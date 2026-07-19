@@ -47,3 +47,47 @@ logs/
 ### Environment Variables / Secrets ###
 .env
 .env.*
+# Added by code-review-graph
+.code-review-graph/
+
+# ---------------------------------------------
+# AI AGENT TOOLS & SKILLS (KHÔNG PUSH LÊN GIT)
+# ---------------------------------------------
+
+# Antigravity / Gemini CLI
+.agents/
+.gemini/
+AGENTS.md
+GEMINI.md
+skills-lock.json
+
+# Claude / Anthropic
+.claude/
+CLAUDE.md
+
+# Cursor
+.cursor/
+.cursorrules
+
+# Kiro
+.kiro/
+
+# Windsurf
+.windsurfrules
+
+# Qoder
+.qoder/
+QODER.md
+
+# CodeBuddy
+.codebuddy/
+CODEBUDDY.md
+
+# opencode
+opencode.jsonc
+
+# MCP config (có thể chứa API keys)
+.mcp.json
+
+# Metadata file của Antigravity workspace
+.metadata
