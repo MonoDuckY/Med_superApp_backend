@@ -21,9 +21,8 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	
-	// Database (JPA + MySQL)
-	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	runtimeOnly 'com.mysql:mysql-connector-j'
+	// Database (MongoDB Atlas)
+	implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
 	
 	// JWT for Authentication
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.5'

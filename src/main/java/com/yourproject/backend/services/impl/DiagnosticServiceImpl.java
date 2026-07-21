@@ -1,7 +1,8 @@
-﻿package com.yourproject.backend.services.impl;
+package com.yourproject.backend.services.impl;
+
+import org.springframework.stereotype.Service;
 
 import com.yourproject.backend.services.DiagnosticService;
-import org.springframework.stereotype.Service;
 
 @Service
 public class DiagnosticServiceImpl implements DiagnosticService {

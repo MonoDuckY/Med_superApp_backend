@@ -1,4 +1,4 @@
-﻿package com.yourproject.backend.services;
+package com.yourproject.backend.services;
 
 public interface DiagnosticService {
 }

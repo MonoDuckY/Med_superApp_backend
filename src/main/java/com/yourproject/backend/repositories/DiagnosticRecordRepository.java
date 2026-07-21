@@ -1,4 +1,8 @@
-﻿package com.yourproject.backend.repositories;
+package com.yourproject.backend.repositories;
 
-public interface DiagnosticRecordRepository {
+import org.springframework.data.mongodb.repository.MongoRepository;
+
+import com.yourproject.backend.models.DiagnosticRecord;
+
+public interface DiagnosticRecordRepository extends MongoRepository<DiagnosticRecord, String> {
 }
