@@ -21,9 +21,6 @@ public class User {
     @Id
     private String id;
 
-    @Indexed(unique = true)
-    private String username;
-
     private String passwordHash;
     private UserRole role;
     private AccountStatus status;
@@ -33,6 +30,12 @@ public class User {
     private String fullName;
     private String gender;
     private LocalDate dateOfBirth;
+    private String address;
+    private String citizenIdentificationCode;
+    private String healthInsuranceCode;
+    private String certificate;
+
+    @Indexed(unique = true, sparse = true)
     private String phoneNumber;
 
     private Instant createdAt;

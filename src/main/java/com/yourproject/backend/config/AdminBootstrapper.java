@@ -5,17 +5,19 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import com.yourproject.backend.dtos.requests.CreateUserRequest;
 import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.services.UserService;
-import com.yourproject.backend.utils.UsernameNormalizer;
+import com.yourproject.backend.utils.PhoneNumberNormalizer;
 
 import lombok.RequiredArgsConstructor;
 
 @Component
+@Order(2)
 @RequiredArgsConstructor
 public class AdminBootstrapper implements ApplicationRunner {
     private static final Logger LOGGER = LoggerFactory.getLogger(AdminBootstrapper.class);
@@ -23,8 +25,8 @@ public class AdminBootstrapper implements ApplicationRunner {
     private final UserRepository userRepository;
     private final UserService userService;
 
-    @Value("${app.bootstrap.admin.username}")
-    private String username;
+    @Value("${app.bootstrap.admin.phone-number}")
+    private String phoneNumber;
 
     @Value("${app.bootstrap.admin.password}")
     private String password;
@@ -34,20 +36,20 @@ public class AdminBootstrapper implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        if (username.isBlank() && password.isBlank()) {
-            LOGGER.warn("No bootstrap admin credentials were provided. Set BOOTSTRAP_ADMIN_USERNAME and BOOTSTRAP_ADMIN_PASSWORD.");
+        if (phoneNumber.isBlank() && password.isBlank()) {
+            LOGGER.warn("No bootstrap admin credentials were provided. Set BOOTSTRAP_ADMIN_PHONE_NUMBER and BOOTSTRAP_ADMIN_PASSWORD.");
             return;
         }
-        if (username.isBlank() || password.isBlank()) {
-            throw new IllegalStateException("Both bootstrap admin username and password must be provided.");
+        if (phoneNumber.isBlank() || password.isBlank()) {
+            throw new IllegalStateException("Both bootstrap admin phone number and password must be provided.");
         }
-        if (userRepository.existsByUsername(UsernameNormalizer.normalizeUsername(username))) {
+        if (userRepository.existsByPhoneNumber(PhoneNumberNormalizer.normalize(phoneNumber))) {
             LOGGER.info("Bootstrap administrator account already exists; creation skipped.");
             return;
         }
 
         CreateUserRequest request = new CreateUserRequest();
-        request.setUsername(username);
+        request.setPhoneNumber(phoneNumber);
         request.setPassword(password);
         request.setFullName(fullName);
         request.setRole(UserRole.ADMIN);

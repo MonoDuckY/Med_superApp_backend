@@ -14,7 +14,6 @@ import lombok.Value;
 @Builder
 public class UserResponse {
     String id;
-    String username;
     UserRole role;
     AccountStatus status;
     String patientId;
@@ -22,6 +21,10 @@ public class UserResponse {
     String gender;
     LocalDate dateOfBirth;
     String phoneNumber;
+    String address;
+    String citizenIdentificationCode;
+    String healthInsuranceCode;
+    String certificate;
     Instant createdAt;
     Instant updatedAt;
     Instant lastLoginAt;
@@ -29,7 +32,6 @@ public class UserResponse {
     public static UserResponse from(User user) {
         return UserResponse.builder()
                 .id(user.getId())
-                .username(user.getUsername())
                 .role(user.getRole())
                 .status(user.getStatus())
                 .patientId(user.getPatientId())
@@ -37,6 +39,10 @@ public class UserResponse {
                 .gender(user.getGender())
                 .dateOfBirth(user.getDateOfBirth())
                 .phoneNumber(user.getPhoneNumber())
+                .address(user.getAddress())
+                .citizenIdentificationCode(user.getCitizenIdentificationCode())
+                .healthInsuranceCode(user.getHealthInsuranceCode())
+                .certificate(user.getCertificate())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .lastLoginAt(user.getLastLoginAt())

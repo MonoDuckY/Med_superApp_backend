@@ -14,7 +14,7 @@ public interface UserService {
 
     User getActiveUserById(String userId);
 
-    User findByUsername(String username);
+    User findByPhoneNumber(String phoneNumber);
 
     List<User> getAllUsers();
 

@@ -21,7 +21,7 @@ import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.utils.PasswordPolicy;
-import com.yourproject.backend.utils.UsernameNormalizer;
+import com.yourproject.backend.utils.PhoneNumberNormalizer;
 
 import lombok.RequiredArgsConstructor;
 
@@ -33,15 +33,14 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public User createUser(CreateUserRequest request, String createdBy) {
-        String username = UsernameNormalizer.normalizeUsername(request.getUsername());
-        if (userRepository.existsByUsername(username)) {
-            throw new ConflictException("Username already exists.");
+        String phoneNumber = PhoneNumberNormalizer.normalize(request.getPhoneNumber());
+        if (userRepository.existsByPhoneNumber(phoneNumber)) {
+            throw new ConflictException("Phone number already exists.");
         }
 
         PasswordPolicy.validate(request.getPassword());
         Instant now = Instant.now();
         User user = User.builder()
-                .username(username)
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .role(request.getRole())
                 .status(AccountStatus.ACTIVE)
@@ -49,7 +48,11 @@ public class UserServiceImpl implements UserService {
                 .fullName(trimToNull(request.getFullName()))
                 .gender(trimToNull(request.getGender()))
                 .dateOfBirth(request.getDateOfBirth())
-                .phoneNumber(trimToNull(request.getPhoneNumber()))
+                .phoneNumber(phoneNumber)
+                .address(trimToNull(request.getAddress()))
+                .citizenIdentificationCode(trimToNull(request.getCitizenIdentificationCode()))
+                .healthInsuranceCode(trimToNull(request.getHealthInsuranceCode()))
+                .certificate(trimToNull(request.getCertificate()))
                 .createdAt(now)
                 .updatedAt(now)
                 .passwordChangedAt(now)
@@ -76,10 +79,10 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public User findByUsername(String username) {
-        String normalizedUsername = UsernameNormalizer.normalizeUsername(username);
-        return userRepository.findByUsername(normalizedUsername)
-                .orElseThrow(() -> new UnauthorizedException("Invalid username or password."));
+    public User findByPhoneNumber(String phoneNumber) {
+        String normalizedPhoneNumber = PhoneNumberNormalizer.normalize(phoneNumber);
+        return userRepository.findByPhoneNumber(normalizedPhoneNumber)
+                .orElseThrow(() -> new UnauthorizedException("Invalid phone number or password."));
     }
 
     @Override
@@ -91,13 +94,6 @@ public class UserServiceImpl implements UserService {
     public User updateUser(String userId, UpdateUserRequest request, String updatedBy) {
         User user = getUserById(userId);
 
-        if (request.getUsername() != null) {
-            String username = UsernameNormalizer.normalizeUsername(request.getUsername());
-            if (!username.equals(user.getUsername()) && userRepository.existsByUsername(username)) {
-                throw new ConflictException("Username already exists.");
-            }
-            user.setUsername(username);
-        }
         if (request.getRole() != null) {
             user.setRole(request.getRole());
         }
@@ -117,7 +113,23 @@ public class UserServiceImpl implements UserService {
             user.setDateOfBirth(request.getDateOfBirth());
         }
         if (request.getPhoneNumber() != null) {
-            user.setPhoneNumber(trimToNull(request.getPhoneNumber()));
+            String phoneNumber = PhoneNumberNormalizer.normalize(request.getPhoneNumber());
+            if (!phoneNumber.equals(user.getPhoneNumber()) && userRepository.existsByPhoneNumber(phoneNumber)) {
+                throw new ConflictException("Phone number already exists.");
+            }
+            user.setPhoneNumber(phoneNumber);
+        }
+        if (request.getAddress() != null) {
+            user.setAddress(trimToNull(request.getAddress()));
+        }
+        if (request.getCitizenIdentificationCode() != null) {
+            user.setCitizenIdentificationCode(trimToNull(request.getCitizenIdentificationCode()));
+        }
+        if (request.getHealthInsuranceCode() != null) {
+            user.setHealthInsuranceCode(trimToNull(request.getHealthInsuranceCode()));
+        }
+        if (request.getCertificate() != null) {
+            user.setCertificate(trimToNull(request.getCertificate()));
         }
 
         user.setUpdatedAt(Instant.now());
@@ -170,12 +182,16 @@ public class UserServiceImpl implements UserService {
             throw new BadRequestException("Role is required.");
         }
 
+        if (isBlank(user.getPhoneNumber())) {
+            throw new BadRequestException("Phone number is required.");
+        }
+        user.setPhoneNumber(PhoneNumberNormalizer.normalize(user.getPhoneNumber()));
+
+        if (user.getDateOfBirth() != null && user.getDateOfBirth().isAfter(LocalDate.now())) {
+            throw new BadRequestException("Date of birth cannot be in the future.");
+        }
+
         if (user.getRole() != UserRole.PATIENT) {
-            validateStaffUsername(user.getUsername());
-            user.setPatientId(null);
-            user.setGender(null);
-            user.setDateOfBirth(null);
-            user.setPhoneNumber(null);
             return;
         }
 
@@ -183,21 +199,6 @@ public class UserServiceImpl implements UserService {
                 || user.getDateOfBirth() == null || isBlank(user.getPhoneNumber())) {
             throw new BadRequestException(
                     "Patient accounts require patient ID, full name, gender, date of birth, and phone number.");
-        }
-        if (user.getDateOfBirth().isAfter(LocalDate.now())) {
-            throw new BadRequestException("Date of birth cannot be in the future.");
-        }
-
-        String phoneNumber = UsernameNormalizer.normalizePhoneNumber(user.getPhoneNumber());
-        if (!user.getUsername().equals(phoneNumber)) {
-            throw new BadRequestException("A patient username must match the registered phone number.");
-        }
-        user.setPhoneNumber(phoneNumber);
-    }
-
-    private void validateStaffUsername(String username) {
-        if (username.length() < 5 || username.length() > 50) {
-            throw new BadRequestException("Username must contain 5-50 characters.");
         }
     }
 

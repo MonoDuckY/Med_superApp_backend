@@ -43,10 +43,10 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse login(LoginRequest request) {
-        User user = userService.findByUsername(request.getUsername());
+        User user = userService.findByPhoneNumber(request.getPhoneNumber());
         user = userService.getActiveUserById(user.getId());
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new UnauthorizedException("Invalid username or password.");
+            throw new UnauthorizedException("Invalid phone number or password.");
         }
 
         userService.recordSuccessfulLogin(user);

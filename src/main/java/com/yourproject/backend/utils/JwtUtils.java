@@ -37,7 +37,7 @@ public class JwtUtils {
 
         return Jwts.builder()
                 .subject(user.getId())
-                .claim("username", user.getUsername())
+                .claim("phoneNumber", user.getPhoneNumber())
                 .claim("role", user.getRole().name())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(accessTokenDuration)))
