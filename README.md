@@ -476,3 +476,35 @@ http://localhost:8080/v3/api-docs
 4. Gọi các endpoint như `GET /api/auth/me` hoặc `/api/admin/users`.
 
 `/api/admin/users/**` yêu cầu account có role `ADMIN`. Không dán `refreshToken` vào Swagger Authorize.
+
+## 12. Mã hóa dữ liệu Patient
+
+Backend mã hóa AES-256-GCM các PII của `PATIENT`: phone number, Patient ID, họ tên, giới tính, ngày sinh, địa chỉ, CCCD và mã bảo hiểm. MongoDB chỉ lưu ciphertext cho các field này. Password vẫn dùng BCrypt và không thể giải mã.
+
+Backend lưu `phoneLookup` cho mọi account và `patientIdLookup` cho Patient bằng HMAC-SHA-256. Các lookup này dùng để login, kiểm tra unique và không chứa plaintext.
+
+Tạo hai key Base64 riêng, mỗi key 32 byte, bằng PowerShell:
+
+```powershell
+$bytes = New-Object byte[] 32
+[System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+[Convert]::ToBase64String($bytes)
+```
+
+Chạy lệnh hai lần, sau đó cấu hình trong IntelliJ/hosting environment:
+
+```text
+PATIENT_DATA_AES_KEY=<base64-key-thu-nhat>
+PATIENT_LOOKUP_HMAC_KEY=<base64-key-thu-hai>
+```
+
+Hai key phải giống nhau ở mọi backend instance dùng chung MongoDB, nhưng không được đưa vào Git, README công khai, Postman collection hoặc frontend/mobile.
+
+### Migration dữ liệu cũ
+
+1. Backup Atlas trước.
+2. Chạy backend một lần với `PATIENT_DATA_MIGRATE_LEGACY_ON_STARTUP=true` để backfill lookup và mã hóa các Patient legacy.
+3. Xác nhận login, API `/api/auth/me` và Admin API hoạt động.
+4. Đặt lại `PATIENT_DATA_MIGRATE_LEGACY_ON_STARTUP=false` rồi restart backend.
+
+Không bật migration nếu database có Patient thiếu các field bắt buộc hoặc phone/Patient ID bị trùng sau chuẩn hóa; hãy sửa dữ liệu đó trước.

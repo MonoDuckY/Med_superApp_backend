@@ -17,6 +17,7 @@ import com.yourproject.backend.dtos.responses.AuthResponse;
 import com.yourproject.backend.dtos.responses.UserResponse;
 import com.yourproject.backend.services.AuthService;
 import com.yourproject.backend.services.UserService;
+import com.yourproject.backend.services.PatientDataProtectionService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ import lombok.RequiredArgsConstructor;
 public class AuthController {
     private final AuthService authService;
     private final UserService userService;
+    private final PatientDataProtectionService patientDataProtectionService;
 
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
@@ -56,7 +58,7 @@ public class AuthController {
 
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserResponse>> getCurrentUser(Authentication authentication) {
-        UserResponse user = UserResponse.from(userService.getActiveUserById(authentication.getName()));
+        UserResponse user = UserResponse.from(userService.getActiveUserById(authentication.getName()), patientDataProtectionService);
         return ResponseEntity.ok(ApiResponse.success("Current user retrieved successfully.", user));
     }
 }

@@ -38,6 +38,21 @@ public class User {
     @Indexed(unique = true, sparse = true)
     private String phoneNumber;
 
+    @Indexed(unique = true, sparse = true)
+    private String phoneLookup;
+
+    @Indexed(unique = true, sparse = true)
+    private String patientIdLookup;
+    private String patientPhoneEncrypted;
+    private String patientIdEncrypted;
+    private String patientFullNameEncrypted;
+    private String patientGenderEncrypted;
+    private String patientDateOfBirthEncrypted;
+    private String patientAddressEncrypted;
+    private String patientCitizenIdentificationCodeEncrypted;
+    private String patientHealthInsuranceCodeEncrypted;
+    private Integer encryptionVersion;
+
     private Instant createdAt;
     private Instant updatedAt;
     private Instant lastLoginAt;

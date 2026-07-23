@@ -20,6 +20,7 @@ import com.yourproject.backend.dtos.requests.UpdateUserRequest;
 import com.yourproject.backend.dtos.responses.ApiResponse;
 import com.yourproject.backend.dtos.responses.UserResponse;
 import com.yourproject.backend.services.UserService;
+import com.yourproject.backend.services.PatientDataProtectionService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -30,24 +31,25 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AdminUserController {
     private final UserService userService;
+    private final PatientDataProtectionService patientDataProtectionService;
 
     @PostMapping
     public ResponseEntity<ApiResponse<UserResponse>> createUser(
             Authentication authentication,
             @Valid @RequestBody CreateUserRequest request) {
-        UserResponse user = UserResponse.from(userService.createUser(request, authentication.getName()));
+        UserResponse user = UserResponse.from(userService.createUser(request, authentication.getName()), patientDataProtectionService);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("User account created successfully.", user));
     }
 
     @GetMapping
     public ResponseEntity<ApiResponse<List<UserResponse>>> getUsers() {
-        List<UserResponse> users = userService.getAllUsers().stream().map(UserResponse::from).toList();
+        List<UserResponse> users = userService.getAllUsers().stream().map(user -> UserResponse.from(user, patientDataProtectionService)).toList();
         return ResponseEntity.ok(ApiResponse.success("User accounts retrieved successfully.", users));
     }
 
     @GetMapping("/{userId}")
     public ResponseEntity<ApiResponse<UserResponse>> getUser(@PathVariable String userId) {
-        UserResponse user = UserResponse.from(userService.getUserById(userId));
+        UserResponse user = UserResponse.from(userService.getUserById(userId), patientDataProtectionService);
         return ResponseEntity.ok(ApiResponse.success("User account retrieved successfully.", user));
     }
 
@@ -56,7 +58,7 @@ public class AdminUserController {
             Authentication authentication,
             @PathVariable String userId,
             @Valid @RequestBody UpdateUserRequest request) {
-        UserResponse user = UserResponse.from(userService.updateUser(userId, request, authentication.getName()));
+        UserResponse user = UserResponse.from(userService.updateUser(userId, request, authentication.getName()), patientDataProtectionService);
         return ResponseEntity.ok(ApiResponse.success("User account updated successfully.", user));
     }
 

@@ -20,6 +20,7 @@ import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.services.UserService;
+import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.utils.PasswordPolicy;
 import com.yourproject.backend.utils.PhoneNumberNormalizer;
 
@@ -30,11 +31,13 @@ import lombok.RequiredArgsConstructor;
 public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final PatientDataProtectionService patientDataProtectionService;
 
     @Override
     public User createUser(CreateUserRequest request, String createdBy) {
         String phoneNumber = PhoneNumberNormalizer.normalize(request.getPhoneNumber());
-        if (userRepository.existsByPhoneNumber(phoneNumber)) {
+        String phoneLookup = patientDataProtectionService.phoneLookup(phoneNumber);
+        if (userRepository.existsByPhoneLookup(phoneLookup)) {
             throw new ConflictException("Phone number already exists.");
         }
 
@@ -49,6 +52,7 @@ public class UserServiceImpl implements UserService {
                 .gender(trimToNull(request.getGender()))
                 .dateOfBirth(request.getDateOfBirth())
                 .phoneNumber(phoneNumber)
+                .phoneLookup(phoneLookup)
                 .address(trimToNull(request.getAddress()))
                 .citizenIdentificationCode(trimToNull(request.getCitizenIdentificationCode()))
                 .healthInsuranceCode(trimToNull(request.getHealthInsuranceCode()))
@@ -60,6 +64,14 @@ public class UserServiceImpl implements UserService {
                 .build();
 
         validateAccountProfile(user);
+        if (user.getRole() == UserRole.PATIENT) {
+            String patientIdLookup = patientDataProtectionService.patientIdLookup(user.getPatientId());
+            if (userRepository.existsByPatientIdLookup(patientIdLookup)) {
+                throw new ConflictException("Patient ID already exists.");
+            }
+            user.setPatientIdLookup(patientIdLookup);
+            patientDataProtectionService.encryptPatientFields(user);
+        }
         return userRepository.save(user);
     }
 
@@ -81,7 +93,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public User findByPhoneNumber(String phoneNumber) {
         String normalizedPhoneNumber = PhoneNumberNormalizer.normalize(phoneNumber);
-        return userRepository.findByPhoneNumber(normalizedPhoneNumber)
+        return userRepository.findByPhoneLookup(patientDataProtectionService.phoneLookup(normalizedPhoneNumber))
                 .orElseThrow(() -> new UnauthorizedException("Invalid phone number or password."));
     }
 
@@ -93,6 +105,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public User updateUser(String userId, UpdateUserRequest request, String updatedBy) {
         User user = getUserById(userId);
+        patientDataProtectionService.decryptPatientFields(user);
 
         if (request.getRole() != null) {
             user.setRole(request.getRole());
@@ -114,10 +127,12 @@ public class UserServiceImpl implements UserService {
         }
         if (request.getPhoneNumber() != null) {
             String phoneNumber = PhoneNumberNormalizer.normalize(request.getPhoneNumber());
-            if (!phoneNumber.equals(user.getPhoneNumber()) && userRepository.existsByPhoneNumber(phoneNumber)) {
+            String phoneLookup = patientDataProtectionService.phoneLookup(phoneNumber);
+            if (!phoneLookup.equals(user.getPhoneLookup()) && userRepository.existsByPhoneLookup(phoneLookup)) {
                 throw new ConflictException("Phone number already exists.");
             }
             user.setPhoneNumber(phoneNumber);
+            user.setPhoneLookup(phoneLookup);
         }
         if (request.getAddress() != null) {
             user.setAddress(trimToNull(request.getAddress()));
@@ -134,6 +149,14 @@ public class UserServiceImpl implements UserService {
 
         user.setUpdatedAt(Instant.now());
         validateAccountProfile(user);
+        if (user.getRole() == UserRole.PATIENT) {
+            String patientIdLookup = patientDataProtectionService.patientIdLookup(user.getPatientId());
+            if (!patientIdLookup.equals(user.getPatientIdLookup()) && userRepository.existsByPatientIdLookup(patientIdLookup)) {
+                throw new ConflictException("Patient ID already exists.");
+            }
+            user.setPatientIdLookup(patientIdLookup);
+            patientDataProtectionService.encryptPatientFields(user);
+        }
         return userRepository.save(user);
     }
 
@@ -185,6 +208,9 @@ public class UserServiceImpl implements UserService {
         if (isBlank(user.getPhoneNumber())) {
             throw new BadRequestException("Phone number is required.");
         }
+        if (isBlank(user.getFullName())) {
+            throw new BadRequestException("Full name is required.");
+        }
         user.setPhoneNumber(PhoneNumberNormalizer.normalize(user.getPhoneNumber()));
 
         if (user.getDateOfBirth() != null && user.getDateOfBirth().isAfter(LocalDate.now())) {
@@ -192,6 +218,11 @@ public class UserServiceImpl implements UserService {
         }
 
         if (user.getRole() != UserRole.PATIENT) {
+            user.setPatientId(null);
+            user.setPatientIdLookup(null);
+            if (user.getRole() == UserRole.DOCTOR && isBlank(user.getCertificate())) {
+                throw new BadRequestException("Doctor accounts require a practice certificate.");
+            }
             return;
         }
 

@@ -24,6 +24,7 @@ import com.yourproject.backend.models.User;
 import com.yourproject.backend.repositories.RefreshTokenRepository;
 import com.yourproject.backend.services.AuthService;
 import com.yourproject.backend.services.UserService;
+import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.utils.JwtUtils;
 
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,7 @@ public class AuthServiceImpl implements AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
+    private final PatientDataProtectionService patientDataProtectionService;
 
     @Value("${app.jwt.refresh-token-expiration-days}")
     private long refreshTokenExpirationDays;
@@ -95,7 +97,7 @@ public class AuthServiceImpl implements AuthService {
                 .refreshToken(createRefreshToken(user.getId(), deviceId))
                 .tokenType("Bearer")
                 .expiresInSeconds(jwtUtils.getAccessTokenExpirationSeconds())
-                .user(UserResponse.from(user))
+                .user(UserResponse.from(user, patientDataProtectionService))
                 .build();
     }
 
