@@ -1,0 +1,92 @@
+# Gradle / Spring Boot build output
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# Java bytecode and packaged artifacts
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+
+# Local application configuration and secrets
+.env
+.env.*
+!.env.example
+application-local.properties
+application-local.yml
+application-local.yaml
+application-dev.properties
+application-dev.yml
+application-dev.yaml
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Application logs
+*.log
+logs/
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+# Eclipse / Spring Tool Suite
+.apt_generated/
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache/
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# VS Code
+.vscode/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Test reports and local tool caches
+test-output/
+.code-review-graph/
+.work/
+
+# AI coding assistants (local configuration may contain credentials)
+.agents/
+.claude/
+.codex/
+.cursor/
+.gemini/
+.kiro/
+.qoder/
+AGENTS.md
+GEMINI.md
+CLAUDE.md
+QODER.md
+.cursorrules
+.windsurfrules
+opencode.jsonc
+.mcp.json
+skills-lock.json
+.metadata
