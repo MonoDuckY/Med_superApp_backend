@@ -43,6 +43,18 @@ public class PatientDataProtectionService {
         return hmac(patientId);
     }
 
+    public String secureLookup(String value) {
+        return hmac(value);
+    }
+
+    public String encryptSensitiveValue(String value) {
+        return encrypt(value);
+    }
+
+    public String decryptSensitiveValue(String value) {
+        return decrypt(value);
+    }
+
     public void encryptPatientFields(User user) {
         if (user.getRole() != UserRole.PATIENT) return;
         user.setPatientPhoneEncrypted(encrypt(user.getPhoneNumber()));

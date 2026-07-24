@@ -26,6 +26,8 @@ application-dev.yaml
 *.key
 *.p12
 *.pfx
+firebase-*.json
+*-firebase-adminsdk-*.json
 
 # Application logs
 *.log
