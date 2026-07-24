@@ -16,9 +16,6 @@ public class UpdateUserRequest {
     @Size(max = 100, message = "Full name must not exceed 100 characters.")
     private String fullName;
 
-    @Size(max = 50, message = "Patient ID must not exceed 50 characters.")
-    private String patientId;
-
     @Size(max = 20, message = "Gender must not exceed 20 characters.")
     private String gender;
 

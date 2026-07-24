@@ -17,10 +17,12 @@ import com.yourproject.backend.dtos.requests.LoginRequest;
 import com.yourproject.backend.dtos.requests.LogoutRequest;
 import com.yourproject.backend.dtos.requests.RefreshTokenRequest;
 import com.yourproject.backend.dtos.responses.AuthResponse;
+import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.dtos.responses.UserResponse;
 import com.yourproject.backend.exceptions.UnauthorizedException;
 import com.yourproject.backend.models.RefreshToken;
 import com.yourproject.backend.models.User;
+import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.repositories.RefreshTokenRepository;
 import com.yourproject.backend.services.AuthService;
 import com.yourproject.backend.services.UserService;
@@ -45,8 +47,12 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse login(LoginRequest request) {
+        validateLoginRequest(request);
         User user = userService.findByPhoneNumber(request.getPhoneNumber());
         user = userService.getActiveUserById(user.getId());
+        if (user.getRole() == UserRole.PATIENT) {
+            throw new BadRequestException("Patient accounts must sign in using SMS OTP.");
+        }
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw new UnauthorizedException("Invalid phone number or password.");
         }
@@ -124,6 +130,15 @@ public class AuthServiceImpl implements AuthService {
             return Base64.getUrlEncoder().withoutPadding().encodeToString(hashed);
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is unavailable.", exception);
+        }
+    }
+
+    private void validateLoginRequest(LoginRequest request) {
+        if (request == null || request.getPhoneNumber() == null || request.getPhoneNumber().isBlank()) {
+            throw new BadRequestException("Phone number is required.");
+        }
+        if (request.getPassword() == null || request.getPassword().isBlank()) {
+            throw new BadRequestException("Password is required.");
         }
     }
 }

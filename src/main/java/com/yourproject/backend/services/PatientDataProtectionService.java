@@ -93,7 +93,13 @@ public class PatientDataProtectionService {
     private String decrypt(String value) {
         if (value == null) return null;
         try {
+            if (!value.startsWith("v1:")) {
+                throw new IllegalArgumentException("Unsupported ciphertext version.");
+            }
             byte[] payload = Base64.getUrlDecoder().decode(value.substring(3));
+            if (payload.length <= IV_LENGTH) {
+                throw new IllegalArgumentException("Ciphertext payload is too short.");
+            }
             byte[] iv = new byte[IV_LENGTH];
             byte[] ciphertext = new byte[payload.length - IV_LENGTH];
             System.arraycopy(payload, 0, iv, 0, IV_LENGTH);

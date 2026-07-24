@@ -24,6 +24,11 @@ class PasswordPolicyTest {
     }
 
     @Test
+    void validate_rejectsPasswordWithoutLowercaseCharacter() {
+        assertThrows(BadRequestException.class, () -> PasswordPolicy.validate("VALIDPASS1"));
+    }
+
+    @Test
     void validate_acceptsSpecialCharacterInsteadOfDigit() {
         assertDoesNotThrow(() -> PasswordPolicy.validate("Validpass!"));
     }
