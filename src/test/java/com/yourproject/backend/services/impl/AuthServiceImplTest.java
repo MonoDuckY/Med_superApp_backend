@@ -100,11 +100,11 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void login_rejectsDisabledAccount() {
+    void login_rejectsInactiveAccount() {
         User user = activeDoctor();
         when(userService.findByPhoneNumber("0363636363")).thenReturn(user);
         when(userService.getActiveUserById("user-id"))
-                .thenThrow(new UnauthorizedException("This account is disabled."));
+                .thenThrow(new UnauthorizedException("This account is inactive."));
 
         assertThrows(UnauthorizedException.class, () -> authService.login(loginRequest()));
         verify(passwordEncoder, never()).matches(any(), any());

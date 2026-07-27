@@ -92,7 +92,7 @@ public class UserServiceImpl implements UserService {
     public User getActiveUserById(String userId) {
         User user = getUserById(userId);
         if (user.getStatus() != AccountStatus.ACTIVE) {
-            throw new UnauthorizedException("This account is disabled. Please contact an administrator.");
+            throw new UnauthorizedException("This account is inactive. Please contact an administrator.");
         }
         return user;
     }
@@ -171,7 +171,7 @@ public class UserServiceImpl implements UserService {
         }
 
         User user = getUserById(userId);
-        user.setStatus(AccountStatus.DISABLED);
+        user.setStatus(AccountStatus.INACTIVE);
         user.setUpdatedAt(Instant.now());
         userRepository.save(user);
     }

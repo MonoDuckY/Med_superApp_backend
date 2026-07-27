@@ -171,9 +171,9 @@ class UserServiceImplTest {
     }
 
     @Test
-    void getActiveUserById_rejectsDisabledUser() {
+    void getActiveUserById_rejectsInactiveUser() {
         User user = activeDoctor();
-        user.setStatus(AccountStatus.DISABLED);
+        user.setStatus(AccountStatus.INACTIVE);
         when(userRepository.findById("user-id")).thenReturn(Optional.of(user));
 
         assertThrows(UnauthorizedException.class, () -> userService.getActiveUserById("user-id"));
@@ -205,13 +205,13 @@ class UserServiceImplTest {
     }
 
     @Test
-    void deactivateUser_disablesOtherUser() {
+    void deactivateUser_inactivatesOtherUser() {
         User user = activeDoctor();
         when(userRepository.findById("user-id")).thenReturn(Optional.of(user));
 
         userService.deactivateUser("user-id", "admin-id");
 
-        assertEquals(AccountStatus.DISABLED, user.getStatus());
+        assertEquals(AccountStatus.INACTIVE, user.getStatus());
         verify(userRepository).save(user);
     }
 
