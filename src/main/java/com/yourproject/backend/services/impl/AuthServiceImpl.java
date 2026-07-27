@@ -75,7 +75,7 @@ public class AuthServiceImpl implements AuthService {
         System.out.println("MÃ OTP CỦA BẠN LÀ: " + code);
         System.out.println("=======================================================\n");
         patientOtpRepository.save(PatientOtp.builder().userId(user.getId()).phoneLookup(phoneLookup).codeHash(patientDataProtectionService.secureLookup("otp:"+user.getId()+":"+code)).attempts(0).createdAt(Instant.now()).expiresAt(expires).build());
-        smsGatewayService.enqueue(user.getId(),com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()),"[Hospital Management System] Ma OTP cua ban la "+code+". Khong chia se ma nay.",expires);
+        smsGatewayService.enqueue(user.getId(),com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()),"[Hospital Management System] Ma OTP testing cua ban la "+code+". Khong chia se ma nay.",expires);
         return null;
     }
 
