@@ -12,6 +12,8 @@ import com.yourproject.backend.dtos.requests.ChangePasswordRequest;
 import com.yourproject.backend.dtos.requests.LoginRequest;
 import com.yourproject.backend.dtos.requests.LogoutRequest;
 import com.yourproject.backend.dtos.requests.RefreshTokenRequest;
+import com.yourproject.backend.dtos.requests.RequestPatientOtpRequest;
+import com.yourproject.backend.dtos.requests.VerifyPatientOtpRequest;
 import com.yourproject.backend.dtos.responses.ApiResponse;
 import com.yourproject.backend.dtos.responses.AuthResponse;
 import com.yourproject.backend.dtos.responses.UserResponse;
@@ -34,6 +36,8 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(ApiResponse.success("Login successful.", authService.login(request)));
     }
+    @PostMapping("/patient-otp/request") public ResponseEntity<ApiResponse<Void>> requestPatientOtp(@Valid @RequestBody RequestPatientOtpRequest request){authService.requestPatientOtp(request);return ResponseEntity.ok(ApiResponse.success("OTP sent successfully.",null));}
+    @PostMapping("/patient-otp/verify") public ResponseEntity<ApiResponse<AuthResponse>> verifyPatientOtp(@Valid @RequestBody VerifyPatientOtpRequest request){return ResponseEntity.ok(ApiResponse.success("OTP verified successfully.",authService.verifyPatientOtp(request)));}
 
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<AuthResponse>> refresh(@Valid @RequestBody RefreshTokenRequest request) {

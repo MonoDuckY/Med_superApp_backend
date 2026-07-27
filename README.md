@@ -4,6 +4,20 @@ Tài liệu này dành cho Web Admin, Web Doctor và Mobile App. Hiện backend 
 
 > Các API khám bệnh, lịch hẹn, đơn thuốc, AI và ảnh y tế chưa được triển khai; không được tự suy đoán endpoint cho các chức năng đó.
 
+##-3.6.vẻy importance
+-Cách chạy: clone về
++dung inteliJ: copy đống trên Backend fix tại business doc về paste vào variable inviroment
++ko thì copy đống đấy gửi AI
+-Vào firebase->project setting-> service accounts-> generate a private key( chọn java, dù tải cái đéo j cũng như nhau) 
+-Nhét vào đâu thì đổi đường dẫn ở đó, r thay cái FIREBASE_SERVICE_ACCOUNT_PATH= cái đường dẫn đến file đó
+-Chạy backend và mong nó hoạt động
+PS: lỗi thì hỏi AI đừng hỏi t, t cũng đéo biết đâu :P  
+
+
+
+
+
+
 ## 1. Môi trường và Base URL
 
 | Môi trường | Base URL |

@@ -16,12 +16,19 @@ import com.yourproject.backend.dtos.requests.ChangePasswordRequest;
 import com.yourproject.backend.dtos.requests.LoginRequest;
 import com.yourproject.backend.dtos.requests.LogoutRequest;
 import com.yourproject.backend.dtos.requests.RefreshTokenRequest;
+import com.yourproject.backend.dtos.requests.RequestPatientOtpRequest;
+import com.yourproject.backend.dtos.requests.VerifyPatientOtpRequest;
 import com.yourproject.backend.dtos.responses.AuthResponse;
+import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.dtos.responses.UserResponse;
 import com.yourproject.backend.exceptions.UnauthorizedException;
 import com.yourproject.backend.models.RefreshToken;
 import com.yourproject.backend.models.User;
+import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.repositories.RefreshTokenRepository;
+import com.yourproject.backend.repositories.PatientOtpRepository;
+import com.yourproject.backend.models.PatientOtp;
+import com.yourproject.backend.services.SmsGatewayService;
 import com.yourproject.backend.services.AuthService;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.services.PatientDataProtectionService;
@@ -39,14 +46,45 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
     private final PatientDataProtectionService patientDataProtectionService;
+    private final PatientOtpRepository patientOtpRepository;
+    private final SmsGatewayService smsGatewayService;
 
     @Value("${app.jwt.refresh-token-expiration-days}")
     private long refreshTokenExpirationDays;
+    @Value("${app.otp.expiration-minutes}") private long otpExpirationMinutes;
+    @Value("${app.otp.resend-cooldown-seconds}") private long otpResendCooldownSeconds;
+    @Value("${app.otp.max-attempts}") private int otpMaxAttempts;
+
+    @Override
+    public void requestPatientOtp(RequestPatientOtpRequest request) {
+        User user=userService.findByPhoneNumber(request.getPhoneNumber()); user=userService.getActiveUserById(user.getId());
+        if(user.getRole()!=UserRole.PATIENT) throw new BadRequestException("Only patient accounts can use SMS OTP.");
+        String phoneLookup=patientDataProtectionService.phoneLookup(com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()));
+        patientOtpRepository.findTopByPhoneLookupOrderByCreatedAtDesc(phoneLookup).ifPresent(previous->{if(previous.getCreatedAt().plusSeconds(otpResendCooldownSeconds).isAfter(Instant.now())) throw new BadRequestException("Please wait before requesting another OTP.");});
+        String code=String.format("%06d",SECURE_RANDOM.nextInt(1_000_000)); Instant expires=Instant.now().plus(Duration.ofMinutes(otpExpirationMinutes));
+        patientOtpRepository.save(PatientOtp.builder().userId(user.getId()).phoneLookup(phoneLookup).codeHash(patientDataProtectionService.secureLookup("otp:"+user.getId()+":"+code)).attempts(0).createdAt(Instant.now()).expiresAt(expires).build());
+        smsGatewayService.enqueue(user.getId(),com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()),"[MedSuperApp] Ma OTP cua ban la "+code+". Khong chia se ma nay.",expires);
+    }
+
+    @Override
+    public AuthResponse verifyPatientOtp(VerifyPatientOtpRequest request) {
+        User user=userService.findByPhoneNumber(request.getPhoneNumber()); user=userService.getActiveUserById(user.getId());
+        if(user.getRole()!=UserRole.PATIENT) throw new BadRequestException("Only patient accounts can use SMS OTP.");
+        String lookup=patientDataProtectionService.phoneLookup(com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()));
+        PatientOtp otp=patientOtpRepository.findTopByPhoneLookupOrderByCreatedAtDesc(lookup).orElseThrow(()->new UnauthorizedException("OTP is invalid or expired."));
+        if(otp.getConsumedAt()!=null||otp.getExpiresAt().isBefore(Instant.now())||otp.getAttempts()>=otpMaxAttempts) throw new UnauthorizedException("OTP is invalid or expired.");
+        if(!patientDataProtectionService.secureLookup("otp:"+user.getId()+":"+request.getCode()).equals(otp.getCodeHash())) { otp.setAttempts(otp.getAttempts()+1);patientOtpRepository.save(otp);throw new UnauthorizedException("OTP is invalid or expired."); }
+        otp.setConsumedAt(Instant.now());patientOtpRepository.save(otp);userService.recordSuccessfulLogin(user);return issueTokens(user,request.getDeviceId());
+    }
 
     @Override
     public AuthResponse login(LoginRequest request) {
+        validateLoginRequest(request);
         User user = userService.findByPhoneNumber(request.getPhoneNumber());
         user = userService.getActiveUserById(user.getId());
+        if (user.getRole() == UserRole.PATIENT) {
+            throw new BadRequestException("Patient accounts must sign in using SMS OTP.");
+        }
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw new UnauthorizedException("Invalid phone number or password.");
         }
@@ -124,6 +162,15 @@ public class AuthServiceImpl implements AuthService {
             return Base64.getUrlEncoder().withoutPadding().encodeToString(hashed);
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is unavailable.", exception);
+        }
+    }
+
+    private void validateLoginRequest(LoginRequest request) {
+        if (request == null || request.getPhoneNumber() == null || request.getPhoneNumber().isBlank()) {
+            throw new BadRequestException("Phone number is required.");
+        }
+        if (request.getPassword() == null || request.getPassword().isBlank()) {
+            throw new BadRequestException("Password is required.");
         }
     }
 }

@@ -3,6 +3,7 @@ package com.yourproject.backend.services.impl;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -35,19 +36,24 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public User createUser(CreateUserRequest request, String createdBy) {
+        if (request.getRole() == null) {
+            throw new BadRequestException("Role is required.");
+        }
         String phoneNumber = PhoneNumberNormalizer.normalize(request.getPhoneNumber());
         String phoneLookup = patientDataProtectionService.phoneLookup(phoneNumber);
         if (userRepository.existsByPhoneLookup(phoneLookup)) {
             throw new ConflictException("Phone number already exists.");
         }
 
-        PasswordPolicy.validate(request.getPassword());
+        if (request.getRole() != UserRole.PATIENT) {
+            PasswordPolicy.validate(request.getPassword());
+        }
         Instant now = Instant.now();
         User user = User.builder()
-                .passwordHash(passwordEncoder.encode(request.getPassword()))
+                .passwordHash(request.getRole() == UserRole.PATIENT ? null : passwordEncoder.encode(request.getPassword()))
                 .role(request.getRole())
                 .status(AccountStatus.ACTIVE)
-                .patientId(trimToNull(request.getPatientId()))
+                .patientId(null)
                 .fullName(trimToNull(request.getFullName()))
                 .gender(trimToNull(request.getGender()))
                 .dateOfBirth(request.getDateOfBirth())
@@ -65,6 +71,7 @@ public class UserServiceImpl implements UserService {
 
         validateAccountProfile(user);
         if (user.getRole() == UserRole.PATIENT) {
+            user.setPatientId(generatePatientId());
             String patientIdLookup = patientDataProtectionService.patientIdLookup(user.getPatientId());
             if (userRepository.existsByPatientIdLookup(patientIdLookup)) {
                 throw new ConflictException("Patient ID already exists.");
@@ -115,9 +122,6 @@ public class UserServiceImpl implements UserService {
         }
         if (request.getFullName() != null) {
             user.setFullName(trimToNull(request.getFullName()));
-        }
-        if (request.getPatientId() != null) {
-            user.setPatientId(trimToNull(request.getPatientId()));
         }
         if (request.getGender() != null) {
             user.setGender(trimToNull(request.getGender()));
@@ -226,11 +230,15 @@ public class UserServiceImpl implements UserService {
             return;
         }
 
-        if (isBlank(user.getPatientId()) || isBlank(user.getFullName()) || isBlank(user.getGender())
-                || user.getDateOfBirth() == null || isBlank(user.getPhoneNumber())) {
+        if (isBlank(user.getFullName()) || isBlank(user.getGender()) || user.getDateOfBirth() == null
+                || isBlank(user.getPhoneNumber())) {
             throw new BadRequestException(
-                    "Patient accounts require patient ID, full name, gender, date of birth, and phone number.");
+                    "Patient accounts require full name, gender, date of birth, and phone number.");
         }
+    }
+
+    private String generatePatientId() {
+        return "PAT-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
     }
 
     private String trimToNull(String value) {

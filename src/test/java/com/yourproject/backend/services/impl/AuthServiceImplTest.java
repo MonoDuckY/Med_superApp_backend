@@ -11,7 +11,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
+import java.time.Duration;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Base64;
 import java.util.List;
+import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -24,8 +29,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.yourproject.backend.dtos.requests.ChangePasswordRequest;
 import com.yourproject.backend.dtos.requests.LoginRequest;
+import com.yourproject.backend.dtos.requests.LogoutRequest;
+import com.yourproject.backend.dtos.requests.RefreshTokenRequest;
 import com.yourproject.backend.dtos.responses.AuthResponse;
 import com.yourproject.backend.exceptions.UnauthorizedException;
+import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.RefreshToken;
 import com.yourproject.backend.models.User;
@@ -103,6 +111,66 @@ class AuthServiceImplTest {
     }
 
     @Test
+    void login_rejectsPatientAccountBecauseItMustUseOtp() {
+        User patient = activeDoctor();
+        patient.setRole(UserRole.PATIENT);
+        patient.setPasswordHash(null);
+        when(userService.findByPhoneNumber("0363636363")).thenReturn(patient);
+        when(userService.getActiveUserById("user-id")).thenReturn(patient);
+
+        assertThrows(BadRequestException.class, () -> authService.login(loginRequest()));
+        verify(passwordEncoder, never()).matches(any(), any());
+    }
+
+    @Test
+    void login_rejectsRequestWithoutPhoneNumber() {
+        LoginRequest request = loginRequest();
+        request.setPhoneNumber(null);
+
+        assertThrows(BadRequestException.class, () -> authService.login(request));
+        verify(userService, never()).findByPhoneNumber(any());
+    }
+
+    @Test
+    void refresh_revokesOldTokenAndIssuesNewTokenPair() {
+        User user = activeDoctor();
+        RefreshToken storedToken = activeRefreshToken("refresh-token", "user-id");
+        RefreshTokenRequest request = new RefreshTokenRequest();
+        request.setRefreshToken("refresh-token");
+        when(refreshTokenRepository.findByTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(storedToken));
+        when(userService.getActiveUserById("user-id")).thenReturn(user);
+        when(jwtUtils.generateAccessToken(user)).thenReturn("new-access-token");
+        when(jwtUtils.getAccessTokenExpirationSeconds()).thenReturn(900L);
+
+        assertEquals("new-access-token", authService.refresh(request).getAccessToken());
+        assertNotNull(storedToken.getRevokedAt());
+        verify(refreshTokenRepository, times(2)).save(any(RefreshToken.class));
+    }
+
+    @Test
+    void refresh_rejectsRevokedToken() {
+        RefreshToken storedToken = activeRefreshToken("refresh-token", "user-id");
+        storedToken.setRevokedAt(Instant.now());
+        RefreshTokenRequest request = new RefreshTokenRequest();
+        request.setRefreshToken("refresh-token");
+        when(refreshTokenRepository.findByTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(storedToken));
+
+        assertThrows(UnauthorizedException.class, () -> authService.refresh(request));
+        verify(userService, never()).getActiveUserById(any());
+    }
+
+    @Test
+    void logout_rejectsTokenOwnedByAnotherUser() {
+        RefreshToken storedToken = activeRefreshToken("refresh-token", "other-user");
+        LogoutRequest request = new LogoutRequest();
+        request.setRefreshToken("refresh-token");
+        when(refreshTokenRepository.findByTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(storedToken));
+
+        assertThrows(UnauthorizedException.class, () -> authService.logout("user-id", request));
+        verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+    }
+
+    @Test
     void changePassword_revokesEveryActiveRefreshToken() {
         ChangePasswordRequest request = new ChangePasswordRequest();
         request.setCurrentPassword("Oldpass1");
@@ -139,5 +207,19 @@ class AuthServiceImplTest {
                 .status(AccountStatus.ACTIVE)
                 .createdAt(Instant.now())
                 .build();
+    }
+
+    private RefreshToken activeRefreshToken(String token, String userId) {
+        return RefreshToken.builder().tokenHash(hashToken(token)).userId(userId).deviceId("device-id")
+                .createdAt(Instant.now()).expiresAt(Instant.now().plus(Duration.ofDays(1))).build();
+    }
+
+    private String hashToken(String token) {
+        try {
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(
+                    MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 }
