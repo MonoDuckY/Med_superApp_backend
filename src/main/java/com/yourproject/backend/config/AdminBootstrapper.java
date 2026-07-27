@@ -1,5 +1,6 @@
 package com.yourproject.backend.config;
 
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,15 +50,14 @@ public class AdminBootstrapper implements ApplicationRunner {
         if (userRepository.existsByPhoneLookup(patientDataProtectionService.phoneLookup(normalizedPhoneNumber))
                 || userRepository.findByPhoneNumber(normalizedPhoneNumber).isPresent()) {
             LOGGER.info("Bootstrap administrator account already exists; creation skipped.");
-            return;
+        } else {
+            CreateUserRequest request = new CreateUserRequest();
+            request.setPhoneNumber(phoneNumber);
+            request.setPassword(password);
+            request.setFullName(fullName);
+            request.setRole(UserRole.ADMIN);
+            userService.createUser(request, null);
+            LOGGER.info("Bootstrap administrator account created.");
         }
-
-        CreateUserRequest request = new CreateUserRequest();
-        request.setPhoneNumber(phoneNumber);
-        request.setPassword(password);
-        request.setFullName(fullName);
-        request.setRole(UserRole.ADMIN);
-        userService.createUser(request, null);
-        LOGGER.info("Bootstrap administrator account created.");
     }
 }
