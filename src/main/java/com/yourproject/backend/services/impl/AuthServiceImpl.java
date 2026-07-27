@@ -33,6 +33,9 @@ import com.yourproject.backend.services.AuthService;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.utils.JwtUtils;
+import com.yourproject.backend.repositories.UserRepository;
+import com.yourproject.backend.repositories.TrustedDeviceRepository;
+import com.yourproject.backend.models.TrustedDevice;
 
 import lombok.RequiredArgsConstructor;
 
@@ -48,25 +51,32 @@ public class AuthServiceImpl implements AuthService {
     private final PatientDataProtectionService patientDataProtectionService;
     private final PatientOtpRepository patientOtpRepository;
     private final SmsGatewayService smsGatewayService;
+    private final UserRepository userRepository;
+    private final TrustedDeviceRepository trustedDeviceRepository;
 
     @Value("${app.jwt.refresh-token-expiration-days}")
     private long refreshTokenExpirationDays;
     @Value("${app.otp.expiration-minutes}") private long otpExpirationMinutes;
     @Value("${app.otp.resend-cooldown-seconds}") private long otpResendCooldownSeconds;
     @Value("${app.otp.max-attempts}") private int otpMaxAttempts;
+    @Value("${app.auth.max-failed-login-attempts}") private int maxFailedLoginAttempts;
+    @Value("${app.auth.lockout-minutes}") private long lockoutMinutes;
 
     @Override
-    public void requestPatientOtp(RequestPatientOtpRequest request) {
+    public AuthResponse requestPatientOtp(RequestPatientOtpRequest request) {
         User user=userService.findByPhoneNumber(request.getPhoneNumber()); user=userService.getActiveUserById(user.getId());
         if(user.getRole()!=UserRole.PATIENT) throw new BadRequestException("Only patient accounts can use SMS OTP.");
+        if (isTrustedDevice(user, request.getDeviceId())) { userService.recordSuccessfulLogin(user); return issueTokens(user, request.getDeviceId()); }
         String phoneLookup=patientDataProtectionService.phoneLookup(com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()));
         patientOtpRepository.findTopByPhoneLookupOrderByCreatedAtDesc(phoneLookup).ifPresent(previous->{if(previous.getCreatedAt().plusSeconds(otpResendCooldownSeconds).isAfter(Instant.now())) throw new BadRequestException("Please wait before requesting another OTP.");});
+        patientOtpRepository.findAllByPhoneLookupAndConsumedAtIsNull(phoneLookup).forEach(previous -> { previous.setConsumedAt(Instant.now()); patientOtpRepository.save(previous); });
         String code=String.format("%06d",SECURE_RANDOM.nextInt(1_000_000)); Instant expires=Instant.now().plus(Duration.ofMinutes(otpExpirationMinutes));
         System.out.println("\n=======================================================");
         System.out.println("MÃ OTP CỦA BẠN LÀ: " + code);
         System.out.println("=======================================================\n");
         patientOtpRepository.save(PatientOtp.builder().userId(user.getId()).phoneLookup(phoneLookup).codeHash(patientDataProtectionService.secureLookup("otp:"+user.getId()+":"+code)).attempts(0).createdAt(Instant.now()).expiresAt(expires).build());
         smsGatewayService.enqueue(user.getId(),com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()),"[Hospital Management System] Ma OTP cua ban la "+code+". Khong chia se ma nay.",expires);
+        return null;
     }
 
     @Override
@@ -77,7 +87,7 @@ public class AuthServiceImpl implements AuthService {
         PatientOtp otp=patientOtpRepository.findTopByPhoneLookupOrderByCreatedAtDesc(lookup).orElseThrow(()->new UnauthorizedException("OTP is invalid or expired."));
         if(otp.getConsumedAt()!=null||otp.getExpiresAt().isBefore(Instant.now())||otp.getAttempts()>=otpMaxAttempts) throw new UnauthorizedException("OTP is invalid or expired.");
         if(!patientDataProtectionService.secureLookup("otp:"+user.getId()+":"+request.getCode()).equals(otp.getCodeHash())) { otp.setAttempts(otp.getAttempts()+1);patientOtpRepository.save(otp);throw new UnauthorizedException("OTP is invalid or expired."); }
-        otp.setConsumedAt(Instant.now());patientOtpRepository.save(otp);userService.recordSuccessfulLogin(user);return issueTokens(user,request.getDeviceId());
+        otp.setConsumedAt(Instant.now());patientOtpRepository.save(otp);trustDevice(user,request.getDeviceId());userService.recordSuccessfulLogin(user);return issueTokens(user,request.getDeviceId());
     }
 
     @Override
@@ -88,10 +98,14 @@ public class AuthServiceImpl implements AuthService {
         if (user.getRole() == UserRole.PATIENT) {
             throw new BadRequestException("Patient accounts must sign in using SMS OTP.");
         }
+        if (user.getLockedUntil()!=null && user.getLockedUntil().isAfter(Instant.now())) throw new UnauthorizedException("Account is temporarily locked. Please try again later.");
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            user.setFailedLoginAttempts(user.getFailedLoginAttempts()+1);
+            if(user.getFailedLoginAttempts()>=maxFailedLoginAttempts) user.setLockedUntil(Instant.now().plus(Duration.ofMinutes(lockoutMinutes)));
+            userRepository.save(user);
             throw new UnauthorizedException("Invalid phone number or password.");
         }
-
+        user.setFailedLoginAttempts(0); user.setLockedUntil(null); userRepository.save(user);
         userService.recordSuccessfulLogin(user);
         return issueTokens(user, request.getDeviceId());
     }
@@ -176,4 +190,6 @@ public class AuthServiceImpl implements AuthService {
             throw new BadRequestException("Password is required.");
         }
     }
+    private boolean isTrustedDevice(User user,String deviceId){return deviceId!=null&&!deviceId.isBlank()&&trustedDeviceRepository.findByUserIdAndDeviceIdAndRevokedAtIsNull(user.getId(),deviceId.trim()).isPresent();}
+    private void trustDevice(User user,String deviceId){if(deviceId==null||deviceId.isBlank())return;trustedDeviceRepository.findByUserIdAndDeviceIdAndRevokedAtIsNull(user.getId(),deviceId.trim()).orElseGet(()->trustedDeviceRepository.save(TrustedDevice.builder().userId(user.getId()).deviceId(deviceId.trim()).verifiedAt(Instant.now()).build()));}
 }

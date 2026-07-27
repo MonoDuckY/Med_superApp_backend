@@ -16,6 +16,6 @@ public interface AuthService {
     void logout(String userId, LogoutRequest request);
 
     void changePassword(String userId, ChangePasswordRequest request);
-    void requestPatientOtp(RequestPatientOtpRequest request);
+    AuthResponse requestPatientOtp(RequestPatientOtpRequest request);
     AuthResponse verifyPatientOtp(VerifyPatientOtpRequest request);
 }

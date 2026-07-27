@@ -58,4 +58,6 @@ public class User {
     private Instant lastLoginAt;
     private Instant passwordChangedAt;
     private String createdBy;
+    private int failedLoginAttempts;
+    private Instant lockedUntil;
 }

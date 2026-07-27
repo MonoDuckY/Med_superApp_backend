@@ -36,7 +36,7 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(ApiResponse.success("Login successful.", authService.login(request)));
     }
-    @PostMapping("/patient-otp/request") public ResponseEntity<ApiResponse<Void>> requestPatientOtp(@Valid @RequestBody RequestPatientOtpRequest request){authService.requestPatientOtp(request);return ResponseEntity.ok(ApiResponse.success("OTP sent successfully.",null));}
+    @PostMapping("/patient-otp/request") public ResponseEntity<ApiResponse<AuthResponse>> requestPatientOtp(@Valid @RequestBody RequestPatientOtpRequest request){AuthResponse response=authService.requestPatientOtp(request);return ResponseEntity.ok(ApiResponse.success(response==null?"OTP sent successfully.":"Trusted device authenticated successfully.",response));}
     @PostMapping("/patient-otp/verify") public ResponseEntity<ApiResponse<AuthResponse>> verifyPatientOtp(@Valid @RequestBody VerifyPatientOtpRequest request){return ResponseEntity.ok(ApiResponse.success("OTP verified successfully.",authService.verifyPatientOtp(request)));}
 
     @PostMapping("/refresh")
