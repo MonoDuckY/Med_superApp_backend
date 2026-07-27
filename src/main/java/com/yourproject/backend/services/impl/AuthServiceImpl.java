@@ -62,6 +62,9 @@ public class AuthServiceImpl implements AuthService {
         String phoneLookup=patientDataProtectionService.phoneLookup(com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()));
         patientOtpRepository.findTopByPhoneLookupOrderByCreatedAtDesc(phoneLookup).ifPresent(previous->{if(previous.getCreatedAt().plusSeconds(otpResendCooldownSeconds).isAfter(Instant.now())) throw new BadRequestException("Please wait before requesting another OTP.");});
         String code=String.format("%06d",SECURE_RANDOM.nextInt(1_000_000)); Instant expires=Instant.now().plus(Duration.ofMinutes(otpExpirationMinutes));
+        System.out.println("\n=======================================================");
+        System.out.println("MÃ OTP CỦA BẠN LÀ: " + code);
+        System.out.println("=======================================================\n");
         patientOtpRepository.save(PatientOtp.builder().userId(user.getId()).phoneLookup(phoneLookup).codeHash(patientDataProtectionService.secureLookup("otp:"+user.getId()+":"+code)).attempts(0).createdAt(Instant.now()).expiresAt(expires).build());
         smsGatewayService.enqueue(user.getId(),com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()),"[MedSuperApp] Ma OTP cua ban la "+code+". Khong chia se ma nay.",expires);
     }
