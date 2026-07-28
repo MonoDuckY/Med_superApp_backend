@@ -20,6 +20,7 @@ import com.yourproject.backend.dtos.requests.RequestPatientOtpRequest;
 import com.yourproject.backend.dtos.requests.VerifyPatientOtpRequest;
 import com.yourproject.backend.dtos.responses.AuthResponse;
 import com.yourproject.backend.exceptions.BadRequestException;
+import com.yourproject.backend.exceptions.ResourceNotFoundException;
 import com.yourproject.backend.dtos.responses.UserResponse;
 import com.yourproject.backend.exceptions.UnauthorizedException;
 import com.yourproject.backend.models.RefreshToken;
@@ -74,8 +75,13 @@ public class AuthServiceImpl implements AuthService {
         System.out.println("\n=======================================================");
         System.out.println("MÃ OTP CỦA BẠN LÀ: " + code);
         System.out.println("=======================================================\n");
-        patientOtpRepository.save(PatientOtp.builder().userId(user.getId()).phoneLookup(phoneLookup).codeHash(patientDataProtectionService.secureLookup("otp:"+user.getId()+":"+code)).attempts(0).createdAt(Instant.now()).expiresAt(expires).build());
-        smsGatewayService.enqueue(user.getId(),com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()),"[Hospital Management System] Ma OTP testing cua ban la "+code+". Khong chia se ma nay.",expires);
+        PatientOtp otp = patientOtpRepository.save(PatientOtp.builder().userId(user.getId()).phoneLookup(phoneLookup).codeHash(patientDataProtectionService.secureLookup("otp:"+user.getId()+":"+code)).attempts(0).createdAt(Instant.now()).expiresAt(expires).build());
+        try {
+            smsGatewayService.enqueue(user.getId(),com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()),"[Hospital Management System] Ma OTP testing cua ban la "+code+". Khong chia se ma nay.",expires);
+        } catch (RuntimeException exception) {
+            patientOtpRepository.deleteById(otp.getId());
+            throw new BadRequestException("OTP could not be delivered. Please try again.");
+        }
         return null;
     }
 
@@ -119,7 +125,12 @@ public class AuthServiceImpl implements AuthService {
             throw new UnauthorizedException("Refresh token is expired or revoked.");
         }
 
-        User user = userService.getActiveUserById(storedToken.getUserId());
+        User user;
+        try {
+            user = userService.getActiveUserById(storedToken.getUserId());
+        } catch (ResourceNotFoundException exception) {
+            throw new UnauthorizedException("Refresh token is invalid.");
+        }
         storedToken.setRevokedAt(Instant.now());
         refreshTokenRepository.save(storedToken);
         return issueTokens(user, storedToken.getDeviceId());

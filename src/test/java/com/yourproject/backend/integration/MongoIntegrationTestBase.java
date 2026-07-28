@@ -114,18 +114,37 @@ public abstract class MongoIntegrationTestBase {
                 .build());
     }
 
+    protected User saveActiveAdmin(String normalizedPhone, String password) {
+        Instant now = Instant.now();
+        return userRepository.save(User.builder()
+                .fullName("Admin Integration")
+                .role(UserRole.ADMIN)
+                .status(AccountStatus.ACTIVE)
+                .phoneNumber(normalizedPhone)
+                .phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
+                .passwordHash(passwordEncoder.encode(password))
+                .createdAt(now)
+                .updatedAt(now)
+                .passwordChangedAt(now.minusSeconds(10))
+                .build());
+    }
+
     protected User saveActivePatient(String normalizedPhone) {
+        return saveActivePatient(normalizedPhone, "PAT-INTEGRATION");
+    }
+
+    protected User saveActivePatient(String normalizedPhone, String patientId) {
         Instant now = Instant.now();
         User patient = User.builder()
                 .fullName("Patient Integration")
                 .role(UserRole.PATIENT)
                 .status(AccountStatus.ACTIVE)
-                .patientId("PAT-INTEGRATION")
+                .patientId(patientId)
                 .gender("NONE")
                 .dateOfBirth(java.time.LocalDate.of(1995, 1, 1))
                 .phoneNumber(normalizedPhone)
                 .phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
-                .patientIdLookup(patientDataProtectionService.patientIdLookup("PAT-INTEGRATION"))
+                .patientIdLookup(patientDataProtectionService.patientIdLookup(patientId))
                 .address("Test address")
                 .createdAt(now)
                 .updatedAt(now)

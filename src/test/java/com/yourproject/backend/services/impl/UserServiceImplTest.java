@@ -282,20 +282,6 @@ class UserServiceImplTest {
     }
 
     @Test
-    void changePassword_rejectsNewPasswordWithoutDigitOrSpecialCharacter() {
-        User user = activeDoctor();
-        ChangePasswordRequest request = changePasswordRequest("Oldpass1!");
-        request.setNewPassword("Newpassword");
-        request.setConfirmPassword("Newpassword");
-        when(userRepository.findById("user-id")).thenReturn(Optional.of(user));
-        when(passwordEncoder.matches("Oldpass1!", "password-hash")).thenReturn(true);
-
-        assertThrows(BadRequestException.class, () -> userService.changePassword("user-id", request));
-        verify(passwordEncoder, never()).encode(any());
-        verify(userRepository, never()).save(any(User.class));
-    }
-
-    @Test
     void changePassword_updatesHashAndTimestampsForValidRequest() {
         User user = activeDoctor();
         ChangePasswordRequest request = changePasswordRequest("Oldpass1!");

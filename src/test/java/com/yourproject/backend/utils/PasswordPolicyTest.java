@@ -10,7 +10,7 @@ import com.yourproject.backend.exceptions.BadRequestException;
 class PasswordPolicyTest {
     @Test
     void validate_acceptsPasswordContainingAllRequiredCharacterClasses() {
-        assertDoesNotThrow(() -> PasswordPolicy.validate("Validpass1"));
+        assertDoesNotThrow(() -> PasswordPolicy.validate("Validpass1!"));
     }
 
     @Test
@@ -29,12 +29,17 @@ class PasswordPolicyTest {
     }
 
     @Test
-    void validate_acceptsSpecialCharacterInsteadOfDigit() {
+    void validate_acceptsPasswordWithoutDigitWhenSpecialCharacterIsPresent() {
         assertDoesNotThrow(() -> PasswordPolicy.validate("Validpass!"));
     }
 
     @Test
-    void validate_rejectsPasswordWithoutDigitOrSpecialCharacter() {
+    void validate_acceptsPasswordWithoutSpecialCharacterWhenDigitIsPresent() {
+        assertDoesNotThrow(() -> PasswordPolicy.validate("Validpass1"));
+    }
+
+    @Test
+    void validate_rejectsPasswordWithoutDigitAndSpecialCharacter() {
         assertThrows(BadRequestException.class, () -> PasswordPolicy.validate("Validpassword"));
     }
 }

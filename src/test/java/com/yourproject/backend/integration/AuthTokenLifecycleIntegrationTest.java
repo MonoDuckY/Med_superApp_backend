@@ -3,6 +3,8 @@ package com.yourproject.backend.integration;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -17,7 +19,9 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
 
 import com.jayway.jsonpath.JsonPath;
+import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.RefreshToken;
+import com.yourproject.backend.models.User;
 
 class AuthTokenLifecycleIntegrationTest extends MongoIntegrationTestBase {
     @Test
@@ -92,6 +96,143 @@ class AuthTokenLifecycleIntegrationTest extends MongoIntegrationTestBase {
                 .andExpect(jsonPath("$.message").value("Refresh token does not belong to the current user."));
 
         assertNull(refreshTokenRepository.findByTokenHash(hashToken(secondUser.refreshToken())).orElseThrow().getRevokedAt());
+    }
+
+    @Test
+    void refreshWithoutTokenReturnsValidationError() throws Exception {
+        mockMvc.perform(post("/api/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Refresh token is required."))
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void unknownRefreshTokenIsRejected() throws Exception {
+        mockMvc.perform(post("/api/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"unknown-refresh-token\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Refresh token is invalid."));
+
+        assertEquals(0, refreshTokenRepository.count());
+    }
+
+    @Test
+    void inactiveUserCannotRefreshTokens() throws Exception {
+        User doctor = saveActiveDoctor("+84912345678", "Password123!");
+        TokenPair tokens = login("0912345678", "Password123!");
+        doctor.setStatus(AccountStatus.INACTIVE);
+        userRepository.save(doctor);
+
+        mockMvc.perform(post("/api/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + tokens.refreshToken() + "\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+
+        assertNull(refreshTokenRepository.findByTokenHash(hashToken(tokens.refreshToken())).orElseThrow().getRevokedAt());
+    }
+
+    @Test
+    void deletedUserCannotRefreshTokens() throws Exception {
+        User doctor = saveActiveDoctor("+84912345678", "Password123!");
+        TokenPair tokens = login("0912345678", "Password123!");
+        userRepository.deleteById(doctor.getId());
+
+        mockMvc.perform(post("/api/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + tokens.refreshToken() + "\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Refresh token is invalid."));
+
+        assertNull(refreshTokenRepository.findByTokenHash(hashToken(tokens.refreshToken())).orElseThrow().getRevokedAt());
+    }
+
+    @Test
+    void refreshRotationPreservesDeviceId() throws Exception {
+        saveActiveDoctor("+84912345678", "Password123!");
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"Password123!\",\"deviceId\":\"web-browser-a\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String refreshToken = JsonPath.read(loginResult.getResponse().getContentAsString(), "$.data.refreshToken");
+
+        MvcResult refreshResult = mockMvc.perform(post("/api/auth/refresh").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn();
+        String rotatedToken = JsonPath.read(refreshResult.getResponse().getContentAsString(), "$.data.refreshToken");
+
+        assertEquals("web-browser-a", refreshTokenRepository.findByTokenHash(hashToken(rotatedToken)).orElseThrow().getDeviceId());
+    }
+
+    @Test
+    void logoutWithoutBearerTokenIsRejected() throws Exception {
+        saveActiveDoctor("+84912345678", "Password123!");
+        TokenPair tokens = login("0912345678", "Password123!");
+
+        mockMvc.perform(post("/api/auth/logout").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + tokens.refreshToken() + "\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+
+        assertNull(refreshTokenRepository.findByTokenHash(hashToken(tokens.refreshToken())).orElseThrow().getRevokedAt());
+    }
+
+    @Test
+    void logoutWithoutRefreshTokenReturnsValidationError() throws Exception {
+        saveActiveDoctor("+84912345678", "Password123!");
+        TokenPair tokens = login("0912345678", "Password123!");
+
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer " + tokens.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Refresh token is required."));
+    }
+
+    @Test
+    void logoutWithUnknownRefreshTokenIsRejected() throws Exception {
+        saveActiveDoctor("+84912345678", "Password123!");
+        TokenPair tokens = login("0912345678", "Password123!");
+
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer " + tokens.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"unknown-refresh-token\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Refresh token is invalid."));
+    }
+
+    @Test
+    void repeatedLogoutRemainsIdempotentlySuccessful() throws Exception {
+        saveActiveDoctor("+84912345678", "Password123!");
+        TokenPair tokens = login("0912345678", "Password123!");
+
+        for (int invocation = 0; invocation < 2; invocation++) {
+            mockMvc.perform(post("/api/auth/logout")
+                            .header("Authorization", "Bearer " + tokens.accessToken())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"refreshToken\":\"" + tokens.refreshToken() + "\"}"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.message").value("Logout successful."));
+        }
+
+        assertNotNull(refreshTokenRepository.findByTokenHash(hashToken(tokens.refreshToken())).orElseThrow().getRevokedAt());
+    }
+
+    @Test
+    void logoutDoesNotInvalidateAccessTokenBeforeExpiry() throws Exception {
+        saveActiveDoctor("+84912345678", "Password123!");
+        TokenPair tokens = login("0912345678", "Password123!");
+
+        mockMvc.perform(post("/api/auth/logout")
+                        .header("Authorization", "Bearer " + tokens.accessToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"refreshToken\":\"" + tokens.refreshToken() + "\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + tokens.accessToken()))
+                .andExpect(status().isOk());
     }
 
     private TokenPair login(String phoneNumber, String password) throws Exception {

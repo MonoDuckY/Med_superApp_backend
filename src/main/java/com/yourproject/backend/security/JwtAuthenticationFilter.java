@@ -1,6 +1,7 @@
 package com.yourproject.backend.security;
 
 import java.io.IOException;
+import java.util.Date;
 import java.util.List;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -50,6 +51,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             if (user != null
                     && user.getStatus() == AccountStatus.ACTIVE
+                    && user.getRole() != null
                     && isIssuedAfterPasswordChange(claims, user)
                     && SecurityContextHolder.getContext().getAuthentication() == null) {
                 SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + user.getRole().name());
@@ -68,7 +70,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private boolean isIssuedAfterPasswordChange(Claims claims, User user) {
-        return user.getPasswordChangedAt() == null
-                || !claims.getIssuedAt().toInstant().isBefore(user.getPasswordChangedAt());
+        Date issuedAt = claims.getIssuedAt();
+        return issuedAt != null
+                && (user.getPasswordChangedAt() == null
+                || !issuedAt.toInstant().isBefore(user.getPasswordChangedAt()));
     }
 }

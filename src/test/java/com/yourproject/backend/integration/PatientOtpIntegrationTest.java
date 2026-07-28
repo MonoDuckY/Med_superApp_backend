@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -23,6 +24,8 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
 
 import com.yourproject.backend.models.PatientOtp;
+import com.yourproject.backend.models.AccountStatus;
+import com.yourproject.backend.models.TrustedDevice;
 import com.yourproject.backend.models.User;
 
 class PatientOtpIntegrationTest extends MongoIntegrationTestBase {
@@ -152,6 +155,221 @@ class PatientOtpIntegrationTest extends MongoIntegrationTestBase {
 
         assertEquals(0, refreshTokenRepository.count());
         assertEquals(0, trustedDeviceRepository.count());
+    }
+
+    @Test
+    void otpRequestWithoutPhoneNumberReturnsValidationError() throws Exception {
+        mockMvc.perform(post("/api/auth/patient-otp/request").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"deviceId\":\"device-a\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+
+        assertEquals(0, patientOtpRepository.count());
+        verifyNoInteractions(fcmGatewayService);
+    }
+
+    @Test
+    void unknownPhoneCannotRequestOtp() throws Exception {
+        mockMvc.perform(post("/api/auth/patient-otp/request").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"deviceId\":\"device-a\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Invalid phone number or password."));
+
+        assertEquals(0, patientOtpRepository.count());
+        verifyNoInteractions(fcmGatewayService);
+    }
+
+    @Test
+    void nonPatientCannotRequestOrVerifyOtp() throws Exception {
+        saveActiveDoctor(PHONE, "Password123!");
+
+        mockMvc.perform(post("/api/auth/patient-otp/request").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"deviceId\":\"device-a\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Only patient accounts can use SMS OTP."));
+
+        mockMvc.perform(post("/api/auth/patient-otp/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"code\":\"123456\",\"deviceId\":\"device-a\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Only patient accounts can use SMS OTP."));
+
+        assertEquals(0, patientOtpRepository.count());
+        verifyNoInteractions(fcmGatewayService);
+    }
+
+    @Test
+    void inactivePatientCannotRequestOrVerifyOtp() throws Exception {
+        User patient = saveActivePatient(PHONE);
+        patient.setStatus(AccountStatus.INACTIVE);
+        userRepository.save(patient);
+
+        mockMvc.perform(post("/api/auth/patient-otp/request").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"deviceId\":\"device-a\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+
+        mockMvc.perform(post("/api/auth/patient-otp/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"code\":\"123456\",\"deviceId\":\"device-a\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
+
+        assertEquals(0, patientOtpRepository.count());
+        verifyNoInteractions(fcmGatewayService);
+    }
+
+    @Test
+    void malformedOtpVerificationFieldsReturnValidationErrorWithoutIncrementingAttempts() throws Exception {
+        User patient = saveActivePatient(PHONE);
+        PatientOtp otp = saveOtp(patient, "123456", 0, Instant.now(), Instant.now().plusSeconds(300));
+
+        mockMvc.perform(post("/api/auth/patient-otp/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"code\":\"123456\",\"deviceId\":\"device-a\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+        mockMvc.perform(post("/api/auth/patient-otp/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"deviceId\":\"device-a\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+        mockMvc.perform(post("/api/auth/patient-otp/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"code\":\"12345A\",\"deviceId\":\"device-a\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+
+        assertEquals(0, patientOtpRepository.findById(otp.getId()).orElseThrow().getAttempts());
+    }
+
+    @Test
+    void overlongDeviceIdIsRejectedByOtpEndpoints() throws Exception {
+        String deviceId = "d".repeat(256);
+
+        mockMvc.perform(post("/api/auth/patient-otp/request").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"deviceId\":\"" + deviceId + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+        mockMvc.perform(post("/api/auth/patient-otp/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"code\":\"123456\",\"deviceId\":\"" + deviceId + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void malformedPhoneIsRejectedByOtpEndpoints() throws Exception {
+        mockMvc.perform(post("/api/auth/patient-otp/request").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"12345\",\"deviceId\":\"device-a\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("BAD_REQUEST"));
+        mockMvc.perform(post("/api/auth/patient-otp/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"12345\",\"code\":\"123456\",\"deviceId\":\"device-a\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("BAD_REQUEST"));
+    }
+
+    @Test
+    void verificationWithoutExistingOtpIsRejected() throws Exception {
+        saveActivePatient(PHONE);
+
+        mockMvc.perform(post("/api/auth/patient-otp/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"code\":\"123456\",\"deviceId\":\"device-a\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("OTP is invalid or expired."));
+    }
+
+    @Test
+    void validOtpWithoutDeviceIdDoesNotCreateTrustedDevice() throws Exception {
+        User patient = saveActivePatient(PHONE);
+        saveOtp(patient, "123456", 0, Instant.now(), Instant.now().plusSeconds(300));
+
+        mockMvc.perform(post("/api/auth/patient-otp/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"code\":\"123456\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.accessToken").isNotEmpty());
+
+        assertEquals(0, trustedDeviceRepository.count());
+        assertEquals(1, refreshTokenRepository.count());
+    }
+
+    @Test
+    void revokedTrustedDeviceMustRequestOtpAgain() throws Exception {
+        User patient = saveActivePatient(PHONE);
+        trustedDeviceRepository.save(TrustedDevice.builder()
+                .userId(patient.getId())
+                .deviceId("revoked-device")
+                .verifiedAt(Instant.now().minusSeconds(60))
+                .revokedAt(Instant.now())
+                .build());
+
+        mockMvc.perform(post("/api/auth/patient-otp/request").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"deviceId\":\"revoked-device\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").doesNotExist());
+
+        captureSentOtp(1);
+        assertEquals(1, patientOtpRepository.count());
+    }
+
+    @Test
+    void trustedDeviceBelongingToAnotherPatientDoesNotBypassOtp() throws Exception {
+        User firstPatient = saveActivePatient("+84911111111", "PAT-FIRST");
+        saveActivePatient("+84922222222", "PAT-SECOND");
+        trustedDeviceRepository.save(TrustedDevice.builder()
+                .userId(firstPatient.getId())
+                .deviceId("shared-device")
+                .verifiedAt(Instant.now())
+                .build());
+
+        mockMvc.perform(post("/api/auth/patient-otp/request").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0922222222\",\"deviceId\":\"shared-device\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").doesNotExist());
+
+        verify(fcmGatewayService).sendSmsCommand(eq("integration-test-fcm-token"), eq("+84922222222"), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void fifthIncorrectOtpBlocksSubsequentCorrectCode() throws Exception {
+        User patient = saveActivePatient(PHONE);
+        PatientOtp otp = saveOtp(patient, "123456", 4, Instant.now(), Instant.now().plusSeconds(300));
+
+        mockMvc.perform(post("/api/auth/patient-otp/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"code\":\"654321\",\"deviceId\":\"device-a\"}"))
+                .andExpect(status().isUnauthorized());
+        assertEquals(5, patientOtpRepository.findById(otp.getId()).orElseThrow().getAttempts());
+
+        assertOtpRejected("123456");
+        assertEquals(0, refreshTokenRepository.count());
+    }
+
+    @Test
+    void onlyLatestOtpCanCompleteAuthentication() throws Exception {
+        User patient = saveActivePatient(PHONE);
+        requestOtp("device-a");
+        String firstCode = captureSentOtp(1);
+        PatientOtp firstOtp = patientOtpRepository.findAll().get(0);
+        firstOtp.setCreatedAt(Instant.now().minusSeconds(61));
+        patientOtpRepository.save(firstOtp);
+
+        requestOtp("device-a");
+        String secondCode = captureSentOtp(2);
+
+        assertOtpRejected(firstCode);
+        verifyOtp(secondCode, "device-a");
+        assertEquals(1, refreshTokenRepository.count());
+        assertEquals(1, trustedDeviceRepository.count());
+    }
+
+    @Test
+    void smsGatewayFailureRemovesGeneratedOtp() throws Exception {
+        saveActivePatient(PHONE);
+        doThrow(new RuntimeException("FCM unavailable")).when(fcmGatewayService)
+                .sendSmsCommand(eq("integration-test-fcm-token"), eq(PHONE), org.mockito.ArgumentMatchers.anyString());
+
+        mockMvc.perform(post("/api/auth/patient-otp/request").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"deviceId\":\"device-a\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("OTP could not be delivered. Please try again."));
+
+        assertEquals(0, patientOtpRepository.count());
+        assertEquals(0, refreshTokenRepository.count());
     }
 
     private void requestOtp(String deviceId) throws Exception {
