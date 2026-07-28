@@ -25,6 +25,7 @@ import com.yourproject.backend.dtos.requests.ChangePasswordRequest;
 import com.yourproject.backend.dtos.requests.UpdateUserRequest;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ConflictException;
+import com.yourproject.backend.exceptions.ForbiddenException;
 import com.yourproject.backend.exceptions.ResourceNotFoundException;
 import com.yourproject.backend.exceptions.UnauthorizedException;
 import com.yourproject.backend.models.AccountStatus;
@@ -92,7 +93,6 @@ class UserServiceImplTest {
         request.setDateOfBirth(LocalDate.now().plusDays(1));
         when(patientDataProtectionService.phoneLookup("+84912345678")).thenReturn("phone-lookup");
         when(userRepository.existsByPhoneLookup("phone-lookup")).thenReturn(false);
-        when(passwordEncoder.encode("Newabc123!")).thenReturn("bcrypt-hash");
 
         assertThrows(BadRequestException.class, () -> userService.createUser(request, "admin-id"));
         verify(userRepository, never()).save(any(User.class));
@@ -120,7 +120,6 @@ class UserServiceImplTest {
     void createUser_rejectsRequestWithoutRole() {
         CreateUserRequest request = doctorRequest();
         request.setRole(null);
-        stubDoctorPhone();
         assertThrows(BadRequestException.class, () -> userService.createUser(request, "admin-id"));
     }
 
@@ -225,6 +224,18 @@ class UserServiceImplTest {
     }
 
     @Test
+    void changePassword_rejectsPatientAccountBeforePasswordMatching() {
+        User patient = activeDoctor();
+        patient.setRole(UserRole.PATIENT);
+        patient.setPasswordHash(null);
+        when(userRepository.findById("user-id")).thenReturn(Optional.of(patient));
+
+        assertThrows(ForbiddenException.class, () -> userService.changePassword("user-id", changePasswordRequest("Anything1!")));
+        verify(passwordEncoder, never()).matches(any(), any());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
     void recordSuccessfulLogin_updatesLoginTimestamp() {
         User user = activeDoctor();
 
@@ -253,11 +264,6 @@ class UserServiceImplTest {
         request.setPhoneNumber("0912345678");
         request.setDateOfBirth(LocalDate.of(1995, 1, 1));
         return request;
-    }
-
-    private void stubDoctorPhone() {
-        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.existsByPhoneLookup("phone-lookup")).thenReturn(false);
     }
 
     private void stubPatientPhone() {

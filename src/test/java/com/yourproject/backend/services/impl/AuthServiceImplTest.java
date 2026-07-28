@@ -38,7 +38,11 @@ import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.RefreshToken;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
+import com.yourproject.backend.repositories.PatientOtpRepository;
 import com.yourproject.backend.repositories.RefreshTokenRepository;
+import com.yourproject.backend.repositories.TrustedDeviceRepository;
+import com.yourproject.backend.repositories.UserRepository;
+import com.yourproject.backend.services.SmsGatewayService;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.utils.JwtUtils;
@@ -60,12 +64,29 @@ class AuthServiceImplTest {
     @Mock
     private PatientDataProtectionService patientDataProtectionService;
 
+    @Mock
+    private PatientOtpRepository patientOtpRepository;
+
+    @Mock
+    private SmsGatewayService smsGatewayService;
+
+    @Mock
+    private UserRepository userRepository;
+
+    @Mock
+    private TrustedDeviceRepository trustedDeviceRepository;
+
     @InjectMocks
     private AuthServiceImpl authService;
 
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(authService, "refreshTokenExpirationDays", 7L);
+        ReflectionTestUtils.setField(authService, "otpExpirationMinutes", 5L);
+        ReflectionTestUtils.setField(authService, "otpResendCooldownSeconds", 60L);
+        ReflectionTestUtils.setField(authService, "otpMaxAttempts", 5);
+        ReflectionTestUtils.setField(authService, "maxFailedLoginAttempts", 5);
+        ReflectionTestUtils.setField(authService, "lockoutMinutes", 15L);
     }
 
     @Test

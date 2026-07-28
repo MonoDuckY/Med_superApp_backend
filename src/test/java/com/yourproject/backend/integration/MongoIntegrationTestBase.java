@@ -1,29 +1,41 @@
 package com.yourproject.backend.integration;
 
 import java.util.Base64;
+import java.time.Instant;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Import;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.MongoDBContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
+import com.yourproject.backend.models.AccountStatus;
+import com.yourproject.backend.models.User;
+import com.yourproject.backend.models.UserRole;
+import com.yourproject.backend.repositories.PatientOtpRepository;
 import com.yourproject.backend.repositories.RefreshTokenRepository;
+import com.yourproject.backend.repositories.SmsGatewayDeviceRepository;
+import com.yourproject.backend.repositories.SmsGatewayJobRepository;
+import com.yourproject.backend.repositories.TrustedDeviceRepository;
 import com.yourproject.backend.repositories.UserRepository;
+import com.yourproject.backend.services.FcmGatewayService;
 import com.yourproject.backend.services.PatientDataProtectionService;
+
+import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@Testcontainers(disabledWithoutDocker = true)
 public abstract class MongoIntegrationTestBase {
-    @Container
     static final MongoDBContainer MONGO = new MongoDBContainer("mongo:7.0");
+
+    static {
+        MONGO.start();
+    }
 
     @Autowired
     protected UserRepository userRepository;
@@ -37,6 +49,27 @@ public abstract class MongoIntegrationTestBase {
     @Autowired
     protected PatientDataProtectionService patientDataProtectionService;
 
+    @Autowired
+    protected PatientOtpRepository patientOtpRepository;
+
+    @Autowired
+    protected TrustedDeviceRepository trustedDeviceRepository;
+
+    @Autowired
+    protected SmsGatewayJobRepository smsGatewayJobRepository;
+
+    @Autowired
+    protected SmsGatewayDeviceRepository smsGatewayDeviceRepository;
+
+    @Autowired
+    protected MockMvc mockMvc;
+
+    @Autowired
+    protected ObjectMapper objectMapper;
+
+    @MockitoBean
+    protected FcmGatewayService fcmGatewayService;
+
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.mongodb.uri", MONGO::getReplicaSetUrl);
@@ -46,12 +79,60 @@ public abstract class MongoIntegrationTestBase {
         registry.add("app.bootstrap.admin.phone-number", () -> "");
         registry.add("app.bootstrap.admin.password", () -> "");
         registry.add("app.patient-data.migrate-legacy-on-startup", () -> "false");
+        registry.add("app.sms-gateway.direct-fcm-token", () -> "integration-test-fcm-token");
+        registry.add("app.sms-gateway.registration-key", () -> "integration-test-gateway-key");
+        registry.add("app.otp.expiration-minutes", () -> "5");
+        registry.add("app.otp.resend-cooldown-seconds", () -> "60");
+        registry.add("app.otp.max-attempts", () -> "5");
+        registry.add("app.auth.max-failed-login-attempts", () -> "5");
+        registry.add("app.auth.lockout-minutes", () -> "15");
     }
 
     @BeforeEach
     void clearDatabase() {
+        patientOtpRepository.deleteAll();
+        trustedDeviceRepository.deleteAll();
+        smsGatewayJobRepository.deleteAll();
+        smsGatewayDeviceRepository.deleteAll();
         refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
+    }
+
+    protected User saveActiveDoctor(String normalizedPhone, String password) {
+        Instant now = Instant.now();
+        return userRepository.save(User.builder()
+                .fullName("Dr Integration")
+                .role(UserRole.DOCTOR)
+                .status(AccountStatus.ACTIVE)
+                .phoneNumber(normalizedPhone)
+                .phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
+                .passwordHash(passwordEncoder.encode(password))
+                .certificate("Practice certificate")
+                .createdAt(now)
+                .updatedAt(now)
+                .passwordChangedAt(now.minusSeconds(10))
+                .build());
+    }
+
+    protected User saveActivePatient(String normalizedPhone) {
+        Instant now = Instant.now();
+        User patient = User.builder()
+                .fullName("Patient Integration")
+                .role(UserRole.PATIENT)
+                .status(AccountStatus.ACTIVE)
+                .patientId("PAT-INTEGRATION")
+                .gender("NONE")
+                .dateOfBirth(java.time.LocalDate.of(1995, 1, 1))
+                .phoneNumber(normalizedPhone)
+                .phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
+                .patientIdLookup(patientDataProtectionService.patientIdLookup("PAT-INTEGRATION"))
+                .address("Test address")
+                .createdAt(now)
+                .updatedAt(now)
+                .passwordChangedAt(now.minusSeconds(10))
+                .build();
+        patientDataProtectionService.encryptPatientFields(patient);
+        return userRepository.save(patient);
     }
 
     private static String key(byte seed) {

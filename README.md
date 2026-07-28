@@ -522,3 +522,73 @@ Hai key phải giống nhau ở mọi backend instance dùng chung MongoDB, như
 4. Đặt lại `PATIENT_DATA_MIGRATE_LEGACY_ON_STARTUP=false` rồi restart backend.
 
 Không bật migration nếu database có Patient thiếu các field bắt buộc hoặc phone/Patient ID bị trùng sau chuẩn hóa; hãy sửa dữ liệu đó trước.
+
+## 13. Chạy Unit Test và Integration Test hoàn chỉnh
+
+### 13.1 Phân biệt môi trường test
+
+- Unit test dùng Mockito, không cần Docker, MongoDB Atlas, Firebase hoặc biến môi trường thật.
+- Integration test khởi động Spring Boot, MockMvc, Spring Security và MongoDB 7 bằng Testcontainers.
+- Integration test dùng fake `FcmGatewayService`; không gửi FCM hoặc SMS thật. OTP vẫn được in ra console trong môi trường hiện tại và test cũng đọc OTP từ fake FCM payload.
+- Không cấu hình integration test chạy trực tiếp trên MongoDB Atlas của nhóm vì `MongoIntegrationTestBase` xóa dữ liệu test trước mỗi test case.
+
+### 13.2 Cài Docker cho Integration Test
+
+1. Cài Docker Desktop cho Windows và bật WSL 2 backend.
+2. Mở Docker Desktop, chờ trạng thái `Engine running`.
+3. Mở PowerShell và kiểm tra:
+
+```powershell
+docker version
+docker run --rm hello-world
+```
+
+Nếu `docker` không được nhận diện, restart PowerShell/IntelliJ sau khi cài Docker Desktop.
+
+### 13.3 Chạy bằng PowerShell
+
+Chạy riêng unit test:
+
+```powershell
+cd D:\doAn2026\Med_superApp_backend
+.\gradlew.bat test --tests "com.yourproject.backend.services.*" --tests "com.yourproject.backend.utils.*" --tests "com.yourproject.backend.config.*"
+```
+
+Chạy toàn bộ integration test:
+
+```powershell
+.\gradlew.bat test --tests "com.yourproject.backend.integration.*"
+```
+
+Chạy sạch toàn bộ project:
+
+```powershell
+.\gradlew.bat clean test
+```
+
+Lần chạy integration đầu tiên có thể chậm vì Testcontainers phải tải image `mongo:7.0`.
+
+### 13.4 Chạy bằng IntelliJ IDEA
+
+1. Mở Docker Desktop trước.
+2. Trong IntelliJ, mở `src/test/java/com/yourproject/backend/integration`.
+3. Nhấn chuột phải package `integration` và chọn **Run Tests in 'integration'**.
+4. Để chạy toàn bộ, nhấn chuột phải `src/test/java` và chọn **Run All Tests**.
+5. Integration test không cần nhập `MONGODB_URI`, Firebase key, JWT secret hoặc AES/HMAC key thật; test base tự tạo Mongo container và test key cô lập.
+
+### 13.5 Cách xác nhận test thực sự chạy
+
+Mở báo cáo sau khi chạy:
+
+```text
+build/reports/tests/test/index.html
+```
+
+Kết quả hoàn chỉnh phải thỏa mãn:
+
+- `Failures = 0` và `Errors = 0`.
+- Các class trong package `integration` không có trạng thái `Skipped`.
+- Hiện tại project có 71 test: 46 unit test và 25 integration test.
+- Nếu 25 integration test đều bị Skip nhưng Gradle vẫn báo `BUILD SUCCESSFUL`, Docker chưa được cài hoặc Docker Engine chưa chạy.
+
+Các integration test hiện bao phủ: password login, lockout sau 5 lần sai, OTP bệnh nhân, trusted device, refresh-token rotation, logout, đổi mật khẩu, chặn Patient đổi mật khẩu, JWT không hợp lệ, account inactive và phân quyền Admin.

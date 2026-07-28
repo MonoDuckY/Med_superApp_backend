@@ -3,6 +3,7 @@ package com.yourproject.backend.exceptions;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -30,6 +31,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleDuplicateKeyException(DuplicateKeyException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.failure("A record with the same unique value already exists.", "CONFLICT"));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDeniedException(AccessDeniedException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.failure("You do not have permission to perform this action.", "FORBIDDEN"));
     }
 
     @ExceptionHandler(Exception.class)

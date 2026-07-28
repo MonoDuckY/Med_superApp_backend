@@ -14,6 +14,7 @@ import com.yourproject.backend.dtos.requests.CreateUserRequest;
 import com.yourproject.backend.dtos.requests.UpdateUserRequest;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ConflictException;
+import com.yourproject.backend.exceptions.ForbiddenException;
 import com.yourproject.backend.exceptions.ResourceNotFoundException;
 import com.yourproject.backend.exceptions.UnauthorizedException;
 import com.yourproject.backend.models.AccountStatus;
@@ -179,6 +180,9 @@ public class UserServiceImpl implements UserService {
     @Override
     public void changePassword(String userId, ChangePasswordRequest request) {
         User user = getActiveUserById(userId);
+        if (user.getRole() == UserRole.PATIENT) {
+            throw new ForbiddenException("Patient accounts authenticate using SMS OTP and do not have passwords.");
+        }
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
             throw new UnauthorizedException("Current password is incorrect.");
         }
