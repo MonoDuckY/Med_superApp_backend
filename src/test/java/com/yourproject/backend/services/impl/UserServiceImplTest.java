@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import com.yourproject.backend.dtos.requests.CreateUserRequest;
@@ -179,11 +181,39 @@ class UserServiceImplTest {
     }
 
     @Test
+    void getActiveUserById_returnsActiveUser() {
+        User user = activeDoctor();
+        when(userRepository.findById("user-id")).thenReturn(Optional.of(user));
+
+        assertEquals(user, userService.getActiveUserById("user-id"));
+    }
+
+    @Test
     void findByPhoneNumber_rejectsUnknownPhoneLookup() {
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
         when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.empty());
 
         assertThrows(UnauthorizedException.class, () -> userService.findByPhoneNumber("0363636363"));
+    }
+
+    @Test
+    void findByPhoneNumber_returnsUserForNormalizedPhoneLookup() {
+        User user = activeDoctor();
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.of(user));
+
+        assertEquals(user, userService.findByPhoneNumber("0363636363"));
+        verify(patientDataProtectionService).phoneLookup("+84363636363");
+    }
+
+    @Test
+    void getAllUsers_returnsUsersOrderedByNewestCreationTime() {
+        Sort expectedSort = Sort.by(Sort.Direction.DESC, "createdAt");
+        List<User> expectedUsers = List.of(activeDoctor(), activeDoctor());
+        when(userRepository.findAll(expectedSort)).thenReturn(expectedUsers);
+
+        assertEquals(expectedUsers, userService.getAllUsers());
+        verify(userRepository).findAll(expectedSort);
     }
 
     @Test
@@ -221,6 +251,68 @@ class UserServiceImplTest {
         when(passwordEncoder.matches("Wrongpass1", "password-hash")).thenReturn(false);
 
         assertThrows(UnauthorizedException.class, () -> userService.changePassword("user-id", changePasswordRequest("Wrongpass1")));
+    }
+
+    @Test
+    void changePassword_rejectsMismatchedConfirmation() {
+        User user = activeDoctor();
+        ChangePasswordRequest request = changePasswordRequest("Oldpass1!");
+        request.setNewPassword("Newpass2!");
+        request.setConfirmPassword("Different2!");
+        when(userRepository.findById("user-id")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("Oldpass1!", "password-hash")).thenReturn(true);
+
+        assertThrows(BadRequestException.class, () -> userService.changePassword("user-id", request));
+        verify(passwordEncoder, never()).encode(any());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void changePassword_rejectsNewPasswordEqualToCurrentPassword() {
+        User user = activeDoctor();
+        ChangePasswordRequest request = changePasswordRequest("Oldpass1!");
+        request.setNewPassword("Oldpass1!");
+        request.setConfirmPassword("Oldpass1!");
+        when(userRepository.findById("user-id")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("Oldpass1!", "password-hash")).thenReturn(true);
+
+        assertThrows(BadRequestException.class, () -> userService.changePassword("user-id", request));
+        verify(passwordEncoder, never()).encode(any());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void changePassword_rejectsNewPasswordWithoutDigitOrSpecialCharacter() {
+        User user = activeDoctor();
+        ChangePasswordRequest request = changePasswordRequest("Oldpass1!");
+        request.setNewPassword("Newpassword");
+        request.setConfirmPassword("Newpassword");
+        when(userRepository.findById("user-id")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("Oldpass1!", "password-hash")).thenReturn(true);
+
+        assertThrows(BadRequestException.class, () -> userService.changePassword("user-id", request));
+        verify(passwordEncoder, never()).encode(any());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void changePassword_updatesHashAndTimestampsForValidRequest() {
+        User user = activeDoctor();
+        ChangePasswordRequest request = changePasswordRequest("Oldpass1!");
+        request.setNewPassword("Newpass2!");
+        request.setConfirmPassword("Newpass2!");
+        when(userRepository.findById("user-id")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("Oldpass1!", "password-hash")).thenReturn(true);
+        when(passwordEncoder.matches("Newpass2!", "password-hash")).thenReturn(false);
+        when(passwordEncoder.encode("Newpass2!")).thenReturn("new-password-hash");
+
+        userService.changePassword("user-id", request);
+
+        assertEquals("new-password-hash", user.getPasswordHash());
+        assertNotNull(user.getPasswordChangedAt());
+        assertNotNull(user.getUpdatedAt());
+        verify(passwordEncoder).encode("Newpass2!");
+        verify(userRepository).save(user);
     }
 
     @Test

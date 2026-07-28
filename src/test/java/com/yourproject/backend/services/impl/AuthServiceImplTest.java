@@ -192,6 +192,19 @@ class AuthServiceImplTest {
     }
 
     @Test
+    void logout_revokesRefreshTokenOwnedByCurrentUser() {
+        RefreshToken storedToken = activeRefreshToken("refresh-token", "user-id");
+        LogoutRequest request = new LogoutRequest();
+        request.setRefreshToken("refresh-token");
+        when(refreshTokenRepository.findByTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(storedToken));
+
+        authService.logout("user-id", request);
+
+        assertNotNull(storedToken.getRevokedAt());
+        verify(refreshTokenRepository).save(storedToken);
+    }
+
+    @Test
     void changePassword_revokesEveryActiveRefreshToken() {
         ChangePasswordRequest request = new ChangePasswordRequest();
         request.setCurrentPassword("Oldpass1");

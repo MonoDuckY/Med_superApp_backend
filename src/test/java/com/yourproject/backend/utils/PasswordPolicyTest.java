@@ -32,4 +32,9 @@ class PasswordPolicyTest {
     void validate_acceptsSpecialCharacterInsteadOfDigit() {
         assertDoesNotThrow(() -> PasswordPolicy.validate("Validpass!"));
     }
+
+    @Test
+    void validate_rejectsPasswordWithoutDigitOrSpecialCharacter() {
+        assertThrows(BadRequestException.class, () -> PasswordPolicy.validate("Validpassword"));
+    }
 }
