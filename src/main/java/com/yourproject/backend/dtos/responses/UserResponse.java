@@ -33,15 +33,19 @@ public class UserResponse {
     public static UserResponse from(User user, PatientDataProtectionService patientDataProtectionService) {
         User responseUser = copyOf(user);
         patientDataProtectionService.decryptPatientFields(responseUser);
+        return fromUnprotected(responseUser);
+    }
+
+    public static UserResponse fromUnprotected(User user) {
         return UserResponse.builder()
-                .id(responseUser.getId()).role(responseUser.getRole()).status(responseUser.getStatus())
-                .patientId(responseUser.getPatientId()).fullName(responseUser.getFullName())
-                .gender(responseUser.getGender()).dateOfBirth(responseUser.getDateOfBirth())
-                .phoneNumber(responseUser.getPhoneNumber()).address(responseUser.getAddress())
-                .citizenIdentificationCode(responseUser.getCitizenIdentificationCode())
-                .healthInsuranceCode(responseUser.getHealthInsuranceCode()).certificate(responseUser.getCertificate())
-                .createdAt(responseUser.getCreatedAt()).updatedAt(responseUser.getUpdatedAt())
-                .lastLoginAt(responseUser.getLastLoginAt())
+                .id(user.getId()).role(user.getRole()).status(user.getStatus())
+                .patientId(user.getPatientId()).fullName(user.getFullName())
+                .gender(user.getGender()).dateOfBirth(user.getDateOfBirth())
+                .phoneNumber(user.getPhoneNumber()).address(user.getAddress())
+                .citizenIdentificationCode(user.getCitizenIdentificationCode())
+                .healthInsuranceCode(user.getHealthInsuranceCode()).certificate(user.getCertificate())
+                .createdAt(user.getCreatedAt()).updatedAt(user.getUpdatedAt())
+                .lastLoginAt(user.getLastLoginAt())
                 .build();
     }
 

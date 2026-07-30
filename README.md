@@ -592,3 +592,82 @@ Kết quả hoàn chỉnh phải thỏa mãn:
 - Nếu 25 integration test đều bị Skip nhưng Gradle vẫn báo `BUILD SUCCESSFUL`, Docker chưa được cài hoặc Docker Engine chưa chạy.
 
 Các integration test hiện bao phủ: password login, lockout sau 5 lần sai, OTP bệnh nhân, trusted device, refresh-token rotation, logout, đổi mật khẩu, chặn Patient đổi mật khẩu, JWT không hợp lệ, account inactive và phân quyền Admin.
+
+## 14. Doctor Work Schedule và Patient Appointment
+
+Backend tự tạo 16 work slot, mỗi slot 30 phút:
+
+- `Slot1` đến `Slot8`: 08:00-12:00.
+- `Slot9` đến `Slot16`: 13:00-17:00.
+- Doctor chọn `MORNING`, `AFTERNOON` hoặc `FULL_DAY`; một request tạo lần lượt 8, 8 hoặc 16 document `doctor_work_slots`.
+
+### 14.1 API Doctor
+
+| Method | Endpoint | Mô tả |
+|---|---|---|
+| `GET` | `/api/doctor/work-schedules/options` | Lấy 16 slot chuẩn và danh sách phòng đang active. |
+| `GET` | `/api/doctor/work-schedules?from=YYYY-MM-DD&to=YYYY-MM-DD` | Xem lịch Doctor hiện tại. |
+| `POST` | `/api/doctor/work-schedules` | Đăng ký ca làm việc và gửi Staff duyệt. |
+| `DELETE` | `/api/doctor/work-schedules/{submissionId}` | Hủy submission còn `PENDING_APPROVAL`. |
+
+Ví dụ đăng ký ca sáng:
+
+```json
+{
+  "workDate": "2026-08-10",
+  "session": "MORNING",
+  "roomId": "<clinicRoomId>",
+  "note": "Morning shift"
+}
+```
+
+### 14.2 API Staff
+
+| Method | Endpoint | Mô tả |
+|---|---|---|
+| `POST` | `/api/staff/scheduling/clinic-rooms` | Tạo phòng; `code` là duy nhất. |
+| `GET` | `/api/staff/scheduling/clinic-rooms` | Lấy phòng đang active. |
+| `GET` | `/api/staff/scheduling/work-schedules/pending` | Lấy submission Doctor đang chờ duyệt. |
+| `GET` | `/api/staff/scheduling/work-schedules?status=APPROVED` | Lấy lịch làm việc theo trạng thái; bỏ `status` để lấy tất cả. |
+| `PATCH` | `/api/staff/scheduling/work-schedules/{submissionId}/decision` | `APPROVE` hoặc `REJECT` lịch Doctor. |
+| `GET` | `/api/staff/scheduling/appointments/pending` | Lấy Appointment Patient đang chờ duyệt lần hai. |
+| `GET` | `/api/staff/scheduling/appointments?status=CONFIRMED` | Lấy appointment theo trạng thái; bỏ `status` để lấy tất cả. |
+| `PATCH` | `/api/staff/scheduling/appointments/{appointmentId}/cancel` | Hủy appointment đã xác nhận và giải phóng slot; yêu cầu `cancellationReason`. |
+| `PATCH` | `/api/patient/appointments/{appointmentId}/cancel` | Patient hủy appointment của mình khi đang chờ duyệt hoặc đã xác nhận. |
+| `PATCH` | `/api/staff/scheduling/appointments/{appointmentId}/decision` | `APPROVE` hoặc `REJECT` Appointment. |
+
+Khi reject phải gửi `rejectionReason`:
+
+```json
+{
+  "decision": "REJECT",
+  "rejectionReason": "Clinic room is unavailable"
+}
+```
+
+### 14.3 API Patient
+
+| Method | Endpoint | Mô tả |
+|---|---|---|
+| `GET` | `/api/patient/appointments/available-slots?date=YYYY-MM-DD&doctorId=...` | Chỉ trả slot Doctor đã được Staff duyệt và chưa được Patient khác giữ/đặt. |
+| `POST` | `/api/patient/appointments` | Giữ slot và tạo Appointment `PENDING_STAFF_CONFIRMATION`. |
+| `GET` | `/api/patient/appointments` | Xem Appointment của Patient đang đăng nhập. |
+
+```json
+{
+  "doctorWorkSlotId": "<doctorWorkSlotId>",
+  "note": "First visit"
+}
+```
+
+Luồng trạng thái hiện tại không có thanh toán:
+
+```text
+Doctor submit -> PENDING_APPROVAL
+Staff approve -> APPROVED + AVAILABLE
+Patient book -> PENDING_STAFF_CONFIRMATION + PENDING_CONFIRMATION
+Staff approve Appointment -> CONFIRMED + BOOKED
+Staff reject Appointment -> REJECTED + AVAILABLE
+```
+
+Patient chỉ được đặt lịch trước tối thiểu 12 giờ, tối đa 30 ngày và chỉ có một Appointment active trong một ngày.

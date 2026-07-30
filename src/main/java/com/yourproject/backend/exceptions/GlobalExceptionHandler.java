@@ -1,6 +1,7 @@
 package com.yourproject.backend.exceptions;
 
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -31,6 +32,15 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleDuplicateKeyException(DuplicateKeyException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.failure("A record with the same unique value already exists.", "CONFLICT"));
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleOptimisticLockingFailureException(
+            OptimisticLockingFailureException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.failure(
+                        "The record was changed by another request. Please reload and try again.",
+                        "CONFLICT"));
     }
 
     @ExceptionHandler(AccessDeniedException.class)

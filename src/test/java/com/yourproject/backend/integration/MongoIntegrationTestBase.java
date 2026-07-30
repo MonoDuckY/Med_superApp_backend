@@ -18,6 +18,9 @@ import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.repositories.PatientOtpRepository;
+import com.yourproject.backend.repositories.AppointmentRepository;
+import com.yourproject.backend.repositories.ClinicRoomRepository;
+import com.yourproject.backend.repositories.DoctorWorkSlotRepository;
 import com.yourproject.backend.repositories.RefreshTokenRepository;
 import com.yourproject.backend.repositories.SmsGatewayDeviceRepository;
 import com.yourproject.backend.repositories.SmsGatewayJobRepository;
@@ -25,6 +28,7 @@ import com.yourproject.backend.repositories.TrustedDeviceRepository;
 import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.services.FcmGatewayService;
 import com.yourproject.backend.services.PatientDataProtectionService;
+import com.yourproject.backend.utils.JwtUtils;
 
 import tools.jackson.databind.ObjectMapper;
 
@@ -53,6 +57,15 @@ public abstract class MongoIntegrationTestBase {
     protected PatientOtpRepository patientOtpRepository;
 
     @Autowired
+    protected AppointmentRepository appointmentRepository;
+
+    @Autowired
+    protected DoctorWorkSlotRepository doctorWorkSlotRepository;
+
+    @Autowired
+    protected ClinicRoomRepository clinicRoomRepository;
+
+    @Autowired
     protected TrustedDeviceRepository trustedDeviceRepository;
 
     @Autowired
@@ -66,6 +79,9 @@ public abstract class MongoIntegrationTestBase {
 
     @Autowired
     protected ObjectMapper objectMapper;
+
+    @Autowired
+    protected JwtUtils jwtUtils;
 
     @MockitoBean
     protected FcmGatewayService fcmGatewayService;
@@ -90,6 +106,9 @@ public abstract class MongoIntegrationTestBase {
 
     @BeforeEach
     void clearDatabase() {
+        appointmentRepository.deleteAll();
+        doctorWorkSlotRepository.deleteAll();
+        clinicRoomRepository.deleteAll();
         patientOtpRepository.deleteAll();
         trustedDeviceRepository.deleteAll();
         smsGatewayJobRepository.deleteAll();
@@ -119,6 +138,21 @@ public abstract class MongoIntegrationTestBase {
         return userRepository.save(User.builder()
                 .fullName("Admin Integration")
                 .role(UserRole.ADMIN)
+                .status(AccountStatus.ACTIVE)
+                .phoneNumber(normalizedPhone)
+                .phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
+                .passwordHash(passwordEncoder.encode(password))
+                .createdAt(now)
+                .updatedAt(now)
+                .passwordChangedAt(now.minusSeconds(10))
+                .build());
+    }
+
+    protected User saveActiveStaff(String normalizedPhone, String password) {
+        Instant now = Instant.now();
+        return userRepository.save(User.builder()
+                .fullName("Staff Integration")
+                .role(UserRole.STAFF)
                 .status(AccountStatus.ACTIVE)
                 .phoneNumber(normalizedPhone)
                 .phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
