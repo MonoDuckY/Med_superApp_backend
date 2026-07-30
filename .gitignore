@@ -73,6 +73,7 @@ Desktop.ini
 test-output/
 .code-review-graph/
 .work/
+test design/
 
 # AI coding assistants (local configuration may contain credentials)
 .agents/
