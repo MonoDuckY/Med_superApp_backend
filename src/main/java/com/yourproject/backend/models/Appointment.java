@@ -4,9 +4,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
 import org.springframework.data.annotation.Version;
-import org.springframework.data.mongodb.core.index.CompoundIndex;
-import org.springframework.data.mongodb.core.index.CompoundIndexes;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -16,18 +15,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Document(collection = "appointments")
-@CompoundIndexes({
-        @CompoundIndex(
-                name = "active_work_slot_appointment_unique",
-                def = "{'doctorWorkSlotId': 1}",
-                unique = true,
-                partialFilter = "{'active': true}"),
-        @CompoundIndex(
-                name = "active_patient_appointment_day_unique",
-                def = "{'patientUserId': 1, 'appointmentDate': 1}",
-                unique = true,
-                partialFilter = "{'active': true}")
-})
 @Data
 @Builder
 @NoArgsConstructor
@@ -41,31 +28,44 @@ public class Appointment {
 
     private String patientId;
 
-    @Indexed
+    @Transient
     private String doctorId;
 
     @Indexed
     private String doctorWorkSlotId;
 
+    @Transient
     private String slotId;
+    @Transient
     private String slotName;
+    @Transient
     private String roomId;
+    @Transient
     private String roomCode;
+    @Transient
     private LocalDate appointmentDate;
+    @Transient
     private Instant startAt;
+    @Transient
     private Instant endAt;
 
     @Indexed
     private AppointmentStatus status;
 
+    private String diagnosis;
+    @Transient
     private String note;
     private Instant requestedAt;
+    @Transient
     private String reviewedBy;
+    @Transient
     private Instant reviewedAt;
+    @Transient
     private String rejectionReason;
     private String cancelledBy;
     private Instant cancelledAt;
     private String cancellationReason;
+    @Transient
     private boolean active;
     private Instant createdAt;
     private Instant updatedAt;

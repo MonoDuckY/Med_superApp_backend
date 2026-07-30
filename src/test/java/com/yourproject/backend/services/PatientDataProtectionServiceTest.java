@@ -25,7 +25,6 @@ class PatientDataProtectionServiceTest {
         protectionService.encryptPatientFields(patient);
 
         assertNull(patient.getPhoneNumber());
-        assertNull(patient.getPatientId());
         assertNull(patient.getFullName());
         assertNull(patient.getGender());
         assertNull(patient.getDateOfBirth());
@@ -34,7 +33,6 @@ class PatientDataProtectionServiceTest {
         assertNull(patient.getHealthInsuranceCode());
         assertNotEquals("Nguyen Van A", patient.getPatientFullNameEncrypted());
         assertTrue(patient.getPatientPhoneEncrypted().startsWith("v1:"));
-        assertTrue(patient.getPatientIdEncrypted().startsWith("v1:"));
         assertNotNull(patient.getPatientGenderEncrypted());
         assertNotNull(patient.getPatientDateOfBirthEncrypted());
         assertNotNull(patient.getPatientAddressEncrypted());
@@ -49,7 +47,6 @@ class PatientDataProtectionServiceTest {
                 .role(UserRole.PATIENT)
                 .encryptionVersion(1)
                 .patientPhoneEncrypted(protectionService.encryptSensitiveValue("+84363636363"))
-                .patientIdEncrypted(protectionService.encryptSensitiveValue("PAT-001"))
                 .patientFullNameEncrypted(protectionService.encryptSensitiveValue("Nguyen Van A"))
                 .patientGenderEncrypted(protectionService.encryptSensitiveValue("MALE"))
                 .patientDateOfBirthEncrypted(protectionService.encryptSensitiveValue("1995-01-01"))
@@ -61,7 +58,6 @@ class PatientDataProtectionServiceTest {
         protectionService.decryptPatientFields(patient);
 
         assertEquals("+84363636363", patient.getPhoneNumber());
-        assertEquals("PAT-001", patient.getPatientId());
         assertEquals("Nguyen Van A", patient.getFullName());
         assertEquals("MALE", patient.getGender());
         assertEquals(LocalDate.of(1995, 1, 1), patient.getDateOfBirth());
@@ -78,16 +74,6 @@ class PatientDataProtectionServiceTest {
     @Test
     void phoneLookup_returnsDifferentValueForUnknownPhoneNumber() {
         assertNotEquals(protectionService.phoneLookup("+84363636363"), protectionService.phoneLookup("+84912345678"));
-    }
-
-    @Test
-    void patientIdLookup_isStableForTheSamePatientId() {
-        assertEquals(protectionService.patientIdLookup("PAT-000001"), protectionService.patientIdLookup("PAT-000001"));
-    }
-
-    @Test
-    void patientIdLookup_returnsDifferentValueForDifferentPatientId() {
-        assertNotEquals(protectionService.patientIdLookup("PAT-000001"), protectionService.patientIdLookup("PAT-000002"));
     }
 
     @Test

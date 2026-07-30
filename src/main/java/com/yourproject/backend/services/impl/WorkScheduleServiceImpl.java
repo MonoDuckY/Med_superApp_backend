@@ -2,6 +2,7 @@ package com.yourproject.backend.services.impl;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,8 +28,7 @@ import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.models.WorkSession;
 import com.yourproject.backend.models.WorkSlot;
-import com.yourproject.backend.models.WorkSlotApprovalStatus;
-import com.yourproject.backend.models.WorkSlotBookingStatus;
+import com.yourproject.backend.models.DoctorWorkSlotStatus;
 import com.yourproject.backend.repositories.ClinicRoomRepository;
 import com.yourproject.backend.repositories.DoctorWorkSlotRepository;
 import com.yourproject.backend.repositories.WorkSlotRepository;
@@ -75,19 +75,22 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
 
         Set<String> slotIds = selectedSlots.stream().map(WorkSlot::getId).collect(Collectors.toSet());
         List<DoctorWorkSlot> conflicts = doctorWorkSlotRepository
-                .findAllByWorkDateAndSlotIdInAndConflictActiveTrue(request.getWorkDate(), slotIds)
+                .findAllByWorkDateAndSlotIdIn(request.getWorkDate(), slotIds)
                 .stream()
+                .filter(existing -> existing.getStatus() != DoctorWorkSlotStatus.REJECTED
+                        && existing.getStatus() != DoctorWorkSlotStatus.CANCELLED
+                        && existing.getStatus() != DoctorWorkSlotStatus.CLOSED)
                 .filter(existing -> existing.getDoctorId().equals(doctor.getId())
                         || existing.getRoomId().equals(room.getId()))
                 .toList();
         if (!conflicts.isEmpty()) {
-            String names = conflicts.stream().map(DoctorWorkSlot::getSlotName).distinct().sorted()
+            String names = conflicts.stream().map(DoctorWorkSlot::getSlotId).distinct().sorted()
                     .collect(Collectors.joining(", "));
             throw new ConflictException("Work schedule conflicts with existing slots: " + names + ".");
         }
 
-        String submissionId = UUID.randomUUID().toString();
         String note = trimToNull(request.getNote());
+        String submissionId = UUID.randomUUID().toString();
         List<DoctorWorkSlot> documents = new ArrayList<>();
         for (WorkSlot slot : selectedSlots) {
             Instant startAt = toInstant(request.getWorkDate(), slot);
@@ -96,13 +99,10 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                     .doctorId(doctor.getId())
                     .workDate(request.getWorkDate())
                     .slotId(slot.getId())
-                    .slotName(slot.getName())
                     .roomId(room.getId())
-                    .roomCode(room.getCode())
                     .startAt(startAt)
                     .endAt(request.getWorkDate().atTime(slot.getEndTime()).atZone(HOSPITAL_ZONE).toInstant())
-                    .approvalStatus(WorkSlotApprovalStatus.PENDING_APPROVAL)
-                    .bookingStatus(WorkSlotBookingStatus.NOT_PUBLISHED)
+                    .status(DoctorWorkSlotStatus.PENDING)
                     .note(note)
                     .submittedAt(now)
                     .conflictActive(true)
@@ -130,16 +130,15 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     @Override
     public List<DoctorWorkSlot> getPendingSchedules(String staffId) {
         requireStaff(staffId);
-        return doctorWorkSlotRepository.findAllByApprovalStatusOrderBySubmittedAtAsc(
-                WorkSlotApprovalStatus.PENDING_APPROVAL);
+        return doctorWorkSlotRepository.findAllByStatusOrderBySubmittedAtAsc(DoctorWorkSlotStatus.PENDING);
     }
 
     @Override
-    public List<DoctorWorkSlot> getSchedules(String staffId, WorkSlotApprovalStatus status) {
+    public List<DoctorWorkSlot> getSchedules(String staffId, DoctorWorkSlotStatus status) {
         requireStaff(staffId);
         return status == null
                 ? doctorWorkSlotRepository.findAllByOrderBySubmittedAtDesc()
-                : doctorWorkSlotRepository.findAllByApprovalStatusOrderBySubmittedAtDesc(status);
+                : doctorWorkSlotRepository.findAllByStatusOrderBySubmittedAtDesc(status);
     }
 
     @Override
@@ -150,7 +149,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         if (slots.isEmpty()) {
             throw new ResourceNotFoundException("Work schedule submission was not found.");
         }
-        if (slots.stream().anyMatch(slot -> slot.getApprovalStatus() != WorkSlotApprovalStatus.PENDING_APPROVAL)) {
+        if (slots.stream().anyMatch(slot -> slot.getStatus() != DoctorWorkSlotStatus.PENDING)) {
             throw new ConflictException("Only pending work schedule submissions can be reviewed.");
         }
 
@@ -169,12 +168,10 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             slot.setReviewedAt(reviewedAt);
             slot.setUpdatedAt(reviewedAt);
             if (request.getDecision() == ScheduleDecision.APPROVE) {
-                slot.setApprovalStatus(WorkSlotApprovalStatus.APPROVED);
-                slot.setBookingStatus(WorkSlotBookingStatus.AVAILABLE);
+                slot.setStatus(DoctorWorkSlotStatus.AVAILABLE);
                 slot.setRejectionReason(null);
             } else {
-                slot.setApprovalStatus(WorkSlotApprovalStatus.REJECTED);
-                slot.setBookingStatus(WorkSlotBookingStatus.NOT_PUBLISHED);
+                slot.setStatus(DoctorWorkSlotStatus.REJECTED);
                 slot.setRejectionReason(rejectionReason);
                 slot.setConflictActive(false);
             }
@@ -191,14 +188,13 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         if (slots.isEmpty()) {
             throw new ResourceNotFoundException("Work schedule submission was not found.");
         }
-        if (slots.stream().anyMatch(slot -> slot.getApprovalStatus() != WorkSlotApprovalStatus.PENDING_APPROVAL)) {
+        if (slots.stream().anyMatch(slot -> slot.getStatus() != DoctorWorkSlotStatus.PENDING)) {
             throw new ConflictException("Only pending work schedule submissions can be cancelled by a doctor.");
         }
 
         Instant now = Instant.now();
         slots.forEach(slot -> {
-            slot.setApprovalStatus(WorkSlotApprovalStatus.CANCELLED);
-            slot.setBookingStatus(WorkSlotBookingStatus.NOT_PUBLISHED);
+            slot.setStatus(DoctorWorkSlotStatus.CANCELLED);
             slot.setConflictActive(false);
             slot.setUpdatedAt(now);
         });
@@ -223,10 +219,14 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     }
 
     private List<WorkSlot> getSlots(WorkSession session) {
-        if (session == WorkSession.FULL_DAY) {
-            return workSlotRepository.findAllByActiveTrueOrderByStartTimeAsc();
-        }
-        return workSlotRepository.findAllBySessionAndActiveTrueOrderByStartTimeAsc(session);
+        List<WorkSlot> slots = workSlotRepository.findAllByOrderByStartTimeAsc();
+        if (session == WorkSession.FULL_TIME) return slots;
+        LocalTime noon = LocalTime.NOON;
+        return slots.stream()
+                .filter(slot -> session == WorkSession.MORNING
+                        ? slot.getStartTime().isBefore(noon)
+                        : !slot.getStartTime().isBefore(noon))
+                .toList();
     }
 
     private Instant toInstant(LocalDate workDate, WorkSlot slot) {
@@ -235,7 +235,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
 
     private User requireRole(String userId, UserRole role, String message) {
         User user = userService.getActiveUserById(userId);
-        if (user.getRole() != role) {
+        if (!user.getRoles().contains(role)) {
             throw new ForbiddenException(message);
         }
         return user;
@@ -243,8 +243,8 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
 
     private void requireStaff(String userId) {
         User user = userService.getActiveUserById(userId);
-        if (user.getRole() != UserRole.STAFF && user.getRole() != UserRole.ADMIN) {
-            throw new ForbiddenException("Only staff or administrators can review work schedules.");
+        if (!user.getRoles().contains(UserRole.STAFF)) {
+            throw new ForbiddenException("Only staff can review work schedules.");
         }
     }
 

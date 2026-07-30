@@ -15,9 +15,7 @@ public class AvailableAppointmentSlotResponse {
     private String doctorName;
     private LocalDate workDate;
     private String slotId;
-    private String slotName;
     private String roomId;
-    private String roomCode;
     private Instant startAt;
     private Instant endAt;
 
@@ -28,9 +26,7 @@ public class AvailableAppointmentSlotResponse {
                 .doctorName(doctorName)
                 .workDate(slot.getWorkDate())
                 .slotId(slot.getSlotId())
-                .slotName(slot.getSlotName())
                 .roomId(slot.getRoomId())
-                .roomCode(slot.getRoomCode())
                 .startAt(slot.getStartAt())
                 .endAt(slot.getEndAt())
                 .build();

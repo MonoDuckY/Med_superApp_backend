@@ -11,6 +11,8 @@ import org.springframework.stereotype.Component;
 
 import com.yourproject.backend.dtos.requests.CreateUserRequest;
 import com.yourproject.backend.models.UserRole;
+import com.yourproject.backend.models.AccountStatus;
+import com.yourproject.backend.models.User;
 import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.services.UserService;
@@ -47,9 +49,24 @@ public class AdminBootstrapper implements ApplicationRunner {
             throw new IllegalStateException("Both bootstrap admin phone number and password must be provided.");
         }
         String normalizedPhoneNumber = PhoneNumberNormalizer.normalize(phoneNumber);
-        if (userRepository.existsByPhoneLookup(patientDataProtectionService.phoneLookup(normalizedPhoneNumber))
-                || userRepository.findByPhoneNumber(normalizedPhoneNumber).isPresent()) {
-            LOGGER.info("Bootstrap administrator account already exists; creation skipped.");
+        java.util.Optional<User> existingAdmin = userRepository.findByPhoneLookup(
+                patientDataProtectionService.phoneLookup(normalizedPhoneNumber));
+        if (existingAdmin.isEmpty()) {
+            existingAdmin = userRepository.findByPhoneNumber(normalizedPhoneNumber);
+        }
+        if (existingAdmin.isPresent()) {
+            User admin = existingAdmin.get();
+            if (!admin.getRoles().contains(UserRole.ADMIN)) {
+                admin.setRole(UserRole.ADMIN);
+                admin.setStatus(AccountStatus.ACTIVE);
+                admin.setAccessTokenHash(null);
+                admin.setRefreshTokenHash(null);
+                admin.setRefreshTokenExpiresAt(null);
+                userRepository.save(admin);
+                LOGGER.warn("Bootstrap administrator role was missing and has been repaired. Sign in again.");
+            } else {
+                LOGGER.info("Bootstrap administrator account already exists; creation skipped.");
+            }
         } else {
             CreateUserRequest request = new CreateUserRequest();
             request.setPhoneNumber(phoneNumber);

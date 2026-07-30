@@ -6,7 +6,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -62,11 +61,11 @@ public class AdminUserController {
         return ResponseEntity.ok(ApiResponse.success("User account updated successfully.", user));
     }
 
-    @DeleteMapping("/{userId}")
-    public ResponseEntity<ApiResponse<Void>> deactivateUser(
+    @PatchMapping("/{userId}/status")
+    public ResponseEntity<ApiResponse<UserResponse>> toggleUserStatus(
             Authentication authentication,
             @PathVariable String userId) {
-        userService.deactivateUser(userId, authentication.getName());
-        return ResponseEntity.ok(ApiResponse.success("User account deactivated successfully.", null));
+        UserResponse user = UserResponse.from(userService.toggleUserStatus(userId, authentication.getName()), patientDataProtectionService);
+        return ResponseEntity.ok(ApiResponse.success("User account status changed successfully.", user));
     }
 }

@@ -15,7 +15,7 @@ public interface WorkScheduleService {
 
     List<DoctorWorkSlot> getPendingSchedules(String staffId);
 
-    List<DoctorWorkSlot> getSchedules(String staffId, com.yourproject.backend.models.WorkSlotApprovalStatus status);
+    List<DoctorWorkSlot> getSchedules(String staffId, com.yourproject.backend.models.DoctorWorkSlotStatus status);
 
     List<DoctorWorkSlot> decide(String staffId, String submissionId, ScheduleDecisionRequest request);
 

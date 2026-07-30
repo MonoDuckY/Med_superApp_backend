@@ -66,7 +66,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public AuthResponse requestPatientOtp(RequestPatientOtpRequest request) {
         User user=userService.findByPhoneNumber(request.getPhoneNumber()); user=userService.getActiveUserById(user.getId());
-        if(user.getRole()!=UserRole.PATIENT) throw new BadRequestException("Only patient accounts can use SMS OTP.");
+        if(!user.getRoles().contains(UserRole.PATIENT)) throw new BadRequestException("Only patient accounts can use SMS OTP.");
         if (isTrustedDevice(user, request.getDeviceId())) { userService.recordSuccessfulLogin(user); return issueTokens(user, request.getDeviceId()); }
         String phoneLookup=patientDataProtectionService.phoneLookup(com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()));
         patientOtpRepository.findTopByPhoneLookupOrderByCreatedAtDesc(phoneLookup).ifPresent(previous->{if(previous.getCreatedAt().plusSeconds(otpResendCooldownSeconds).isAfter(Instant.now())) throw new BadRequestException("Please wait before requesting another OTP.");});
@@ -88,7 +88,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public AuthResponse verifyPatientOtp(VerifyPatientOtpRequest request) {
         User user=userService.findByPhoneNumber(request.getPhoneNumber()); user=userService.getActiveUserById(user.getId());
-        if(user.getRole()!=UserRole.PATIENT) throw new BadRequestException("Only patient accounts can use SMS OTP.");
+        if(!user.getRoles().contains(UserRole.PATIENT)) throw new BadRequestException("Only patient accounts can use SMS OTP.");
         String lookup=patientDataProtectionService.phoneLookup(com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()));
         PatientOtp otp=patientOtpRepository.findTopByPhoneLookupOrderByCreatedAtDesc(lookup).orElseThrow(()->new UnauthorizedException("OTP is invalid or expired."));
         if(otp.getConsumedAt()!=null||otp.getExpiresAt().isBefore(Instant.now())||otp.getAttempts()>=otpMaxAttempts) throw new UnauthorizedException("OTP is invalid or expired.");
@@ -101,7 +101,7 @@ public class AuthServiceImpl implements AuthService {
         validateLoginRequest(request);
         User user = userService.findByPhoneNumber(request.getPhoneNumber());
         user = userService.getActiveUserById(user.getId());
-        if (user.getRole() == UserRole.PATIENT) {
+        if (user.getRoles().size() == 1 && user.getRoles().contains(UserRole.PATIENT)) {
             throw new BadRequestException("Patient accounts must sign in using SMS OTP.");
         }
         if (user.getLockedUntil()!=null && user.getLockedUntil().isAfter(Instant.now())) throw new UnauthorizedException("Account is temporarily locked. Please try again later.");
@@ -118,69 +118,58 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse refresh(RefreshTokenRequest request) {
-        RefreshToken storedToken = refreshTokenRepository.findByTokenHash(hashToken(request.getRefreshToken()))
+        User user = userRepository.findByRefreshTokenHash(hashToken(request.getRefreshToken()))
                 .orElseThrow(() -> new UnauthorizedException("Refresh token is invalid."));
-
-        if (storedToken.getRevokedAt() != null || storedToken.getExpiresAt().isBefore(Instant.now())) {
+        if (user.getRefreshTokenExpiresAt() == null || !user.getRefreshTokenExpiresAt().isAfter(Instant.now())) {
             throw new UnauthorizedException("Refresh token is expired or revoked.");
         }
-
-        User user;
-        try {
-            user = userService.getActiveUserById(storedToken.getUserId());
-        } catch (ResourceNotFoundException exception) {
-            throw new UnauthorizedException("Refresh token is invalid.");
-        }
-        storedToken.setRevokedAt(Instant.now());
-        refreshTokenRepository.save(storedToken);
-        return issueTokens(user, storedToken.getDeviceId());
+        user = userService.getActiveUserById(user.getId());
+        return issueTokens(user, user.getDeviceId());
     }
 
     @Override
     public void logout(String userId, LogoutRequest request) {
-        RefreshToken storedToken = refreshTokenRepository.findByTokenHash(hashToken(request.getRefreshToken()))
-                .orElseThrow(() -> new UnauthorizedException("Refresh token is invalid."));
-        if (!storedToken.getUserId().equals(userId)) {
+        User user = userService.getActiveUserById(userId);
+        if (!hashToken(request.getRefreshToken()).equals(user.getRefreshTokenHash())) {
             throw new UnauthorizedException("Refresh token does not belong to the current user.");
         }
-
-        storedToken.setRevokedAt(Instant.now());
-        refreshTokenRepository.save(storedToken);
+        user.setAccessTokenHash(null);
+        user.setRefreshTokenHash(null);
+        user.setRefreshTokenExpiresAt(null);
+        userRepository.save(user);
     }
 
     @Override
     public void changePassword(String userId, ChangePasswordRequest request) {
         userService.changePassword(userId, request);
-        refreshTokenRepository.findAllByUserIdAndRevokedAtIsNull(userId).forEach(token -> {
-            token.setRevokedAt(Instant.now());
-            refreshTokenRepository.save(token);
-        });
+        User user = userService.getUserById(userId);
+        user.setAccessTokenHash(null);
+        user.setRefreshTokenHash(null);
+        user.setRefreshTokenExpiresAt(null);
+        userRepository.save(user);
     }
 
     private AuthResponse issueTokens(User user, String deviceId) {
+        String accessToken = jwtUtils.generateAccessToken(user);
+        String refreshToken = createRefreshToken();
+        user.setAccessTokenHash(hashToken(accessToken));
+        user.setRefreshTokenHash(hashToken(refreshToken));
+        user.setRefreshTokenExpiresAt(Instant.now().plus(Duration.ofDays(refreshTokenExpirationDays)));
+        user.setDeviceId(deviceId == null || deviceId.isBlank() ? null : deviceId.trim());
+        userRepository.save(user);
         return AuthResponse.builder()
-                .accessToken(jwtUtils.generateAccessToken(user))
-                .refreshToken(createRefreshToken(user.getId(), deviceId))
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
                 .tokenType("Bearer")
                 .expiresInSeconds(jwtUtils.getAccessTokenExpirationSeconds())
                 .user(UserResponse.from(user, patientDataProtectionService))
                 .build();
     }
 
-    private String createRefreshToken(String userId, String deviceId) {
+    private String createRefreshToken() {
         byte[] randomBytes = new byte[48];
         SECURE_RANDOM.nextBytes(randomBytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
-        Instant now = Instant.now();
-
-        RefreshToken refreshToken = RefreshToken.builder()
-                .tokenHash(hashToken(token))
-                .userId(userId)
-                .deviceId(deviceId == null || deviceId.isBlank() ? null : deviceId.trim())
-                .createdAt(now)
-                .expiresAt(now.plus(Duration.ofDays(refreshTokenExpirationDays)))
-                .build();
-        refreshTokenRepository.save(refreshToken);
         return token;
     }
 
@@ -201,6 +190,6 @@ public class AuthServiceImpl implements AuthService {
             throw new BadRequestException("Password is required.");
         }
     }
-    private boolean isTrustedDevice(User user,String deviceId){return deviceId!=null&&!deviceId.isBlank()&&trustedDeviceRepository.findByUserIdAndDeviceIdAndRevokedAtIsNull(user.getId(),deviceId.trim()).isPresent();}
-    private void trustDevice(User user,String deviceId){if(deviceId==null||deviceId.isBlank())return;trustedDeviceRepository.findByUserIdAndDeviceIdAndRevokedAtIsNull(user.getId(),deviceId.trim()).orElseGet(()->trustedDeviceRepository.save(TrustedDevice.builder().userId(user.getId()).deviceId(deviceId.trim()).verifiedAt(Instant.now()).build()));}
+    private boolean isTrustedDevice(User user,String deviceId){return deviceId!=null&&!deviceId.isBlank()&&deviceId.trim().equals(user.getDeviceId());}
+    private void trustDevice(User user,String deviceId){if(deviceId==null||deviceId.isBlank())return;user.setDeviceId(deviceId.trim());userRepository.save(user);}
 }

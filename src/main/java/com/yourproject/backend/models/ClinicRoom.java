@@ -3,6 +3,7 @@ package com.yourproject.backend.models;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -20,11 +21,12 @@ public class ClinicRoom {
     @Id
     private String id;
 
-    @Indexed(unique = true)
+    @Transient
     private String code;
 
     private String name;
     private boolean active;
+    private String note;
     private Instant createdAt;
     private Instant updatedAt;
 }

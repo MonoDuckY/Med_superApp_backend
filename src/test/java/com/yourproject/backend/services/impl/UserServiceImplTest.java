@@ -101,20 +101,16 @@ class UserServiceImplTest {
     }
 
     @Test
-    void createUser_generatesPatientId() {
+    void createUser_createsPatientWithoutPassword() {
         CreateUserRequest request = patientRequest();
         request.setPassword(null);
         when(patientDataProtectionService.phoneLookup("+84912345678")).thenReturn("phone-lookup");
         when(userRepository.existsByPhoneLookup("phone-lookup")).thenReturn(false);
-        when(patientDataProtectionService.patientIdLookup(any())).thenReturn("patient-lookup");
-        when(userRepository.existsByPatientIdLookup("patient-lookup")).thenReturn(false);
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         User createdUser = userService.createUser(request, "admin-id");
 
-        assertNotNull(createdUser.getPatientId());
         assertNull(createdUser.getPasswordHash());
-        assertEquals(true, createdUser.getPatientId().startsWith("PAT-"));
         verify(patientDataProtectionService).encryptPatientFields(createdUser);
     }
 
@@ -229,16 +225,16 @@ class UserServiceImplTest {
     }
 
     @Test
-    void deactivateUser_rejectsSelfDeactivation() {
-        assertThrows(BadRequestException.class, () -> userService.deactivateUser("user-id", "user-id"));
+    void toggleUserStatus_rejectsSelfChange() {
+        assertThrows(BadRequestException.class, () -> userService.toggleUserStatus("user-id", "user-id"));
     }
 
     @Test
-    void deactivateUser_inactivatesOtherUser() {
+    void toggleUserStatus_inactivatesOtherUser() {
         User user = activeDoctor();
         when(userRepository.findById("user-id")).thenReturn(Optional.of(user));
 
-        userService.deactivateUser("user-id", "admin-id");
+        userService.toggleUserStatus("user-id", "admin-id");
 
         assertEquals(AccountStatus.INACTIVE, user.getStatus());
         verify(userRepository).save(user);

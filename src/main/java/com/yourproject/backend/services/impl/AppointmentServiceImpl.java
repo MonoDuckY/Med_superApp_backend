@@ -31,11 +31,12 @@ import com.yourproject.backend.models.DoctorWorkSlot;
 import com.yourproject.backend.models.ScheduleDecision;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
-import com.yourproject.backend.models.WorkSlotApprovalStatus;
-import com.yourproject.backend.models.WorkSlotBookingStatus;
+import com.yourproject.backend.models.DoctorWorkSlotStatus;
 import com.yourproject.backend.repositories.AppointmentRepository;
 import com.yourproject.backend.repositories.DoctorWorkSlotRepository;
 import com.yourproject.backend.repositories.UserRepository;
+import com.yourproject.backend.repositories.WorkSlotRepository;
+import com.yourproject.backend.repositories.ClinicRoomRepository;
 import com.yourproject.backend.services.AppointmentService;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.services.UserService;
@@ -55,6 +56,8 @@ public class AppointmentServiceImpl implements AppointmentService {
     private final UserService userService;
     private final PatientDataProtectionService patientDataProtectionService;
     private final MongoTemplate mongoTemplate;
+    private final WorkSlotRepository workSlotRepository;
+    private final ClinicRoomRepository clinicRoomRepository;
 
     @Override
     public List<DoctorWorkSlot> getAvailableSlots(String patientUserId, LocalDate date, String doctorId) {
@@ -77,9 +80,8 @@ public class AppointmentServiceImpl implements AppointmentService {
         }
 
         List<DoctorWorkSlot> availableSlots = doctorWorkSlotRepository
-                .findAllByApprovalStatusAndBookingStatusAndStartAtBetweenOrderByStartAtAsc(
-                        WorkSlotApprovalStatus.APPROVED,
-                        WorkSlotBookingStatus.AVAILABLE,
+                .findAllByStatusAndStartAtBetweenOrderByStartAtAsc(
+                        DoctorWorkSlotStatus.AVAILABLE,
                         from,
                         to)
                 .stream()
@@ -93,7 +95,7 @@ public class AppointmentServiceImpl implements AppointmentService {
                 .filter(slot -> {
                     User doctor = doctors.get(slot.getDoctorId());
                     return doctor != null
-                            && doctor.getRole() == UserRole.DOCTOR
+                            && doctor.getRoles().contains(UserRole.DOCTOR)
                             && doctor.getStatus() == AccountStatus.ACTIVE;
                 })
                 .toList();
@@ -106,22 +108,24 @@ public class AppointmentServiceImpl implements AppointmentService {
         DoctorWorkSlot currentSlot = doctorWorkSlotRepository.findById(request.getDoctorWorkSlotId())
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor work slot was not found."));
         User doctor = userService.getActiveUserById(currentSlot.getDoctorId());
-        if (doctor.getRole() != UserRole.DOCTOR) {
+        if (!doctor.getRoles().contains(UserRole.DOCTOR)) {
             throw new ConflictException("The selected work slot does not belong to an active doctor.");
         }
         validateBookableSlot(currentSlot);
-        if (appointmentRepository.existsByPatientUserIdAndAppointmentDateAndActiveTrue(
-                patient.getId(),
-                currentSlot.getWorkDate())) {
+        boolean alreadyBookedThatDay = appointmentRepository.findAllForPatient(patient.getId()).stream()
+                .filter(appointment -> appointment.getStatus() != AppointmentStatus.CANCELLED
+                        && appointment.getStatus() != AppointmentStatus.REJECTED)
+                .map(appointment -> doctorWorkSlotRepository.findById(appointment.getDoctorWorkSlotId()).orElse(null))
+                .anyMatch(slot -> slot != null && slot.getWorkDate().equals(currentSlot.getWorkDate()));
+        if (alreadyBookedThatDay) {
             throw new ConflictException("A patient can only have one active appointment per day.");
         }
 
         Instant now = Instant.now();
         Query claimQuery = Query.query(Criteria.where("_id").is(currentSlot.getId())
-                .and("approvalStatus").is(WorkSlotApprovalStatus.APPROVED)
-                .and("bookingStatus").is(WorkSlotBookingStatus.AVAILABLE));
+                .and("status").is(DoctorWorkSlotStatus.AVAILABLE));
         Update claimUpdate = new Update()
-                .set("bookingStatus", WorkSlotBookingStatus.PENDING_CONFIRMATION)
+                .set("status", DoctorWorkSlotStatus.SCHEDULING)
                 .set("updatedAt", now);
         DoctorWorkSlot claimedSlot = mongoTemplate.findAndModify(
                 claimQuery,
@@ -133,21 +137,10 @@ public class AppointmentServiceImpl implements AppointmentService {
         }
 
         return appointmentRepository.save(Appointment.builder()
-                .patientUserId(patient.getId())
-                .patientId(patient.getPatientId())
-                .doctorId(claimedSlot.getDoctorId())
+                .patientId(patient.getId())
                 .doctorWorkSlotId(claimedSlot.getId())
-                .slotId(claimedSlot.getSlotId())
-                .slotName(claimedSlot.getSlotName())
-                .roomId(claimedSlot.getRoomId())
-                .roomCode(claimedSlot.getRoomCode())
-                .appointmentDate(claimedSlot.getWorkDate())
-                .startAt(claimedSlot.getStartAt())
-                .endAt(claimedSlot.getEndAt())
                 .status(AppointmentStatus.PENDING_STAFF_CONFIRMATION)
-                .note(trimToNull(request.getNote()))
                 .requestedAt(now)
-                .active(true)
                 .createdAt(now)
                 .updatedAt(now)
                 .build());
@@ -156,7 +149,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     @Override
     public List<Appointment> getPatientAppointments(String patientUserId) {
         requirePatient(patientUserId);
-        return appointmentRepository.findAllByPatientUserIdOrderByRequestedAtDesc(patientUserId);
+        return appointmentRepository.findAllForPatient(patientUserId);
     }
 
     @Override
@@ -185,7 +178,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         }
         DoctorWorkSlot slot = doctorWorkSlotRepository.findById(appointment.getDoctorWorkSlotId())
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor work slot was not found."));
-        if (slot.getBookingStatus() != WorkSlotBookingStatus.PENDING_CONFIRMATION) {
+        if (slot.getStatus() != DoctorWorkSlotStatus.SCHEDULING) {
             throw new ConflictException("Doctor work slot is not awaiting appointment confirmation.");
         }
 
@@ -205,12 +198,12 @@ public class AppointmentServiceImpl implements AppointmentService {
         if (request.getDecision() == ScheduleDecision.APPROVE) {
             appointment.setStatus(AppointmentStatus.CONFIRMED);
             appointment.setRejectionReason(null);
-            slot.setBookingStatus(WorkSlotBookingStatus.BOOKED);
+            slot.setStatus(DoctorWorkSlotStatus.BOOKED);
         } else {
             appointment.setStatus(AppointmentStatus.REJECTED);
             appointment.setRejectionReason(rejectionReason);
             appointment.setActive(false);
-            slot.setBookingStatus(WorkSlotBookingStatus.AVAILABLE);
+            slot.setStatus(DoctorWorkSlotStatus.AVAILABLE);
         }
         doctorWorkSlotRepository.save(slot);
         return appointmentRepository.save(appointment);
@@ -237,7 +230,10 @@ public class AppointmentServiceImpl implements AppointmentService {
         User patient = requirePatient(patientUserId);
         Appointment appointment = appointmentRepository.findById(appointmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment was not found."));
-        if (!patient.getId().equals(appointment.getPatientUserId())) {
+        String ownerId = patient.getId().equals(appointment.getPatientId())
+                ? appointment.getPatientId()
+                : appointment.getPatientUserId();
+        if (!patient.getId().equals(ownerId)) {
             throw new ForbiddenException("Patients can only cancel their own appointments.");
         }
         if (appointment.getStatus() != AppointmentStatus.PENDING_STAFF_CONFIRMATION
@@ -250,11 +246,11 @@ public class AppointmentServiceImpl implements AppointmentService {
     private Appointment cancelAppointment(Appointment appointment, String cancelledBy, String cancellationReason) {
         DoctorWorkSlot slot = doctorWorkSlotRepository.findById(appointment.getDoctorWorkSlotId())
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor work slot was not found."));
-        WorkSlotBookingStatus expectedBookingStatus = appointment.getStatus()
+        DoctorWorkSlotStatus expectedBookingStatus = appointment.getStatus()
                 == AppointmentStatus.PENDING_STAFF_CONFIRMATION
-                        ? WorkSlotBookingStatus.PENDING_CONFIRMATION
-                        : WorkSlotBookingStatus.BOOKED;
-        if (slot.getBookingStatus() != expectedBookingStatus) {
+                        ? DoctorWorkSlotStatus.SCHEDULING
+                        : DoctorWorkSlotStatus.BOOKED;
+        if (slot.getStatus() != expectedBookingStatus) {
             throw new ConflictException("Doctor work slot status does not match this appointment.");
         }
         if (!slot.getStartAt().isAfter(Instant.now())) {
@@ -268,7 +264,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         appointment.setCancelledAt(cancelledAt);
         appointment.setCancellationReason(cancellationReason.trim());
         appointment.setUpdatedAt(cancelledAt);
-        slot.setBookingStatus(WorkSlotBookingStatus.AVAILABLE);
+        slot.setStatus(DoctorWorkSlotStatus.AVAILABLE);
         slot.setUpdatedAt(cancelledAt);
 
         doctorWorkSlotRepository.save(slot);
@@ -289,27 +285,60 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     @Override
     public List<AppointmentResponse> toResponses(List<Appointment> appointments) {
+        Map<String, DoctorWorkSlot> workSlots = doctorWorkSlotRepository.findAllById(
+                        appointments.stream().map(Appointment::getDoctorWorkSlotId)
+                                .filter(id -> id != null && !id.isBlank()).distinct().toList())
+                .stream()
+                .collect(Collectors.toMap(DoctorWorkSlot::getId, slot -> slot));
+        Map<String, com.yourproject.backend.models.WorkSlot> slotDefinitions = workSlotRepository.findAllById(
+                        workSlots.values().stream().map(DoctorWorkSlot::getSlotId)
+                                .filter(id -> id != null && !id.isBlank()).distinct().toList())
+                .stream().collect(Collectors.toMap(com.yourproject.backend.models.WorkSlot::getId, slot -> slot));
+        Map<String, com.yourproject.backend.models.ClinicRoom> rooms = clinicRoomRepository.findAllById(
+                        workSlots.values().stream().map(DoctorWorkSlot::getRoomId)
+                                .filter(id -> id != null && !id.isBlank()).distinct().toList())
+                .stream().collect(Collectors.toMap(com.yourproject.backend.models.ClinicRoom::getId, room -> room));
+        appointments.forEach(appointment -> {
+            DoctorWorkSlot slot = workSlots.get(appointment.getDoctorWorkSlotId());
+            if (slot == null) return;
+            appointment.setDoctorId(slot.getDoctorId());
+            appointment.setSlotId(slot.getSlotId());
+            appointment.setRoomId(slot.getRoomId());
+            appointment.setAppointmentDate(slot.getWorkDate());
+            appointment.setStartAt(slot.getStartAt());
+            appointment.setEndAt(slot.getEndAt());
+        });
         List<String> userIds = appointments.stream()
                 .flatMap(appointment -> java.util.stream.Stream.of(
                         appointment.getDoctorId(),
+                        appointment.getPatientId(),
                         appointment.getPatientUserId()))
                 .filter(id -> id != null && !id.isBlank())
                 .distinct()
                 .toList();
         Map<String, User> users = userRepository.findAllById(userIds).stream()
                 .collect(Collectors.toMap(User::getId, user -> user));
+        appointments.forEach(appointment -> {
+            if (!users.containsKey(appointment.getPatientId())
+                    && users.containsKey(appointment.getPatientUserId())) {
+                appointment.setPatientId(appointment.getPatientUserId());
+            }
+        });
         return appointments.stream()
-                .map(appointment -> AppointmentResponse.from(
-                        appointment,
-                        users.get(appointment.getDoctorId()),
-                        users.get(appointment.getPatientUserId()),
-                        patientDataProtectionService))
+                .map(appointment -> {
+                    DoctorWorkSlot doctorWorkSlot = workSlots.get(appointment.getDoctorWorkSlotId());
+                    return AppointmentResponse.from(appointment, users.get(appointment.getDoctorId()),
+                            users.getOrDefault(appointment.getPatientId(), users.get(appointment.getPatientUserId())),
+                            doctorWorkSlot,
+                            doctorWorkSlot == null ? null : slotDefinitions.get(doctorWorkSlot.getSlotId()),
+                            doctorWorkSlot == null ? null : rooms.get(doctorWorkSlot.getRoomId()),
+                            patientDataProtectionService);
+                })
                 .toList();
     }
 
     private void validateBookableSlot(DoctorWorkSlot slot) {
-        if (slot.getApprovalStatus() != WorkSlotApprovalStatus.APPROVED
-                || slot.getBookingStatus() != WorkSlotBookingStatus.AVAILABLE) {
+        if (slot.getStatus() != DoctorWorkSlotStatus.AVAILABLE) {
             throw new ConflictException("The selected doctor work slot is not available.");
         }
         Instant now = Instant.now();
@@ -323,7 +352,7 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     private User requirePatient(String userId) {
         User patient = userService.getActiveUserById(userId);
-        if (patient.getRole() != UserRole.PATIENT) {
+        if (!patient.getRoles().contains(UserRole.PATIENT)) {
             throw new ForbiddenException("Only patients can use patient appointment operations.");
         }
         return patient;
@@ -331,8 +360,8 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     private void requireStaff(String userId) {
         User staff = userService.getActiveUserById(userId);
-        if (staff.getRole() != UserRole.STAFF && staff.getRole() != UserRole.ADMIN) {
-            throw new ForbiddenException("Only staff or administrators can review appointments.");
+        if (!staff.getRoles().contains(UserRole.STAFF)) {
+            throw new ForbiddenException("Only staff can review appointments.");
         }
     }
 

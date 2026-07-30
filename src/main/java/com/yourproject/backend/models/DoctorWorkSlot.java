@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
 import org.springframework.data.annotation.Version;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.index.CompoundIndexes;
@@ -35,8 +36,6 @@ import lombok.NoArgsConstructor;
 public class DoctorWorkSlot {
     @Id
     private String id;
-
-    @Indexed
     private String submissionId;
 
     @Indexed
@@ -46,16 +45,19 @@ public class DoctorWorkSlot {
     private LocalDate workDate;
 
     private String slotId;
+    @Transient
     private String slotName;
     private String roomId;
+    @Transient
     private String roomCode;
     private Instant startAt;
     private Instant endAt;
 
     @Indexed
+    private DoctorWorkSlotStatus status;
+    @Transient
     private WorkSlotApprovalStatus approvalStatus;
-
-    @Indexed
+    @Transient
     private WorkSlotBookingStatus bookingStatus;
 
     private String note;
@@ -63,6 +65,7 @@ public class DoctorWorkSlot {
     private String reviewedBy;
     private Instant reviewedAt;
     private String rejectionReason;
+    @Transient
     private boolean conflictActive;
     private Instant createdAt;
     private Instant updatedAt;

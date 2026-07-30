@@ -8,8 +8,7 @@ import java.util.List;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
 import com.yourproject.backend.models.DoctorWorkSlot;
-import com.yourproject.backend.models.WorkSlotApprovalStatus;
-import com.yourproject.backend.models.WorkSlotBookingStatus;
+import com.yourproject.backend.models.DoctorWorkSlotStatus;
 
 public interface DoctorWorkSlotRepository extends MongoRepository<DoctorWorkSlot, String> {
     List<DoctorWorkSlot> findAllBySubmissionIdOrderByStartAtAsc(String submissionId);
@@ -21,9 +20,9 @@ public interface DoctorWorkSlotRepository extends MongoRepository<DoctorWorkSlot
             LocalDate from,
             LocalDate to);
 
-    List<DoctorWorkSlot> findAllByApprovalStatusOrderBySubmittedAtAsc(WorkSlotApprovalStatus approvalStatus);
+    List<DoctorWorkSlot> findAllByStatusOrderBySubmittedAtAsc(DoctorWorkSlotStatus status);
 
-    List<DoctorWorkSlot> findAllByApprovalStatusOrderBySubmittedAtDesc(WorkSlotApprovalStatus approvalStatus);
+    List<DoctorWorkSlot> findAllByStatusOrderBySubmittedAtDesc(DoctorWorkSlotStatus status);
 
     List<DoctorWorkSlot> findAllByOrderBySubmittedAtDesc();
 
@@ -31,9 +30,10 @@ public interface DoctorWorkSlotRepository extends MongoRepository<DoctorWorkSlot
             LocalDate workDate,
             Collection<String> slotIds);
 
-    List<DoctorWorkSlot> findAllByApprovalStatusAndBookingStatusAndStartAtBetweenOrderByStartAtAsc(
-            WorkSlotApprovalStatus approvalStatus,
-            WorkSlotBookingStatus bookingStatus,
+    List<DoctorWorkSlot> findAllByWorkDateAndSlotIdIn(LocalDate workDate, Collection<String> slotIds);
+
+    List<DoctorWorkSlot> findAllByStatusAndStartAtBetweenOrderByStartAtAsc(
+            DoctorWorkSlotStatus status,
             Instant from,
             Instant to);
 }

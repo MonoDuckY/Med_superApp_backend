@@ -2,6 +2,7 @@ package com.yourproject.backend.dtos.responses;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Set;
 
 import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.User;
@@ -15,9 +16,8 @@ import lombok.Value;
 @Builder
 public class UserResponse {
     String id;
-    UserRole role;
+    Set<UserRole> roles;
     AccountStatus status;
-    String patientId;
     String fullName;
     String gender;
     LocalDate dateOfBirth;
@@ -26,6 +26,11 @@ public class UserResponse {
     String citizenIdentificationCode;
     String healthInsuranceCode;
     String certificate;
+    String medicalHistory;
+    String currentSickness;
+    Double height;
+    Double weight;
+    String bloodType;
     Instant createdAt;
     Instant updatedAt;
     Instant lastLoginAt;
@@ -38,23 +43,27 @@ public class UserResponse {
 
     public static UserResponse fromUnprotected(User user) {
         return UserResponse.builder()
-                .id(user.getId()).role(user.getRole()).status(user.getStatus())
-                .patientId(user.getPatientId()).fullName(user.getFullName())
+                .id(user.getId()).roles(user.getRoles()).status(user.getStatus())
+                .fullName(user.getFullName())
                 .gender(user.getGender()).dateOfBirth(user.getDateOfBirth())
                 .phoneNumber(user.getPhoneNumber()).address(user.getAddress())
                 .citizenIdentificationCode(user.getCitizenIdentificationCode())
                 .healthInsuranceCode(user.getHealthInsuranceCode()).certificate(user.getCertificate())
+                .medicalHistory(user.getMedicalHistory()).currentSickness(user.getCurrentSickness())
+                .height(user.getHeight()).weight(user.getWeight()).bloodType(user.getBloodType())
                 .createdAt(user.getCreatedAt()).updatedAt(user.getUpdatedAt())
                 .lastLoginAt(user.getLastLoginAt())
                 .build();
     }
 
     private static User copyOf(User user) {
-        return User.builder().id(user.getId()).passwordHash(user.getPasswordHash()).role(user.getRole())
-                .status(user.getStatus()).patientId(user.getPatientId()).fullName(user.getFullName())
+        return User.builder().id(user.getId()).passwordHash(user.getPasswordHash()).roles(user.getRoles())
+                .status(user.getStatus()).fullName(user.getFullName())
                 .gender(user.getGender()).dateOfBirth(user.getDateOfBirth()).address(user.getAddress())
                 .citizenIdentificationCode(user.getCitizenIdentificationCode()).healthInsuranceCode(user.getHealthInsuranceCode())
-                .certificate(user.getCertificate()).phoneNumber(user.getPhoneNumber()).phoneLookup(user.getPhoneLookup())
+                .certificate(user.getCertificate()).medicalHistory(user.getMedicalHistory())
+                .currentSickness(user.getCurrentSickness()).height(user.getHeight()).weight(user.getWeight())
+                .bloodType(user.getBloodType()).phoneNumber(user.getPhoneNumber()).phoneLookup(user.getPhoneLookup())
                 .patientIdLookup(user.getPatientIdLookup()).patientPhoneEncrypted(user.getPatientPhoneEncrypted())
                 .patientIdEncrypted(user.getPatientIdEncrypted()).patientFullNameEncrypted(user.getPatientFullNameEncrypted())
                 .patientGenderEncrypted(user.getPatientGenderEncrypted()).patientDateOfBirthEncrypted(user.getPatientDateOfBirthEncrypted())

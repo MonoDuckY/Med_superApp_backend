@@ -6,11 +6,14 @@ import lombok.Data;
 
 @Data
 public class CreateClinicRoomRequest {
-    @NotBlank(message = "Clinic room code is required.")
-    @Size(max = 30, message = "Clinic room code must not exceed 30 characters.")
-    private String code;
+    @NotBlank(message = "Clinic room ID is required.")
+    @Size(max = 50, message = "Clinic room ID must not exceed 50 characters.")
+    private String id;
 
     @NotBlank(message = "Clinic room name is required.")
     @Size(max = 100, message = "Clinic room name must not exceed 100 characters.")
     private String name;
+
+    @Size(max = 500, message = "Note must not exceed 500 characters.")
+    private String note;
 }

@@ -3,6 +3,7 @@ package com.yourproject.backend.models;
 import java.time.LocalTime;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Transient;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -25,6 +26,8 @@ public class WorkSlot {
 
     private LocalTime startTime;
     private LocalTime endTime;
+    @Transient
     private WorkSession session;
+    @Transient
     private boolean active;
 }

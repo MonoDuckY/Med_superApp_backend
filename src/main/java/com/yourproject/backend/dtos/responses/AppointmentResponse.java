@@ -1,11 +1,13 @@
 package com.yourproject.backend.dtos.responses;
 
 import java.time.Instant;
-import java.time.LocalDate;
 
 import com.yourproject.backend.models.Appointment;
 import com.yourproject.backend.models.AppointmentStatus;
 import com.yourproject.backend.models.User;
+import com.yourproject.backend.models.DoctorWorkSlot;
+import com.yourproject.backend.models.WorkSlot;
+import com.yourproject.backend.models.ClinicRoom;
 import com.yourproject.backend.services.PatientDataProtectionService;
 
 import lombok.Builder;
@@ -15,25 +17,16 @@ import lombok.Data;
 @Builder
 public class AppointmentResponse {
     private String id;
-    private String patientUserId;
     private String patientId;
     private UserSummaryResponse patient;
-    private String doctorId;
     private UserSummaryResponse doctor;
     private String doctorWorkSlotId;
-    private LocalDate appointmentDate;
-    private String slotId;
-    private String slotName;
-    private String roomId;
-    private String roomCode;
-    private Instant startAt;
-    private Instant endAt;
+    private DoctorWorkSlotResponse doctorWorkSlot;
+    private WorkSlotResponse slot;
+    private ClinicRoomResponse room;
     private AppointmentStatus status;
-    private String note;
+    private String diagnosis;
     private Instant requestedAt;
-    private String reviewedBy;
-    private Instant reviewedAt;
-    private String rejectionReason;
     private String cancelledBy;
     private Instant cancelledAt;
     private String cancellationReason;
@@ -47,27 +40,24 @@ public class AppointmentResponse {
             User doctor,
             User patient,
             PatientDataProtectionService patientDataProtectionService) {
+        return from(appointment, doctor, patient, null, null, null, patientDataProtectionService);
+    }
+
+    public static AppointmentResponse from(
+            Appointment appointment, User doctor, User patient, DoctorWorkSlot doctorWorkSlot,
+            WorkSlot slot, ClinicRoom room, PatientDataProtectionService patientDataProtectionService) {
         return AppointmentResponse.builder()
                 .id(appointment.getId())
-                .patientUserId(appointment.getPatientUserId())
                 .patientId(appointment.getPatientId())
                 .patient(UserSummaryResponse.from(patient, patientDataProtectionService))
-                .doctorId(appointment.getDoctorId())
                 .doctor(UserSummaryResponse.from(doctor, patientDataProtectionService))
                 .doctorWorkSlotId(appointment.getDoctorWorkSlotId())
-                .appointmentDate(appointment.getAppointmentDate())
-                .slotId(appointment.getSlotId())
-                .slotName(appointment.getSlotName())
-                .roomId(appointment.getRoomId())
-                .roomCode(appointment.getRoomCode())
-                .startAt(appointment.getStartAt())
-                .endAt(appointment.getEndAt())
+                .doctorWorkSlot(doctorWorkSlot == null ? null : DoctorWorkSlotResponse.from(doctorWorkSlot))
+                .slot(slot == null ? null : WorkSlotResponse.from(slot))
+                .room(room == null ? null : ClinicRoomResponse.from(room))
                 .status(appointment.getStatus())
-                .note(appointment.getNote())
+                .diagnosis(appointment.getDiagnosis())
                 .requestedAt(appointment.getRequestedAt())
-                .reviewedBy(appointment.getReviewedBy())
-                .reviewedAt(appointment.getReviewedAt())
-                .rejectionReason(appointment.getRejectionReason())
                 .cancelledBy(appointment.getCancelledBy())
                 .cancelledAt(appointment.getCancelledAt())
                 .cancellationReason(appointment.getCancellationReason())

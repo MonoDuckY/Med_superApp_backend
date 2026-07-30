@@ -37,7 +37,7 @@ public class JwtUtils {
 
         return Jwts.builder()
                 .subject(user.getId())
-                .claim("role", user.getRole().name())
+                .claim("roles", user.getRoles().stream().map(Enum::name).toList())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plus(accessTokenDuration)))
                 .signWith(signingKey)

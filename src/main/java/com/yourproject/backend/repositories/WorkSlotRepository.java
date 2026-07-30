@@ -13,5 +13,7 @@ public interface WorkSlotRepository extends MongoRepository<WorkSlot, String> {
 
     List<WorkSlot> findAllByActiveTrueOrderByStartTimeAsc();
 
+    List<WorkSlot> findAllByOrderByStartTimeAsc();
+
     List<WorkSlot> findAllBySessionAndActiveTrueOrderByStartTimeAsc(WorkSession session);
 }

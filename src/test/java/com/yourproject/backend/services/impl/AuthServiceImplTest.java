@@ -105,7 +105,7 @@ class AuthServiceImplTest {
         assertNotNull(response.getRefreshToken());
         assertEquals("Bearer", response.getTokenType());
         verify(userService).recordSuccessfulLogin(user);
-        verify(refreshTokenRepository).save(any(RefreshToken.class));
+        verify(userRepository, times(2)).save(user);
     }
 
     @Test
@@ -155,26 +155,26 @@ class AuthServiceImplTest {
     @Test
     void refresh_revokesOldTokenAndIssuesNewTokenPair() {
         User user = activeDoctor();
-        RefreshToken storedToken = activeRefreshToken("refresh-token", "user-id");
+        user.setRefreshTokenHash(hashToken("refresh-token"));
+        user.setRefreshTokenExpiresAt(Instant.now().plus(Duration.ofDays(1)));
         RefreshTokenRequest request = new RefreshTokenRequest();
         request.setRefreshToken("refresh-token");
-        when(refreshTokenRepository.findByTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(storedToken));
+        when(userRepository.findByRefreshTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(user));
         when(userService.getActiveUserById("user-id")).thenReturn(user);
         when(jwtUtils.generateAccessToken(user)).thenReturn("new-access-token");
         when(jwtUtils.getAccessTokenExpirationSeconds()).thenReturn(900L);
 
         assertEquals("new-access-token", authService.refresh(request).getAccessToken());
-        assertNotNull(storedToken.getRevokedAt());
-        verify(refreshTokenRepository, times(2)).save(any(RefreshToken.class));
+        verify(userRepository, times(1)).findByRefreshTokenHash(hashToken("refresh-token"));
     }
 
     @Test
     void refresh_rejectsRevokedToken() {
-        RefreshToken storedToken = activeRefreshToken("refresh-token", "user-id");
-        storedToken.setRevokedAt(Instant.now());
+        User user = activeDoctor();
+        user.setRefreshTokenExpiresAt(Instant.now().minusSeconds(1));
         RefreshTokenRequest request = new RefreshTokenRequest();
         request.setRefreshToken("refresh-token");
-        when(refreshTokenRepository.findByTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(storedToken));
+        when(userRepository.findByRefreshTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(user));
 
         assertThrows(UnauthorizedException.class, () -> authService.refresh(request));
         verify(userService, never()).getActiveUserById(any());
@@ -182,10 +182,11 @@ class AuthServiceImplTest {
 
     @Test
     void logout_rejectsTokenOwnedByAnotherUser() {
-        RefreshToken storedToken = activeRefreshToken("refresh-token", "other-user");
+        User user = activeDoctor();
+        user.setRefreshTokenHash(hashToken("another-token"));
         LogoutRequest request = new LogoutRequest();
         request.setRefreshToken("refresh-token");
-        when(refreshTokenRepository.findByTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(storedToken));
+        when(userService.getActiveUserById("user-id")).thenReturn(user);
 
         assertThrows(UnauthorizedException.class, () -> authService.logout("user-id", request));
         verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
@@ -193,15 +194,16 @@ class AuthServiceImplTest {
 
     @Test
     void logout_revokesRefreshTokenOwnedByCurrentUser() {
-        RefreshToken storedToken = activeRefreshToken("refresh-token", "user-id");
+        User user = activeDoctor();
+        user.setRefreshTokenHash(hashToken("refresh-token"));
         LogoutRequest request = new LogoutRequest();
         request.setRefreshToken("refresh-token");
-        when(refreshTokenRepository.findByTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(storedToken));
+        when(userService.getActiveUserById("user-id")).thenReturn(user);
 
         authService.logout("user-id", request);
 
-        assertNotNull(storedToken.getRevokedAt());
-        verify(refreshTokenRepository).save(storedToken);
+        assertEquals(null, user.getRefreshTokenHash());
+        verify(userRepository).save(user);
     }
 
     @Test
@@ -210,17 +212,17 @@ class AuthServiceImplTest {
         request.setCurrentPassword("Oldpass1");
         request.setNewPassword("Newpass1");
         request.setConfirmPassword("Newpass1");
-        RefreshToken firstToken = RefreshToken.builder().userId("user-id").build();
-        RefreshToken secondToken = RefreshToken.builder().userId("user-id").build();
-        when(refreshTokenRepository.findAllByUserIdAndRevokedAtIsNull("user-id"))
-                .thenReturn(List.of(firstToken, secondToken));
+        User user = activeDoctor();
+        user.setAccessTokenHash("access-hash");
+        user.setRefreshTokenHash("refresh-hash");
+        when(userService.getUserById("user-id")).thenReturn(user);
 
         authService.changePassword("user-id", request);
 
         verify(userService).changePassword("user-id", request);
-        assertNotNull(firstToken.getRevokedAt());
-        assertNotNull(secondToken.getRevokedAt());
-        verify(refreshTokenRepository, times(2)).save(any(RefreshToken.class));
+        assertEquals(null, user.getAccessTokenHash());
+        assertEquals(null, user.getRefreshTokenHash());
+        verify(userRepository).save(user);
     }
 
     private LoginRequest loginRequest() {

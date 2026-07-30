@@ -25,7 +25,7 @@ import com.yourproject.backend.dtos.responses.ClinicRoomResponse;
 import com.yourproject.backend.dtos.responses.WorkScheduleSubmissionResponse;
 import com.yourproject.backend.models.DoctorWorkSlot;
 import com.yourproject.backend.models.AppointmentStatus;
-import com.yourproject.backend.models.WorkSlotApprovalStatus;
+import com.yourproject.backend.models.DoctorWorkSlotStatus;
 import com.yourproject.backend.services.AppointmentService;
 import com.yourproject.backend.services.SchedulingCatalogService;
 import com.yourproject.backend.services.WorkScheduleService;
@@ -35,7 +35,7 @@ import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/staff/scheduling")
-@PreAuthorize("hasAnyRole('STAFF','ADMIN')")
+@PreAuthorize("hasRole('STAFF')")
 @RequiredArgsConstructor
 public class StaffSchedulingController {
     private final SchedulingCatalogService schedulingCatalogService;
@@ -72,7 +72,7 @@ public class StaffSchedulingController {
     @GetMapping("/work-schedules")
     public ResponseEntity<ApiResponse<List<WorkScheduleSubmissionResponse>>> getWorkSchedules(
             Authentication authentication,
-            @RequestParam(required = false) WorkSlotApprovalStatus status) {
+            @RequestParam(required = false) DoctorWorkSlotStatus status) {
         List<WorkScheduleSubmissionResponse> schedules = workScheduleService.toResponses(
                 workScheduleService.getSchedules(authentication.getName(), status));
         return ResponseEntity.ok(ApiResponse.success("Work schedules retrieved successfully.", schedules));

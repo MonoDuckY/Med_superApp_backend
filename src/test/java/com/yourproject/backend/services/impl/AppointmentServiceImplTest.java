@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,7 @@ import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.Appointment;
 import com.yourproject.backend.models.AppointmentStatus;
 import com.yourproject.backend.models.DoctorWorkSlot;
+import com.yourproject.backend.models.DoctorWorkSlotStatus;
 import com.yourproject.backend.models.ScheduleDecision;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
@@ -41,6 +43,8 @@ import com.yourproject.backend.models.WorkSlotBookingStatus;
 import com.yourproject.backend.repositories.AppointmentRepository;
 import com.yourproject.backend.repositories.DoctorWorkSlotRepository;
 import com.yourproject.backend.repositories.UserRepository;
+import com.yourproject.backend.repositories.WorkSlotRepository;
+import com.yourproject.backend.repositories.ClinicRoomRepository;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.services.PatientDataProtectionService;
 
@@ -63,6 +67,12 @@ class AppointmentServiceImplTest {
 
     @Mock
     private MongoTemplate mongoTemplate;
+
+    @Mock
+    private WorkSlotRepository workSlotRepository;
+
+    @Mock
+    private ClinicRoomRepository clinicRoomRepository;
 
     @InjectMocks
     private AppointmentServiceImpl service;
@@ -92,8 +102,7 @@ class AppointmentServiceImplTest {
                 .roomCode("ROOM-101")
                 .startAt(Instant.now().plusSeconds(48 * 60 * 60))
                 .endAt(Instant.now().plusSeconds(48 * 60 * 60 + 1800))
-                .approvalStatus(WorkSlotApprovalStatus.APPROVED)
-                .bookingStatus(WorkSlotBookingStatus.AVAILABLE)
+                .status(DoctorWorkSlotStatus.AVAILABLE)
                 .build();
     }
 
@@ -102,9 +111,8 @@ class AppointmentServiceImplTest {
         when(userService.getActiveUserById("patient-user-1")).thenReturn(patient);
         when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
         when(doctorWorkSlotRepository.findById("work-slot-1")).thenReturn(Optional.of(availableSlot));
-        when(appointmentRepository.existsByPatientUserIdAndAppointmentDateAndActiveTrue(any(), any()))
-                .thenReturn(false);
-        DoctorWorkSlot claimed = copySlot(WorkSlotBookingStatus.PENDING_CONFIRMATION);
+        when(appointmentRepository.findAllForPatient("patient-user-1")).thenReturn(List.of());
+        DoctorWorkSlot claimed = copySlot(DoctorWorkSlotStatus.SCHEDULING);
         when(mongoTemplate.findAndModify(
                 any(Query.class),
                 any(Update.class),
@@ -117,8 +125,7 @@ class AppointmentServiceImplTest {
         Appointment appointment = service.book("patient-user-1", request);
 
         assertEquals(AppointmentStatus.PENDING_STAFF_CONFIRMATION, appointment.getStatus());
-        assertEquals("patient-user-1", appointment.getPatientUserId());
-        assertEquals("PAT-0001", appointment.getPatientId());
+        assertEquals("patient-user-1", appointment.getPatientId());
         assertEquals("work-slot-1", appointment.getDoctorWorkSlotId());
     }
 
@@ -127,8 +134,9 @@ class AppointmentServiceImplTest {
         when(userService.getActiveUserById("patient-user-1")).thenReturn(patient);
         when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
         when(doctorWorkSlotRepository.findById("work-slot-1")).thenReturn(Optional.of(availableSlot));
-        when(appointmentRepository.existsByPatientUserIdAndAppointmentDateAndActiveTrue(any(), any()))
-                .thenReturn(true);
+        Appointment existing = pendingAppointment();
+        when(appointmentRepository.findAllForPatient("patient-user-1")).thenReturn(List.of(existing));
+        when(doctorWorkSlotRepository.findById(existing.getDoctorWorkSlotId())).thenReturn(Optional.of(availableSlot));
         BookAppointmentRequest request = new BookAppointmentRequest();
         request.setDoctorWorkSlotId("work-slot-1");
 
@@ -138,7 +146,7 @@ class AppointmentServiceImplTest {
     @Test
     void rejectingAppointmentReleasesSlot() {
         Appointment appointment = pendingAppointment();
-        DoctorWorkSlot pendingSlot = copySlot(WorkSlotBookingStatus.PENDING_CONFIRMATION);
+        DoctorWorkSlot pendingSlot = copySlot(DoctorWorkSlotStatus.SCHEDULING);
         when(userService.getActiveUserById("staff-1")).thenReturn(staff);
         when(appointmentRepository.findById("appointment-1")).thenReturn(Optional.of(appointment));
         when(doctorWorkSlotRepository.findById("work-slot-1")).thenReturn(Optional.of(pendingSlot));
@@ -152,13 +160,13 @@ class AppointmentServiceImplTest {
 
         assertEquals(AppointmentStatus.REJECTED, result.getStatus());
         assertFalse(result.isActive());
-        assertEquals(WorkSlotBookingStatus.AVAILABLE, pendingSlot.getBookingStatus());
+        assertEquals(DoctorWorkSlotStatus.AVAILABLE, pendingSlot.getStatus());
     }
 
     @Test
     void rejectingAppointmentRequiresReason() {
         Appointment appointment = pendingAppointment();
-        DoctorWorkSlot pendingSlot = copySlot(WorkSlotBookingStatus.PENDING_CONFIRMATION);
+        DoctorWorkSlot pendingSlot = copySlot(DoctorWorkSlotStatus.SCHEDULING);
         when(userService.getActiveUserById("staff-1")).thenReturn(staff);
         when(appointmentRepository.findById("appointment-1")).thenReturn(Optional.of(appointment));
         when(doctorWorkSlotRepository.findById("work-slot-1")).thenReturn(Optional.of(pendingSlot));
@@ -184,7 +192,7 @@ class AppointmentServiceImplTest {
         assertEquals("Dr Nguyen Van A", response.getDoctor().getFullName());
         assertEquals("Internal Medicine", response.getDoctor().getCertificate());
         assertEquals("Tran Thi B", response.getPatient().getFullName());
-        assertEquals("PAT-0001", response.getPatient().getPatientId());
+        assertEquals("patient-user-1", response.getPatient().getId());
     }
 
     @Test
@@ -199,11 +207,35 @@ class AppointmentServiceImplTest {
     }
 
     @Test
+    void doctorAndStaffUserCanUseStaffAppointmentOperations() {
+        User multiRoleUser = User.builder().id("multi-role-user")
+                .roles(Set.of(UserRole.STAFF, UserRole.DOCTOR))
+                .status(AccountStatus.ACTIVE).build();
+        when(userService.getActiveUserById("multi-role-user")).thenReturn(multiRoleUser);
+        when(appointmentRepository.findAllByStatusOrderByRequestedAtDesc(AppointmentStatus.CONFIRMED))
+                .thenReturn(List.of());
+
+        List<Appointment> result = service.getAppointments("multi-role-user", AppointmentStatus.CONFIRMED);
+
+        assertEquals(0, result.size());
+    }
+
+    @Test
+    void adminWithoutStaffRoleCannotUseStaffAppointmentOperations() {
+        User admin = User.builder().id("admin-user")
+                .roles(Set.of(UserRole.ADMIN)).status(AccountStatus.ACTIVE).build();
+        when(userService.getActiveUserById("admin-user")).thenReturn(admin);
+
+        assertThrows(ForbiddenException.class,
+                () -> service.getAppointments("admin-user", AppointmentStatus.CONFIRMED));
+    }
+
+    @Test
     void cancelConfirmedAppointmentReleasesSlotAndMakesAppointmentInactive() {
         Appointment appointment = pendingAppointment();
         appointment.setStatus(AppointmentStatus.CONFIRMED);
         appointment.setDoctorWorkSlotId("work-slot-1");
-        DoctorWorkSlot bookedSlot = copySlot(WorkSlotBookingStatus.BOOKED);
+        DoctorWorkSlot bookedSlot = copySlot(DoctorWorkSlotStatus.BOOKED);
         when(userService.getActiveUserById("staff-1")).thenReturn(staff);
         when(appointmentRepository.findById("appointment-1")).thenReturn(Optional.of(appointment));
         when(doctorWorkSlotRepository.findById("work-slot-1")).thenReturn(Optional.of(bookedSlot));
@@ -218,7 +250,7 @@ class AppointmentServiceImplTest {
         assertFalse(result.isActive());
         assertEquals("Doctor unavailable", result.getCancellationReason());
         assertEquals("staff-1", result.getCancelledBy());
-        assertEquals(WorkSlotBookingStatus.AVAILABLE, bookedSlot.getBookingStatus());
+        assertEquals(DoctorWorkSlotStatus.AVAILABLE, bookedSlot.getStatus());
     }
 
     @Test
@@ -236,7 +268,7 @@ class AppointmentServiceImplTest {
     void patientCancelsOwnPendingAppointmentAndReleasesSlot() {
         Appointment appointment = pendingAppointment();
         appointment.setDoctorWorkSlotId("work-slot-1");
-        DoctorWorkSlot pendingSlot = copySlot(WorkSlotBookingStatus.PENDING_CONFIRMATION);
+        DoctorWorkSlot pendingSlot = copySlot(DoctorWorkSlotStatus.SCHEDULING);
         when(userService.getActiveUserById("patient-user-1")).thenReturn(patient);
         when(appointmentRepository.findById("appointment-1")).thenReturn(Optional.of(appointment));
         when(doctorWorkSlotRepository.findById("work-slot-1")).thenReturn(Optional.of(pendingSlot));
@@ -250,7 +282,7 @@ class AppointmentServiceImplTest {
         assertEquals(AppointmentStatus.CANCELLED, result.getStatus());
         assertFalse(result.isActive());
         assertEquals("patient-user-1", result.getCancelledBy());
-        assertEquals(WorkSlotBookingStatus.AVAILABLE, pendingSlot.getBookingStatus());
+        assertEquals(DoctorWorkSlotStatus.AVAILABLE, pendingSlot.getStatus());
     }
 
     @Test
@@ -258,7 +290,7 @@ class AppointmentServiceImplTest {
         Appointment appointment = pendingAppointment();
         appointment.setStatus(AppointmentStatus.CONFIRMED);
         appointment.setDoctorWorkSlotId("work-slot-1");
-        DoctorWorkSlot bookedSlot = copySlot(WorkSlotBookingStatus.BOOKED);
+        DoctorWorkSlot bookedSlot = copySlot(DoctorWorkSlotStatus.BOOKED);
         when(userService.getActiveUserById("patient-user-1")).thenReturn(patient);
         when(appointmentRepository.findById("appointment-1")).thenReturn(Optional.of(appointment));
         when(doctorWorkSlotRepository.findById("work-slot-1")).thenReturn(Optional.of(bookedSlot));
@@ -270,7 +302,7 @@ class AppointmentServiceImplTest {
         Appointment result = service.cancelByPatient("patient-user-1", "appointment-1", request);
 
         assertEquals(AppointmentStatus.CANCELLED, result.getStatus());
-        assertEquals(WorkSlotBookingStatus.AVAILABLE, bookedSlot.getBookingStatus());
+        assertEquals(DoctorWorkSlotStatus.AVAILABLE, bookedSlot.getStatus());
     }
 
     @Test
@@ -290,7 +322,7 @@ class AppointmentServiceImplTest {
                 () -> service.cancelByPatient("patient-user-2", "appointment-1", request));
     }
 
-    private DoctorWorkSlot copySlot(WorkSlotBookingStatus bookingStatus) {
+    private DoctorWorkSlot copySlot(DoctorWorkSlotStatus status) {
         return DoctorWorkSlot.builder()
                 .id(availableSlot.getId())
                 .doctorId(availableSlot.getDoctorId())
@@ -301,8 +333,7 @@ class AppointmentServiceImplTest {
                 .roomCode(availableSlot.getRoomCode())
                 .startAt(availableSlot.getStartAt())
                 .endAt(availableSlot.getEndAt())
-                .approvalStatus(WorkSlotApprovalStatus.APPROVED)
-                .bookingStatus(bookingStatus)
+                .status(status)
                 .build();
     }
 

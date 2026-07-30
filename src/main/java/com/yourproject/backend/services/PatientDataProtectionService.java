@@ -39,10 +39,6 @@ public class PatientDataProtectionService {
         return hmac(normalizedPhoneNumber);
     }
 
-    public String patientIdLookup(String patientId) {
-        return hmac(patientId);
-    }
-
     public String secureLookup(String value) {
         return hmac(value);
     }
@@ -56,17 +52,16 @@ public class PatientDataProtectionService {
     }
 
     public void encryptPatientFields(User user) {
-        if (user.getRole() != UserRole.PATIENT) return;
+        if (!user.getRoles().contains(UserRole.PATIENT)) return;
         user.setPatientPhoneEncrypted(encrypt(user.getPhoneNumber()));
-        user.setPatientIdEncrypted(encrypt(user.getPatientId()));
         user.setPatientFullNameEncrypted(encrypt(user.getFullName()));
         user.setPatientGenderEncrypted(encrypt(user.getGender()));
-        user.setPatientDateOfBirthEncrypted(encrypt(user.getDateOfBirth().toString()));
+        user.setPatientDateOfBirthEncrypted(encrypt(
+                user.getDateOfBirth() == null ? null : user.getDateOfBirth().toString()));
         user.setPatientAddressEncrypted(encrypt(user.getAddress()));
         user.setPatientCitizenIdentificationCodeEncrypted(encrypt(user.getCitizenIdentificationCode()));
         user.setPatientHealthInsuranceCodeEncrypted(encrypt(user.getHealthInsuranceCode()));
         user.setPhoneNumber(null);
-        user.setPatientId(null);
         user.setFullName(null);
         user.setGender(null);
         user.setDateOfBirth(null);
@@ -77,12 +72,12 @@ public class PatientDataProtectionService {
     }
 
     public void decryptPatientFields(User user) {
-        if (user.getRole() != UserRole.PATIENT || user.getEncryptionVersion() == null) return;
+        if (!user.getRoles().contains(UserRole.PATIENT) || user.getEncryptionVersion() == null) return;
         user.setPhoneNumber(decrypt(user.getPatientPhoneEncrypted()));
-        user.setPatientId(decrypt(user.getPatientIdEncrypted()));
         user.setFullName(decrypt(user.getPatientFullNameEncrypted()));
         user.setGender(decrypt(user.getPatientGenderEncrypted()));
-        user.setDateOfBirth(LocalDate.parse(decrypt(user.getPatientDateOfBirthEncrypted())));
+        String decryptedDateOfBirth = decrypt(user.getPatientDateOfBirthEncrypted());
+        user.setDateOfBirth(decryptedDateOfBirth == null ? null : LocalDate.parse(decryptedDateOfBirth));
         user.setAddress(decrypt(user.getPatientAddressEncrypted()));
         user.setCitizenIdentificationCode(decrypt(user.getPatientCitizenIdentificationCodeEncrypted()));
         user.setHealthInsuranceCode(decrypt(user.getPatientHealthInsuranceCodeEncrypted()));

@@ -4,8 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 
 import com.yourproject.backend.models.DoctorWorkSlot;
-import com.yourproject.backend.models.WorkSlotApprovalStatus;
-import com.yourproject.backend.models.WorkSlotBookingStatus;
+import com.yourproject.backend.models.DoctorWorkSlotStatus;
 
 import lombok.Builder;
 import lombok.Data;
@@ -18,13 +17,10 @@ public class DoctorWorkSlotResponse {
     private String doctorId;
     private LocalDate workDate;
     private String slotId;
-    private String slotName;
     private String roomId;
-    private String roomCode;
     private Instant startAt;
     private Instant endAt;
-    private WorkSlotApprovalStatus approvalStatus;
-    private WorkSlotBookingStatus bookingStatus;
+    private DoctorWorkSlotStatus status;
     private String note;
     private Instant submittedAt;
     private String reviewedBy;
@@ -38,13 +34,10 @@ public class DoctorWorkSlotResponse {
                 .doctorId(slot.getDoctorId())
                 .workDate(slot.getWorkDate())
                 .slotId(slot.getSlotId())
-                .slotName(slot.getSlotName())
                 .roomId(slot.getRoomId())
-                .roomCode(slot.getRoomCode())
                 .startAt(slot.getStartAt())
                 .endAt(slot.getEndAt())
-                .approvalStatus(slot.getApprovalStatus())
-                .bookingStatus(slot.getBookingStatus())
+                .status(slot.getStatus())
                 .note(slot.getNote())
                 .submittedAt(slot.getSubmittedAt())
                 .reviewedBy(slot.getReviewedBy())

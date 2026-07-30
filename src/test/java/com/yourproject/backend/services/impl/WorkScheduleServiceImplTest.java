@@ -15,6 +15,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,9 +28,11 @@ import com.yourproject.backend.dtos.requests.ScheduleDecisionRequest;
 import com.yourproject.backend.dtos.requests.SubmitWorkScheduleRequest;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ConflictException;
+import com.yourproject.backend.exceptions.ForbiddenException;
 import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.ClinicRoom;
 import com.yourproject.backend.models.DoctorWorkSlot;
+import com.yourproject.backend.models.DoctorWorkSlotStatus;
 import com.yourproject.backend.models.ScheduleDecision;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
@@ -94,20 +97,17 @@ class WorkScheduleServiceImplTest {
     void submitMorningCreatesEightPendingSlots() {
         when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
         when(clinicRoomRepository.findById("room-1")).thenReturn(Optional.of(room));
-        when(workSlotRepository.findAllBySessionAndActiveTrueOrderByStartTimeAsc(WorkSession.MORNING))
-                .thenReturn(morningSlots);
-        when(doctorWorkSlotRepository.findAllByWorkDateAndSlotIdInAndConflictActiveTrue(any(), any()))
+        when(workSlotRepository.findAllByOrderByStartTimeAsc()).thenReturn(morningSlots);
+        when(doctorWorkSlotRepository.findAllByWorkDateAndSlotIdIn(any(), any()))
                 .thenReturn(List.of());
         when(doctorWorkSlotRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
 
         List<DoctorWorkSlot> result = service.submit("doctor-1", request(WorkSession.MORNING));
 
         assertEquals(8, result.size());
-        assertEquals(1, result.stream().map(DoctorWorkSlot::getSubmissionId).distinct().count());
-        assertEquals(8, result.stream().map(DoctorWorkSlot::getSlotName).distinct().count());
+        assertEquals(8, result.stream().map(DoctorWorkSlot::getSlotId).distinct().count());
         result.forEach(slot -> {
-            assertEquals(WorkSlotApprovalStatus.PENDING_APPROVAL, slot.getApprovalStatus());
-            assertEquals(WorkSlotBookingStatus.NOT_PUBLISHED, slot.getBookingStatus());
+            assertEquals(DoctorWorkSlotStatus.PENDING, slot.getStatus());
             assertEquals("doctor-1", slot.getDoctorId());
             assertEquals("room-1", slot.getRoomId());
         });
@@ -117,9 +117,8 @@ class WorkScheduleServiceImplTest {
     void submitRejectsExistingDoctorOrRoomConflict() {
         when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
         when(clinicRoomRepository.findById("room-1")).thenReturn(Optional.of(room));
-        when(workSlotRepository.findAllBySessionAndActiveTrueOrderByStartTimeAsc(WorkSession.MORNING))
-                .thenReturn(morningSlots);
-        when(doctorWorkSlotRepository.findAllByWorkDateAndSlotIdInAndConflictActiveTrue(any(), any()))
+        when(workSlotRepository.findAllByOrderByStartTimeAsc()).thenReturn(morningSlots);
+        when(doctorWorkSlotRepository.findAllByWorkDateAndSlotIdIn(any(), any()))
                 .thenReturn(List.of(DoctorWorkSlot.builder()
                         .doctorId("another-doctor")
                         .roomId("room-1")
@@ -157,7 +156,7 @@ class WorkScheduleServiceImplTest {
         List<DoctorWorkSlot> result = service.decide("staff-1", "submission-1", request);
 
         result.forEach(slot -> {
-            assertEquals(WorkSlotApprovalStatus.REJECTED, slot.getApprovalStatus());
+            assertEquals(DoctorWorkSlotStatus.REJECTED, slot.getStatus());
             assertFalse(slot.isConflictActive());
             assertEquals("Room maintenance", slot.getRejectionReason());
         });
@@ -166,12 +165,37 @@ class WorkScheduleServiceImplTest {
     @Test
     void getSchedulesFiltersByApprovalStatus() {
         when(userService.getActiveUserById("staff-1")).thenReturn(staff);
-        when(doctorWorkSlotRepository.findAllByApprovalStatusOrderBySubmittedAtDesc(
-                WorkSlotApprovalStatus.APPROVED)).thenReturn(List.of(pendingSlot()));
+        when(doctorWorkSlotRepository.findAllByStatusOrderBySubmittedAtDesc(
+                DoctorWorkSlotStatus.AVAILABLE)).thenReturn(List.of(pendingSlot()));
 
-        List<DoctorWorkSlot> result = service.getSchedules("staff-1", WorkSlotApprovalStatus.APPROVED);
+        List<DoctorWorkSlot> result = service.getSchedules("staff-1", DoctorWorkSlotStatus.AVAILABLE);
 
         assertEquals(1, result.size());
+    }
+
+    @Test
+    void doctorAndStaffUserCanUseStaffScheduleOperations() {
+        User multiRoleUser = User.builder().id("multi-role-user")
+                .roles(Set.of(UserRole.STAFF, UserRole.DOCTOR))
+                .status(AccountStatus.ACTIVE).build();
+        when(userService.getActiveUserById("multi-role-user")).thenReturn(multiRoleUser);
+        when(doctorWorkSlotRepository.findAllByStatusOrderBySubmittedAtDesc(
+                DoctorWorkSlotStatus.AVAILABLE)).thenReturn(List.of());
+
+        List<DoctorWorkSlot> result = service.getSchedules(
+                "multi-role-user", DoctorWorkSlotStatus.AVAILABLE);
+
+        assertEquals(0, result.size());
+    }
+
+    @Test
+    void adminWithoutStaffRoleCannotUseStaffScheduleOperations() {
+        User admin = User.builder().id("admin-user")
+                .roles(Set.of(UserRole.ADMIN)).status(AccountStatus.ACTIVE).build();
+        when(userService.getActiveUserById("admin-user")).thenReturn(admin);
+
+        assertThrows(ForbiddenException.class,
+                () -> service.getSchedules("admin-user", DoctorWorkSlotStatus.AVAILABLE));
     }
 
     @Test
@@ -201,8 +225,7 @@ class WorkScheduleServiceImplTest {
                 .id("work-slot-1")
                 .submissionId("submission-1")
                 .doctorId("doctor-1")
-                .approvalStatus(WorkSlotApprovalStatus.PENDING_APPROVAL)
-                .bookingStatus(WorkSlotBookingStatus.NOT_PUBLISHED)
+                .status(DoctorWorkSlotStatus.PENDING)
                 .conflictActive(true)
                 .startAt(LocalDate.now().plusDays(2).atStartOfDay(ZoneId.systemDefault()).toInstant())
                 .build();

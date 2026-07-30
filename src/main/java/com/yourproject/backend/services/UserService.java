@@ -20,7 +20,7 @@ public interface UserService {
 
     User updateUser(String userId, UpdateUserRequest request, String updatedBy);
 
-    void deactivateUser(String userId, String requestedBy);
+    User toggleUserStatus(String userId, String requestedBy);
 
     void changePassword(String userId, ChangePasswordRequest request);
 
