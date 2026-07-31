@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -62,7 +63,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     private final ClinicRoomRepository clinicRoomRepository;
 
     @Override
-    public List<DoctorWorkSlot> getAvailableSlots(String patientUserId, LocalDate date, String doctorId) {
+    public List<DoctorWorkSlot> getAvailableSlots(String patientUserId, LocalDate date, String doctorName) {
         requirePatient(patientUserId);
         Instant now = Instant.now();
         Instant from = now.plus(MINIMUM_BOOKING_LEAD);
@@ -90,18 +91,25 @@ public class AppointmentServiceImpl implements AppointmentService {
                     Instant startAt = startInstant(slot);
                     return !startAt.isBefore(effectiveFrom) && !startAt.isAfter(effectiveTo);
                 })
-                .filter(slot -> doctorId == null || doctorId.isBlank() || slot.getDoctorId().equals(doctorId))
                 .toList();
         Map<String, User> doctors = userRepository.findAllById(
                         availableSlots.stream().map(DoctorWorkSlot::getDoctorId).distinct().toList())
                 .stream()
                 .collect(Collectors.toMap(User::getId, doctor -> doctor));
+        String normalizedDoctorName = doctorName == null
+                ? null
+                : doctorName.trim().toLowerCase(Locale.ROOT);
         return availableSlots.stream()
                 .filter(slot -> {
                     User doctor = doctors.get(slot.getDoctorId());
                     return doctor != null
                             && doctor.getRoles().contains(UserRole.DOCTOR)
-                            && doctor.getStatus() == AccountStatus.ACTIVE;
+                            && doctor.getStatus() == AccountStatus.ACTIVE
+                            && (normalizedDoctorName == null
+                                    || normalizedDoctorName.isBlank()
+                                    || (doctor.getFullName() != null
+                                            && doctor.getFullName().toLowerCase(Locale.ROOT)
+                                                    .contains(normalizedDoctorName)));
                 })
                 .toList();
     }

@@ -13,7 +13,7 @@ import com.yourproject.backend.models.Appointment;
 import com.yourproject.backend.models.DoctorWorkSlot;
 
 public interface AppointmentService {
-    List<DoctorWorkSlot> getAvailableSlots(String patientUserId, LocalDate date, String doctorId);
+    List<DoctorWorkSlot> getAvailableSlots(String patientUserId, LocalDate date, String doctorName);
 
     Map<String, String> getDoctorNames(List<DoctorWorkSlot> slots);
 

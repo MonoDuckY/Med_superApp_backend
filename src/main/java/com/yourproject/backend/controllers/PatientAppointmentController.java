@@ -39,8 +39,11 @@ public class PatientAppointmentController {
     public ResponseEntity<ApiResponse<List<AvailableAppointmentSlotResponse>>> getAvailableSlots(
             Authentication authentication,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
-            @RequestParam(required = false) String doctorId) {
-        List<DoctorWorkSlot> slots = appointmentService.getAvailableSlots(authentication.getName(), date, doctorId);
+            @RequestParam(required = false) String doctorName) {
+        List<DoctorWorkSlot> slots = appointmentService.getAvailableSlots(
+                authentication.getName(),
+                date,
+                doctorName);
         List<AvailableAppointmentSlotResponse> response = appointmentService.toAvailableSlotResponses(slots);
         return ResponseEntity.ok(ApiResponse.success("Available appointment slots retrieved successfully.", response));
     }
