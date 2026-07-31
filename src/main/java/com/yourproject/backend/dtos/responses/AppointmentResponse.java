@@ -30,6 +30,10 @@ public class AppointmentResponse {
     private String cancelledBy;
     private Instant cancelledAt;
     private String cancellationReason;
+    private String previousDoctorWorkSlotId;
+    private String rescheduledBy;
+    private Instant rescheduledAt;
+    private String rescheduleReason;
 
     public static AppointmentResponse from(Appointment appointment) {
         return from(appointment, null, null, null);
@@ -61,6 +65,10 @@ public class AppointmentResponse {
                 .cancelledBy(appointment.getCancelledBy())
                 .cancelledAt(appointment.getCancelledAt())
                 .cancellationReason(appointment.getCancellationReason())
+                .previousDoctorWorkSlotId(appointment.getPreviousDoctorWorkSlotId())
+                .rescheduledBy(appointment.getRescheduledBy())
+                .rescheduledAt(appointment.getRescheduledAt())
+                .rescheduleReason(appointment.getRescheduleReason())
                 .build();
     }
 

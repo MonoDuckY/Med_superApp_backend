@@ -26,10 +26,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.yourproject.backend.dtos.requests.ScheduleDecisionRequest;
 import com.yourproject.backend.dtos.requests.SubmitWorkScheduleRequest;
+import com.yourproject.backend.dtos.requests.BlockWorkSlotRequest;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ConflictException;
 import com.yourproject.backend.exceptions.ForbiddenException;
 import com.yourproject.backend.models.AccountStatus;
+import com.yourproject.backend.models.Appointment;
+import com.yourproject.backend.models.AppointmentStatus;
 import com.yourproject.backend.models.ClinicRoom;
 import com.yourproject.backend.models.DoctorWorkSlot;
 import com.yourproject.backend.models.DoctorWorkSlotStatus;
@@ -44,6 +47,7 @@ import com.yourproject.backend.repositories.ClinicRoomRepository;
 import com.yourproject.backend.repositories.DoctorWorkSlotRepository;
 import com.yourproject.backend.repositories.WorkSlotRepository;
 import com.yourproject.backend.repositories.UserRepository;
+import com.yourproject.backend.repositories.AppointmentRepository;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.services.UserService;
 
@@ -66,6 +70,9 @@ class WorkScheduleServiceImplTest {
 
     @Mock
     private PatientDataProtectionService patientDataProtectionService;
+
+    @Mock
+    private AppointmentRepository appointmentRepository;
 
     @InjectMocks
     private WorkScheduleServiceImpl service;
@@ -230,5 +237,54 @@ class WorkScheduleServiceImplTest {
                 .status(DoctorWorkSlotStatus.PENDING)
                 .conflictActive(true)
                 .build();
+    }
+
+    @Test
+    void modifyPendingSubmissionReplacesSlotsAndKeepsSubmissionId() {
+        DoctorWorkSlot pending = pendingSlot();
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+        when(doctorWorkSlotRepository.findAllBySubmissionIdAndDoctorIdOrderBySlotIdAsc(
+                "submission-1", "doctor-1")).thenReturn(List.of(pending));
+        when(clinicRoomRepository.findById("room-1")).thenReturn(Optional.of(room));
+        when(workSlotRepository.findAllByOrderByStartTimeAsc()).thenReturn(morningSlots);
+        when(doctorWorkSlotRepository.findAllByWorkDateAndSlotIdIn(any(), any()))
+                .thenReturn(List.of());
+        when(doctorWorkSlotRepository.saveAll(anyList()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<DoctorWorkSlot> result = service.modifyPendingSubmission(
+                "doctor-1", "submission-1", request(WorkSession.MORNING));
+
+        assertEquals(8, result.size());
+        result.forEach(slot -> {
+            assertEquals("submission-1", slot.getSubmissionId());
+            assertEquals(DoctorWorkSlotStatus.PENDING, slot.getStatus());
+        });
+        verify(doctorWorkSlotRepository).deleteAll(List.of(pending));
+    }
+
+    @Test
+    void blockBookedSlotCancelsAffectedAppointment() {
+        DoctorWorkSlot booked = pendingSlot();
+        booked.setStatus(DoctorWorkSlotStatus.BOOKED);
+        Appointment appointment = Appointment.builder()
+                .id("appointment-1")
+                .doctorWorkSlotId(booked.getId())
+                .status(AppointmentStatus.CONFIRMED)
+                .build();
+        BlockWorkSlotRequest request = new BlockWorkSlotRequest();
+        request.setReason("Doctor unavailable");
+        when(userService.getActiveUserById("staff-1")).thenReturn(staff);
+        when(doctorWorkSlotRepository.findById(booked.getId())).thenReturn(Optional.of(booked));
+        when(appointmentRepository.findFirstByDoctorWorkSlotIdAndStatusIn(any(), any()))
+                .thenReturn(Optional.of(appointment));
+        when(doctorWorkSlotRepository.save(booked)).thenReturn(booked);
+
+        DoctorWorkSlot result = service.blockSlot("staff-1", booked.getId(), request);
+
+        assertEquals(DoctorWorkSlotStatus.CANCELLED, result.getStatus());
+        assertEquals(AppointmentStatus.CANCELLED, appointment.getStatus());
+        assertEquals("Doctor unavailable", appointment.getCancellationReason());
+        verify(appointmentRepository).save(appointment);
     }
 }

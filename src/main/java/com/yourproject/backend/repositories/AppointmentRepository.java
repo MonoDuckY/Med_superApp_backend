@@ -3,6 +3,7 @@ package com.yourproject.backend.repositories;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Collection;
 
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
@@ -25,4 +26,8 @@ public interface AppointmentRepository extends MongoRepository<Appointment, Stri
     List<Appointment> findAllByStatusOrderByRequestedAtDesc(AppointmentStatus status);
 
     List<Appointment> findAllByOrderByRequestedAtDesc();
+
+    Optional<Appointment> findFirstByDoctorWorkSlotIdAndStatusIn(
+            String doctorWorkSlotId,
+            Collection<AppointmentStatus> statuses);
 }

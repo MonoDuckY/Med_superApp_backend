@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 
 import com.yourproject.backend.dtos.requests.SubmitWorkScheduleRequest;
 import com.yourproject.backend.dtos.responses.ApiResponse;
@@ -74,5 +75,20 @@ public class DoctorWorkScheduleController {
             @PathVariable String submissionId) {
         workScheduleService.cancelPendingSubmission(authentication.getName(), submissionId);
         return ResponseEntity.ok(ApiResponse.success("Pending work schedule cancelled successfully.", null));
+    }
+
+    @PatchMapping("/{submissionId}")
+    public ResponseEntity<ApiResponse<WorkScheduleSubmissionResponse>> modifyPending(
+            Authentication authentication,
+            @PathVariable String submissionId,
+            @Valid @RequestBody SubmitWorkScheduleRequest request) {
+        WorkScheduleSubmissionResponse response = workScheduleService.toResponse(
+                workScheduleService.modifyPendingSubmission(
+                        authentication.getName(),
+                        submissionId,
+                        request));
+        return ResponseEntity.ok(ApiResponse.success(
+                "Pending work schedule updated successfully.",
+                response));
     }
 }

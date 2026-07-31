@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.yourproject.backend.dtos.requests.ScheduleDecisionRequest;
 import com.yourproject.backend.dtos.requests.SubmitWorkScheduleRequest;
+import com.yourproject.backend.dtos.requests.BlockWorkSlotRequest;
 import com.yourproject.backend.dtos.responses.WorkScheduleSubmissionResponse;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ConflictException;
@@ -29,6 +30,9 @@ import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.models.WorkSession;
 import com.yourproject.backend.models.WorkSlot;
 import com.yourproject.backend.models.DoctorWorkSlotStatus;
+import com.yourproject.backend.models.Appointment;
+import com.yourproject.backend.models.AppointmentStatus;
+import com.yourproject.backend.repositories.AppointmentRepository;
 import com.yourproject.backend.repositories.ClinicRoomRepository;
 import com.yourproject.backend.repositories.DoctorWorkSlotRepository;
 import com.yourproject.backend.repositories.WorkSlotRepository;
@@ -50,6 +54,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     private final UserService userService;
     private final UserRepository userRepository;
     private final PatientDataProtectionService patientDataProtectionService;
+    private final AppointmentRepository appointmentRepository;
 
     @Override
     @Transactional
@@ -198,6 +203,73 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     }
 
     @Override
+    @Transactional
+    public List<DoctorWorkSlot> modifyPendingSubmission(
+            String doctorId,
+            String submissionId,
+            SubmitWorkScheduleRequest request) {
+        requireRole(doctorId, UserRole.DOCTOR, "Only doctors can modify pending work schedules.");
+        List<DoctorWorkSlot> current = doctorWorkSlotRepository
+                .findAllBySubmissionIdAndDoctorIdOrderBySlotIdAsc(submissionId, doctorId);
+        if (current.isEmpty()) {
+            throw new ResourceNotFoundException("Work schedule submission was not found.");
+        }
+        if (current.stream().anyMatch(slot -> slot.getStatus() != DoctorWorkSlotStatus.PENDING)) {
+            throw new ConflictException("Only pending work schedule submissions can be modified by a doctor.");
+        }
+        return replaceSubmission(current, request, DoctorWorkSlotStatus.PENDING, null);
+    }
+
+    @Override
+    @Transactional
+    public List<DoctorWorkSlot> modifyApprovedSubmission(
+            String staffId,
+            String submissionId,
+            SubmitWorkScheduleRequest request) {
+        requireStaff(staffId);
+        List<DoctorWorkSlot> current = doctorWorkSlotRepository
+                .findAllBySubmissionIdOrderBySlotIdAsc(submissionId);
+        if (current.isEmpty()) {
+            throw new ResourceNotFoundException("Work schedule submission was not found.");
+        }
+        if (current.stream().anyMatch(slot -> slot.getStatus() != DoctorWorkSlotStatus.AVAILABLE)) {
+            throw new ConflictException(
+                    "Only approved work schedules without active appointments can be modified.");
+        }
+        return replaceSubmission(current, request, DoctorWorkSlotStatus.AVAILABLE, staffId);
+    }
+
+    @Override
+    @Transactional
+    public DoctorWorkSlot blockSlot(
+            String staffId,
+            String doctorWorkSlotId,
+            BlockWorkSlotRequest request) {
+        requireStaff(staffId);
+        DoctorWorkSlot slot = doctorWorkSlotRepository.findById(doctorWorkSlotId)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor work slot was not found."));
+        if (slot.getStatus() != DoctorWorkSlotStatus.AVAILABLE
+                && slot.getStatus() != DoctorWorkSlotStatus.SCHEDULING
+                && slot.getStatus() != DoctorWorkSlotStatus.BOOKED) {
+            throw new ConflictException("Only available or reserved work slots can be blocked.");
+        }
+
+        Instant now = Instant.now();
+        appointmentRepository.findFirstByDoctorWorkSlotIdAndStatusIn(
+                        slot.getId(),
+                        List.of(AppointmentStatus.PENDING_STAFF_CONFIRMATION, AppointmentStatus.CONFIRMED))
+                .ifPresent(appointment -> cancelAffectedAppointment(appointment, staffId, request.getReason(), now));
+
+        slot.setStatus(DoctorWorkSlotStatus.CANCELLED);
+        slot.setConflictActive(false);
+        slot.setReviewedBy(staffId);
+        slot.setReviewedAt(now);
+        slot.setRejectionReason(request.getReason().trim());
+        slot.setUpdatedAt(now);
+        return doctorWorkSlotRepository.save(slot);
+    }
+
+    @Override
     public WorkScheduleSubmissionResponse toResponse(List<DoctorWorkSlot> slots) {
         if (slots == null || slots.isEmpty()) {
             throw new IllegalArgumentException("A work schedule submission must contain at least one slot.");
@@ -223,6 +295,77 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                         ? slot.getStartTime().isBefore(noon)
                         : !slot.getStartTime().isBefore(noon))
                 .toList();
+    }
+
+    private List<DoctorWorkSlot> replaceSubmission(
+            List<DoctorWorkSlot> current,
+            SubmitWorkScheduleRequest request,
+            DoctorWorkSlotStatus targetStatus,
+            String reviewedBy) {
+        DoctorWorkSlot first = current.get(0);
+        if (request.getWorkDate().isBefore(LocalDate.now(HOSPITAL_ZONE))) {
+            throw new BadRequestException("Work date cannot be in the past.");
+        }
+        ClinicRoom room = clinicRoomRepository.findById(request.getRoomId().trim())
+                .filter(ClinicRoom::isActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Active clinic room was not found."));
+        List<WorkSlot> selectedSlots = getSlots(request.getSession());
+        if (selectedSlots.isEmpty()) {
+            throw new BadRequestException("No work slots are available for the selected session.");
+        }
+        Instant now = Instant.now();
+        if (selectedSlots.stream().map(slot -> toInstant(request.getWorkDate(), slot))
+                .anyMatch(startAt -> !startAt.isAfter(now))) {
+            throw new BadRequestException("Every selected work slot must start in the future.");
+        }
+
+        Set<String> selectedIds = selectedSlots.stream().map(WorkSlot::getId).collect(Collectors.toSet());
+        boolean conflict = doctorWorkSlotRepository
+                .findAllByWorkDateAndSlotIdIn(request.getWorkDate(), selectedIds)
+                .stream()
+                .filter(existing -> !first.getSubmissionId().equals(existing.getSubmissionId()))
+                .filter(existing -> existing.getStatus() != DoctorWorkSlotStatus.REJECTED
+                        && existing.getStatus() != DoctorWorkSlotStatus.CANCELLED
+                        && existing.getStatus() != DoctorWorkSlotStatus.CLOSED)
+                .anyMatch(existing -> existing.getDoctorId().equals(first.getDoctorId())
+                        || existing.getRoomId().equals(room.getId()));
+        if (conflict) {
+            throw new ConflictException("Modified work schedule conflicts with an existing schedule.");
+        }
+
+        String note = trimToNull(request.getNote());
+        List<DoctorWorkSlot> replacements = selectedSlots.stream()
+                .map(definition -> DoctorWorkSlot.builder()
+                        .submissionId(first.getSubmissionId())
+                        .doctorId(first.getDoctorId())
+                        .workDate(request.getWorkDate())
+                        .slotId(definition.getId())
+                        .roomId(room.getId())
+                        .status(targetStatus)
+                        .note(note)
+                        .submittedAt(first.getSubmittedAt())
+                        .reviewedBy(reviewedBy == null ? first.getReviewedBy() : reviewedBy)
+                        .reviewedAt(reviewedBy == null ? first.getReviewedAt() : now)
+                        .conflictActive(true)
+                        .updatedAt(now)
+                        .build())
+                .toList();
+        doctorWorkSlotRepository.deleteAll(current);
+        return doctorWorkSlotRepository.saveAll(replacements);
+    }
+
+    private void cancelAffectedAppointment(
+            Appointment appointment,
+            String staffId,
+            String reason,
+            Instant cancelledAt) {
+        appointment.setStatus(AppointmentStatus.CANCELLED);
+        appointment.setActive(false);
+        appointment.setCancelledBy(staffId);
+        appointment.setCancelledAt(cancelledAt);
+        appointment.setCancellationReason(reason.trim());
+        appointment.setUpdatedAt(cancelledAt);
+        appointmentRepository.save(appointment);
     }
 
     private Instant toInstant(LocalDate workDate, WorkSlot slot) {

@@ -19,6 +19,11 @@ import com.yourproject.backend.dtos.requests.AppointmentDecisionRequest;
 import com.yourproject.backend.dtos.requests.CreateClinicRoomRequest;
 import com.yourproject.backend.dtos.requests.CancelAppointmentRequest;
 import com.yourproject.backend.dtos.requests.ScheduleDecisionRequest;
+import com.yourproject.backend.dtos.requests.SubmitWorkScheduleRequest;
+import com.yourproject.backend.dtos.requests.BlockWorkSlotRequest;
+import com.yourproject.backend.dtos.requests.RescheduleAppointmentRequest;
+import com.yourproject.backend.dtos.requests.StaffCreateAppointmentRequest;
+import com.yourproject.backend.dtos.responses.DoctorWorkSlotResponse;
 import com.yourproject.backend.dtos.responses.ApiResponse;
 import com.yourproject.backend.dtos.responses.AppointmentResponse;
 import com.yourproject.backend.dtos.responses.ClinicRoomResponse;
@@ -88,6 +93,31 @@ public class StaffSchedulingController {
         return ResponseEntity.ok(ApiResponse.success("Work schedule decision recorded successfully.", response));
     }
 
+    @PatchMapping("/work-schedules/{submissionId}")
+    public ResponseEntity<ApiResponse<WorkScheduleSubmissionResponse>> modifyApprovedWorkSchedule(
+            Authentication authentication,
+            @PathVariable String submissionId,
+            @Valid @RequestBody SubmitWorkScheduleRequest request) {
+        WorkScheduleSubmissionResponse response = workScheduleService.toResponse(
+                workScheduleService.modifyApprovedSubmission(
+                        authentication.getName(),
+                        submissionId,
+                        request));
+        return ResponseEntity.ok(ApiResponse.success(
+                "Approved work schedule updated successfully.",
+                response));
+    }
+
+    @PatchMapping("/work-slots/{doctorWorkSlotId}/block")
+    public ResponseEntity<ApiResponse<DoctorWorkSlotResponse>> blockWorkSlot(
+            Authentication authentication,
+            @PathVariable String doctorWorkSlotId,
+            @Valid @RequestBody BlockWorkSlotRequest request) {
+        DoctorWorkSlotResponse response = DoctorWorkSlotResponse.from(
+                workScheduleService.blockSlot(authentication.getName(), doctorWorkSlotId, request));
+        return ResponseEntity.ok(ApiResponse.success("Doctor work slot blocked successfully.", response));
+    }
+
     @GetMapping("/appointments/pending")
     public ResponseEntity<ApiResponse<List<AppointmentResponse>>> getPendingAppointments(
             Authentication authentication) {
@@ -127,5 +157,25 @@ public class StaffSchedulingController {
         AppointmentResponse appointment = appointmentService.toResponse(
                 appointmentService.cancel(authentication.getName(), appointmentId, request));
         return ResponseEntity.ok(ApiResponse.success("Appointment cancelled successfully.", appointment));
+    }
+
+    @PatchMapping("/appointments/{appointmentId}/reschedule")
+    public ResponseEntity<ApiResponse<AppointmentResponse>> rescheduleAppointment(
+            Authentication authentication,
+            @PathVariable String appointmentId,
+            @Valid @RequestBody RescheduleAppointmentRequest request) {
+        AppointmentResponse appointment = appointmentService.toResponse(
+                appointmentService.reschedule(authentication.getName(), appointmentId, request));
+        return ResponseEntity.ok(ApiResponse.success("Appointment rescheduled successfully.", appointment));
+    }
+
+    @PostMapping("/appointments")
+    public ResponseEntity<ApiResponse<AppointmentResponse>> createAppointment(
+            Authentication authentication,
+            @Valid @RequestBody StaffCreateAppointmentRequest request) {
+        AppointmentResponse appointment = appointmentService.toResponse(
+                appointmentService.createByStaff(authentication.getName(), request));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Appointment created successfully.", appointment));
     }
 }

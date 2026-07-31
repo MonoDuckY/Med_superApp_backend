@@ -28,6 +28,8 @@ import org.springframework.data.mongodb.core.query.Update;
 import com.yourproject.backend.dtos.requests.AppointmentDecisionRequest;
 import com.yourproject.backend.dtos.requests.BookAppointmentRequest;
 import com.yourproject.backend.dtos.requests.CancelAppointmentRequest;
+import com.yourproject.backend.dtos.requests.RescheduleAppointmentRequest;
+import com.yourproject.backend.dtos.requests.StaffCreateAppointmentRequest;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ConflictException;
 import com.yourproject.backend.exceptions.ForbiddenException;
@@ -340,6 +342,60 @@ class AppointmentServiceImplTest {
                 .roomCode(availableSlot.getRoomCode())
                 .status(status)
                 .build();
+    }
+
+    @Test
+    void staffReschedulesConfirmedAppointmentToAvailableSlot() {
+        Appointment appointment = pendingAppointment();
+        appointment.setStatus(AppointmentStatus.CONFIRMED);
+        DoctorWorkSlot current = copySlot(DoctorWorkSlotStatus.BOOKED);
+        DoctorWorkSlot replacement = copySlot(DoctorWorkSlotStatus.AVAILABLE);
+        replacement.setId("work-slot-2");
+        DoctorWorkSlot claimed = copySlot(DoctorWorkSlotStatus.BOOKED);
+        claimed.setId("work-slot-2");
+        RescheduleAppointmentRequest request = new RescheduleAppointmentRequest();
+        request.setDoctorWorkSlotId("work-slot-2");
+        request.setReason("Doctor unavailable");
+
+        when(userService.getActiveUserById("staff-1")).thenReturn(staff);
+        when(appointmentRepository.findById("appointment-1")).thenReturn(Optional.of(appointment));
+        when(doctorWorkSlotRepository.findById("work-slot-1")).thenReturn(Optional.of(current));
+        when(doctorWorkSlotRepository.findById("work-slot-2")).thenReturn(Optional.of(replacement));
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+        when(mongoTemplate.findAndModify(any(Query.class), any(Update.class),
+                any(FindAndModifyOptions.class), eq(DoctorWorkSlot.class))).thenReturn(claimed);
+        when(appointmentRepository.save(appointment)).thenReturn(appointment);
+
+        Appointment result = service.reschedule("staff-1", "appointment-1", request);
+
+        assertEquals("work-slot-2", result.getDoctorWorkSlotId());
+        assertEquals("work-slot-1", result.getPreviousDoctorWorkSlotId());
+        assertEquals(AppointmentStatus.CONFIRMED, result.getStatus());
+        assertEquals(DoctorWorkSlotStatus.AVAILABLE, current.getStatus());
+        assertEquals("Doctor unavailable", result.getRescheduleReason());
+    }
+
+    @Test
+    void staffCreateAppointmentBooksSlotImmediately() {
+        StaffCreateAppointmentRequest request = new StaffCreateAppointmentRequest();
+        request.setPatientId("patient-user-1");
+        request.setDoctorWorkSlotId("work-slot-1");
+        DoctorWorkSlot claimed = copySlot(DoctorWorkSlotStatus.BOOKED);
+        when(userService.getActiveUserById("staff-1")).thenReturn(staff);
+        when(userService.getActiveUserById("patient-user-1")).thenReturn(patient);
+        when(doctorWorkSlotRepository.findById("work-slot-1")).thenReturn(Optional.of(availableSlot));
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+        when(appointmentRepository.findAllForPatient("patient-user-1")).thenReturn(List.of());
+        when(mongoTemplate.findAndModify(any(Query.class), any(Update.class),
+                any(FindAndModifyOptions.class), eq(DoctorWorkSlot.class))).thenReturn(claimed);
+        when(appointmentRepository.save(any(Appointment.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        Appointment result = service.createByStaff("staff-1", request);
+
+        assertEquals(AppointmentStatus.CONFIRMED, result.getStatus());
+        assertEquals("patient-user-1", result.getPatientId());
+        assertEquals("work-slot-1", result.getDoctorWorkSlotId());
     }
 
     private Appointment pendingAppointment() {

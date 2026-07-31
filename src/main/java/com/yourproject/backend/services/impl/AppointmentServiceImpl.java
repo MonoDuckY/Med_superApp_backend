@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.yourproject.backend.dtos.requests.AppointmentDecisionRequest;
 import com.yourproject.backend.dtos.requests.BookAppointmentRequest;
 import com.yourproject.backend.dtos.requests.CancelAppointmentRequest;
+import com.yourproject.backend.dtos.requests.RescheduleAppointmentRequest;
+import com.yourproject.backend.dtos.requests.StaffCreateAppointmentRequest;
 import com.yourproject.backend.dtos.responses.AppointmentResponse;
 import com.yourproject.backend.dtos.responses.AvailableAppointmentSlotResponse;
 import com.yourproject.backend.exceptions.BadRequestException;
@@ -255,6 +257,82 @@ public class AppointmentServiceImpl implements AppointmentService {
         return cancelAppointment(appointment, patient.getId(), request.getCancellationReason());
     }
 
+    @Override
+    @Transactional
+    public Appointment reschedule(
+            String staffId,
+            String appointmentId,
+            RescheduleAppointmentRequest request) {
+        requireStaff(staffId);
+        Appointment appointment = appointmentRepository.findById(appointmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Appointment was not found."));
+        if (appointment.getStatus() != AppointmentStatus.PENDING_STAFF_CONFIRMATION
+                && appointment.getStatus() != AppointmentStatus.CONFIRMED) {
+            throw new ConflictException("Only pending or confirmed appointments can be rescheduled.");
+        }
+        if (appointment.getDoctorWorkSlotId().equals(request.getDoctorWorkSlotId().trim())) {
+            throw new BadRequestException("The replacement slot must be different from the current slot.");
+        }
+
+        DoctorWorkSlot currentSlot = doctorWorkSlotRepository.findById(appointment.getDoctorWorkSlotId())
+                .orElseThrow(() -> new ResourceNotFoundException("Current doctor work slot was not found."));
+        DoctorWorkSlot replacement = requireStaffBookableSlot(request.getDoctorWorkSlotId());
+        DoctorWorkSlot claimedReplacement = claimSlot(
+                replacement.getId(),
+                DoctorWorkSlotStatus.AVAILABLE,
+                DoctorWorkSlotStatus.BOOKED);
+
+        DoctorWorkSlotStatus expectedCurrentStatus = appointment.getStatus()
+                == AppointmentStatus.PENDING_STAFF_CONFIRMATION
+                        ? DoctorWorkSlotStatus.SCHEDULING
+                        : DoctorWorkSlotStatus.BOOKED;
+        if (currentSlot.getStatus() != expectedCurrentStatus) {
+            releaseClaimedSlot(claimedReplacement);
+            throw new ConflictException("Current doctor work slot status does not match the appointment.");
+        }
+
+        Instant now = Instant.now();
+        currentSlot.setStatus(DoctorWorkSlotStatus.AVAILABLE);
+        currentSlot.setUpdatedAt(now);
+        doctorWorkSlotRepository.save(currentSlot);
+
+        appointment.setPreviousDoctorWorkSlotId(appointment.getDoctorWorkSlotId());
+        appointment.setDoctorWorkSlotId(claimedReplacement.getId());
+        appointment.setStatus(AppointmentStatus.CONFIRMED);
+        appointment.setRescheduledBy(staffId);
+        appointment.setRescheduledAt(now);
+        appointment.setRescheduleReason(request.getReason().trim());
+        appointment.setUpdatedAt(now);
+        return appointmentRepository.save(appointment);
+    }
+
+    @Override
+    @Transactional
+    public Appointment createByStaff(String staffId, StaffCreateAppointmentRequest request) {
+        requireStaff(staffId);
+        User patient = userService.getActiveUserById(request.getPatientId().trim());
+        if (!patient.getRoles().contains(UserRole.PATIENT)) {
+            throw new BadRequestException("The selected user is not a patient.");
+        }
+        DoctorWorkSlot target = requireStaffBookableSlot(request.getDoctorWorkSlotId());
+        ensurePatientHasNoActiveAppointmentOnDate(patient.getId(), target.getWorkDate());
+        DoctorWorkSlot claimed = claimSlot(
+                target.getId(),
+                DoctorWorkSlotStatus.AVAILABLE,
+                DoctorWorkSlotStatus.BOOKED);
+
+        Instant now = Instant.now();
+        return appointmentRepository.save(Appointment.builder()
+                .patientId(patient.getId())
+                .doctorWorkSlotId(claimed.getId())
+                .status(AppointmentStatus.CONFIRMED)
+                .requestedAt(now)
+                .reviewedBy(staffId)
+                .reviewedAt(now)
+                .updatedAt(now)
+                .build());
+    }
+
     private Appointment cancelAppointment(Appointment appointment, String cancelledBy, String cancellationReason) {
         DoctorWorkSlot slot = doctorWorkSlotRepository.findById(appointment.getDoctorWorkSlotId())
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor work slot was not found."));
@@ -281,6 +359,56 @@ public class AppointmentServiceImpl implements AppointmentService {
 
         doctorWorkSlotRepository.save(slot);
         return appointmentRepository.save(appointment);
+    }
+
+    private DoctorWorkSlot requireStaffBookableSlot(String doctorWorkSlotId) {
+        DoctorWorkSlot slot = doctorWorkSlotRepository.findById(doctorWorkSlotId.trim())
+                .orElseThrow(() -> new ResourceNotFoundException("Replacement doctor work slot was not found."));
+        if (slot.getStatus() != DoctorWorkSlotStatus.AVAILABLE) {
+            throw new ConflictException("The selected doctor work slot is not available.");
+        }
+        if (!startInstant(slot).isAfter(Instant.now())) {
+            throw new ConflictException("The selected doctor work slot has already started.");
+        }
+        User doctor = userService.getActiveUserById(slot.getDoctorId());
+        if (!doctor.getRoles().contains(UserRole.DOCTOR)) {
+            throw new ConflictException("The selected work slot does not belong to an active doctor.");
+        }
+        return slot;
+    }
+
+    private DoctorWorkSlot claimSlot(
+            String slotId,
+            DoctorWorkSlotStatus expected,
+            DoctorWorkSlotStatus target) {
+        Instant now = Instant.now();
+        DoctorWorkSlot claimed = mongoTemplate.findAndModify(
+                Query.query(Criteria.where("_id").is(slotId).and("status").is(expected)),
+                new Update().set("status", target).set("updatedAt", now),
+                FindAndModifyOptions.options().returnNew(true),
+                DoctorWorkSlot.class);
+        if (claimed == null) {
+            throw new ConflictException("The selected doctor work slot is no longer available.");
+        }
+        return claimed;
+    }
+
+    private void releaseClaimedSlot(DoctorWorkSlot slot) {
+        slot.setStatus(DoctorWorkSlotStatus.AVAILABLE);
+        slot.setUpdatedAt(Instant.now());
+        doctorWorkSlotRepository.save(slot);
+    }
+
+    private void ensurePatientHasNoActiveAppointmentOnDate(String patientId, LocalDate date) {
+        boolean conflict = appointmentRepository.findAllForPatient(patientId).stream()
+                .filter(appointment -> appointment.getStatus() != AppointmentStatus.CANCELLED
+                        && appointment.getStatus() != AppointmentStatus.REJECTED)
+                .map(appointment -> doctorWorkSlotRepository.findById(
+                        appointment.getDoctorWorkSlotId()).orElse(null))
+                .anyMatch(slot -> slot != null && date.equals(slot.getWorkDate()));
+        if (conflict) {
+            throw new ConflictException("A patient can only have one active appointment per day.");
+        }
     }
 
     @Override

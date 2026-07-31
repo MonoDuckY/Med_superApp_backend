@@ -65,6 +65,10 @@ public class Appointment {
     private String cancelledBy;
     private Instant cancelledAt;
     private String cancellationReason;
+    private String previousDoctorWorkSlotId;
+    private String rescheduledBy;
+    private Instant rescheduledAt;
+    private String rescheduleReason;
     @Transient
     private boolean active;
     private Instant updatedAt;

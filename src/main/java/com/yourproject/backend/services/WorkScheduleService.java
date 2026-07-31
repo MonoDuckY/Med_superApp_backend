@@ -5,6 +5,7 @@ import java.util.List;
 
 import com.yourproject.backend.dtos.requests.ScheduleDecisionRequest;
 import com.yourproject.backend.dtos.requests.SubmitWorkScheduleRequest;
+import com.yourproject.backend.dtos.requests.BlockWorkSlotRequest;
 import com.yourproject.backend.dtos.responses.WorkScheduleSubmissionResponse;
 import com.yourproject.backend.models.DoctorWorkSlot;
 
@@ -20,6 +21,18 @@ public interface WorkScheduleService {
     List<DoctorWorkSlot> decide(String staffId, String submissionId, ScheduleDecisionRequest request);
 
     void cancelPendingSubmission(String doctorId, String submissionId);
+
+    List<DoctorWorkSlot> modifyPendingSubmission(
+            String doctorId,
+            String submissionId,
+            SubmitWorkScheduleRequest request);
+
+    List<DoctorWorkSlot> modifyApprovedSubmission(
+            String staffId,
+            String submissionId,
+            SubmitWorkScheduleRequest request);
+
+    DoctorWorkSlot blockSlot(String staffId, String doctorWorkSlotId, BlockWorkSlotRequest request);
 
     WorkScheduleSubmissionResponse toResponse(List<DoctorWorkSlot> slots);
 
