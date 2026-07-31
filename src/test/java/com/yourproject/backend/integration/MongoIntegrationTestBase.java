@@ -21,10 +21,8 @@ import com.yourproject.backend.repositories.PatientOtpRepository;
 import com.yourproject.backend.repositories.AppointmentRepository;
 import com.yourproject.backend.repositories.ClinicRoomRepository;
 import com.yourproject.backend.repositories.DoctorWorkSlotRepository;
-import com.yourproject.backend.repositories.RefreshTokenRepository;
 import com.yourproject.backend.repositories.SmsGatewayDeviceRepository;
 import com.yourproject.backend.repositories.SmsGatewayJobRepository;
-import com.yourproject.backend.repositories.TrustedDeviceRepository;
 import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.services.FcmGatewayService;
 import com.yourproject.backend.services.PatientDataProtectionService;
@@ -45,9 +43,6 @@ public abstract class MongoIntegrationTestBase {
     protected UserRepository userRepository;
 
     @Autowired
-    protected RefreshTokenRepository refreshTokenRepository;
-
-    @Autowired
     protected PasswordEncoder passwordEncoder;
 
     @Autowired
@@ -64,9 +59,6 @@ public abstract class MongoIntegrationTestBase {
 
     @Autowired
     protected ClinicRoomRepository clinicRoomRepository;
-
-    @Autowired
-    protected TrustedDeviceRepository trustedDeviceRepository;
 
     @Autowired
     protected SmsGatewayJobRepository smsGatewayJobRepository;
@@ -110,10 +102,8 @@ public abstract class MongoIntegrationTestBase {
         doctorWorkSlotRepository.deleteAll();
         clinicRoomRepository.deleteAll();
         patientOtpRepository.deleteAll();
-        trustedDeviceRepository.deleteAll();
         smsGatewayJobRepository.deleteAll();
         smsGatewayDeviceRepository.deleteAll();
-        refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
     }
 

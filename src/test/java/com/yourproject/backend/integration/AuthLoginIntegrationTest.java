@@ -27,8 +27,9 @@ class AuthLoginIntegrationTest extends MongoIntegrationTestBase {
                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
                 .andExpect(jsonPath("$.data.refreshToken").isNotEmpty());
 
-        assertEquals(1, refreshTokenRepository.count());
-        assertNotNull(userRepository.findAll().get(0).getLastLoginAt());
+        User storedUser = userRepository.findAll().get(0);
+        assertNotNull(storedUser.getRefreshTokenHash());
+        assertNotNull(storedUser.getLastLoginAt());
     }
 
     @Test
@@ -61,7 +62,8 @@ class AuthLoginIntegrationTest extends MongoIntegrationTestBase {
                 .andExpect(jsonPath("$.message").value("Invalid phone number or password."));
 
         assertEquals(1, userRepository.findById(doctor.getId()).orElseThrow().getFailedLoginAttempts());
-        assertEquals(0, refreshTokenRepository.count());
+        org.junit.jupiter.api.Assertions.assertNull(
+                userRepository.findById(doctor.getId()).orElseThrow().getRefreshTokenHash());
     }
 
     @Test
@@ -121,7 +123,8 @@ class AuthLoginIntegrationTest extends MongoIntegrationTestBase {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("Invalid phone number or password."));
 
-        assertEquals(0, refreshTokenRepository.count());
+        org.junit.jupiter.api.Assertions.assertNull(
+                userRepository.findAll().get(0).getRefreshTokenHash());
     }
 
     @Test

@@ -25,7 +25,6 @@ import org.springframework.http.MediaType;
 
 import com.yourproject.backend.models.PatientOtp;
 import com.yourproject.backend.models.AccountStatus;
-import com.yourproject.backend.models.TrustedDevice;
 import com.yourproject.backend.models.User;
 
 class PatientOtpIntegrationTest extends MongoIntegrationTestBase {
@@ -67,15 +66,15 @@ class PatientOtpIntegrationTest extends MongoIntegrationTestBase {
 
         PatientOtp storedOtp = patientOtpRepository.findAll().get(0);
         assertNotNull(storedOtp.getConsumedAt());
-        assertEquals(1, trustedDeviceRepository.count());
-        assertEquals("device-a", trustedDeviceRepository.findAll().get(0).getDeviceId());
-        assertEquals(1, refreshTokenRepository.count());
-        assertNotNull(userRepository.findById(patient.getId()).orElseThrow().getLastLoginAt());
+        User authenticatedPatient = userRepository.findById(patient.getId()).orElseThrow();
+        assertEquals("device-a", authenticatedPatient.getDeviceId());
+        assertNotNull(authenticatedPatient.getRefreshTokenHash());
+        assertNotNull(authenticatedPatient.getLastLoginAt());
     }
 
     @Test
     void trustedDeviceSkipsOtpAndReturnsTokensImmediately() throws Exception {
-        saveActivePatient(PHONE);
+        User patient = saveActivePatient(PHONE);
         requestOtp("trusted-device");
         String code = captureSentOtp(1);
         verifyOtp(code, "trusted-device");
@@ -90,7 +89,7 @@ class PatientOtpIntegrationTest extends MongoIntegrationTestBase {
 
         verifyNoInteractions(fcmGatewayService);
         assertEquals(1, patientOtpRepository.count());
-        assertEquals(2, refreshTokenRepository.count());
+        assertNotNull(userRepository.findById(patient.getId()).orElseThrow().getRefreshTokenHash());
     }
 
     @Test
@@ -132,8 +131,9 @@ class PatientOtpIntegrationTest extends MongoIntegrationTestBase {
                 .andExpect(jsonPath("$.message").value("OTP is invalid or expired."));
 
         assertEquals(1, patientOtpRepository.findById(otp.getId()).orElseThrow().getAttempts());
-        assertEquals(0, trustedDeviceRepository.count());
-        assertEquals(0, refreshTokenRepository.count());
+        User unchangedPatient = userRepository.findById(patient.getId()).orElseThrow();
+        assertNull(unchangedPatient.getDeviceId());
+        assertNull(unchangedPatient.getRefreshTokenHash());
     }
 
     @Test
@@ -153,8 +153,9 @@ class PatientOtpIntegrationTest extends MongoIntegrationTestBase {
         saveOtp(patient, "333333", 5, Instant.now(), Instant.now().plusSeconds(300));
         assertOtpRejected("333333");
 
-        assertEquals(0, refreshTokenRepository.count());
-        assertEquals(0, trustedDeviceRepository.count());
+        User unchangedPatient = userRepository.findById(patient.getId()).orElseThrow();
+        assertNull(unchangedPatient.getRefreshTokenHash());
+        assertNull(unchangedPatient.getDeviceId());
     }
 
     @Test
@@ -284,19 +285,14 @@ class PatientOtpIntegrationTest extends MongoIntegrationTestBase {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty());
 
-        assertEquals(0, trustedDeviceRepository.count());
-        assertEquals(1, refreshTokenRepository.count());
+        User authenticatedPatient = userRepository.findById(patient.getId()).orElseThrow();
+        assertNull(authenticatedPatient.getDeviceId());
+        assertNotNull(authenticatedPatient.getRefreshTokenHash());
     }
 
     @Test
-    void revokedTrustedDeviceMustRequestOtpAgain() throws Exception {
-        User patient = saveActivePatient(PHONE);
-        trustedDeviceRepository.save(TrustedDevice.builder()
-                .userId(patient.getId())
-                .deviceId("revoked-device")
-                .verifiedAt(Instant.now().minusSeconds(60))
-                .revokedAt(Instant.now())
-                .build());
+    void untrustedDeviceMustRequestOtpAgain() throws Exception {
+        saveActivePatient(PHONE);
 
         mockMvc.perform(post("/api/auth/patient-otp/request").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"phoneNumber\":\"0912345678\",\"deviceId\":\"revoked-device\"}"))
@@ -311,11 +307,8 @@ class PatientOtpIntegrationTest extends MongoIntegrationTestBase {
     void trustedDeviceBelongingToAnotherPatientDoesNotBypassOtp() throws Exception {
         User firstPatient = saveActivePatient("+84911111111", "PAT-FIRST");
         saveActivePatient("+84922222222", "PAT-SECOND");
-        trustedDeviceRepository.save(TrustedDevice.builder()
-                .userId(firstPatient.getId())
-                .deviceId("shared-device")
-                .verifiedAt(Instant.now())
-                .build());
+        firstPatient.setDeviceId("shared-device");
+        userRepository.save(firstPatient);
 
         mockMvc.perform(post("/api/auth/patient-otp/request").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"phoneNumber\":\"0922222222\",\"deviceId\":\"shared-device\"}"))
@@ -336,7 +329,7 @@ class PatientOtpIntegrationTest extends MongoIntegrationTestBase {
         assertEquals(5, patientOtpRepository.findById(otp.getId()).orElseThrow().getAttempts());
 
         assertOtpRejected("123456");
-        assertEquals(0, refreshTokenRepository.count());
+        assertNull(userRepository.findById(patient.getId()).orElseThrow().getRefreshTokenHash());
     }
 
     @Test
@@ -353,8 +346,9 @@ class PatientOtpIntegrationTest extends MongoIntegrationTestBase {
 
         assertOtpRejected(firstCode);
         verifyOtp(secondCode, "device-a");
-        assertEquals(1, refreshTokenRepository.count());
-        assertEquals(1, trustedDeviceRepository.count());
+        User authenticatedPatient = userRepository.findById(patient.getId()).orElseThrow();
+        assertNotNull(authenticatedPatient.getRefreshTokenHash());
+        assertEquals("device-a", authenticatedPatient.getDeviceId());
     }
 
     @Test
@@ -369,7 +363,6 @@ class PatientOtpIntegrationTest extends MongoIntegrationTestBase {
                 .andExpect(jsonPath("$.message").value("OTP could not be delivered. Please try again."));
 
         assertEquals(0, patientOtpRepository.count());
-        assertEquals(0, refreshTokenRepository.count());
     }
 
     private void requestOtp(String deviceId) throws Exception {

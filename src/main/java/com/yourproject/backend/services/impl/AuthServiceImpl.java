@@ -23,10 +23,8 @@ import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ResourceNotFoundException;
 import com.yourproject.backend.dtos.responses.UserResponse;
 import com.yourproject.backend.exceptions.UnauthorizedException;
-import com.yourproject.backend.models.RefreshToken;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
-import com.yourproject.backend.repositories.RefreshTokenRepository;
 import com.yourproject.backend.repositories.PatientOtpRepository;
 import com.yourproject.backend.models.PatientOtp;
 import com.yourproject.backend.services.SmsGatewayService;
@@ -35,8 +33,6 @@ import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.utils.JwtUtils;
 import com.yourproject.backend.repositories.UserRepository;
-import com.yourproject.backend.repositories.TrustedDeviceRepository;
-import com.yourproject.backend.models.TrustedDevice;
 
 import lombok.RequiredArgsConstructor;
 
@@ -46,14 +42,12 @@ public class AuthServiceImpl implements AuthService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserService userService;
-    private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
     private final PatientDataProtectionService patientDataProtectionService;
     private final PatientOtpRepository patientOtpRepository;
     private final SmsGatewayService smsGatewayService;
     private final UserRepository userRepository;
-    private final TrustedDeviceRepository trustedDeviceRepository;
 
     @Value("${app.jwt.refresh-token-expiration-days}")
     private long refreshTokenExpirationDays;

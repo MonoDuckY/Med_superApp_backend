@@ -35,12 +35,9 @@ import com.yourproject.backend.dtos.responses.AuthResponse;
 import com.yourproject.backend.exceptions.UnauthorizedException;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.models.AccountStatus;
-import com.yourproject.backend.models.RefreshToken;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.repositories.PatientOtpRepository;
-import com.yourproject.backend.repositories.RefreshTokenRepository;
-import com.yourproject.backend.repositories.TrustedDeviceRepository;
 import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.services.SmsGatewayService;
 import com.yourproject.backend.services.UserService;
@@ -51,9 +48,6 @@ import com.yourproject.backend.utils.JwtUtils;
 class AuthServiceImplTest {
     @Mock
     private UserService userService;
-
-    @Mock
-    private RefreshTokenRepository refreshTokenRepository;
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -72,9 +66,6 @@ class AuthServiceImplTest {
 
     @Mock
     private UserRepository userRepository;
-
-    @Mock
-    private TrustedDeviceRepository trustedDeviceRepository;
 
     @InjectMocks
     private AuthServiceImpl authService;
@@ -117,7 +108,7 @@ class AuthServiceImplTest {
 
         assertThrows(UnauthorizedException.class, () -> authService.login(loginRequest()));
         verify(userService, never()).recordSuccessfulLogin(any(User.class));
-        verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+        verify(userRepository).save(user);
     }
 
     @Test
@@ -189,7 +180,7 @@ class AuthServiceImplTest {
         when(userService.getActiveUserById("user-id")).thenReturn(user);
 
         assertThrows(UnauthorizedException.class, () -> authService.logout("user-id", request));
-        verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+        verify(userRepository, never()).save(user);
     }
 
     @Test
@@ -243,11 +234,6 @@ class AuthServiceImplTest {
                 .status(AccountStatus.ACTIVE)
                 .createdAt(Instant.now())
                 .build();
-    }
-
-    private RefreshToken activeRefreshToken(String token, String userId) {
-        return RefreshToken.builder().tokenHash(hashToken(token)).userId(userId).deviceId("device-id")
-                .createdAt(Instant.now()).expiresAt(Instant.now().plus(Duration.ofDays(1))).build();
     }
 
     private String hashToken(String token) {
