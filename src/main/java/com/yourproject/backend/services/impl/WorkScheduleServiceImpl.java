@@ -93,20 +93,16 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         String submissionId = UUID.randomUUID().toString();
         List<DoctorWorkSlot> documents = new ArrayList<>();
         for (WorkSlot slot : selectedSlots) {
-            Instant startAt = toInstant(request.getWorkDate(), slot);
             documents.add(DoctorWorkSlot.builder()
                     .submissionId(submissionId)
                     .doctorId(doctor.getId())
                     .workDate(request.getWorkDate())
                     .slotId(slot.getId())
                     .roomId(room.getId())
-                    .startAt(startAt)
-                    .endAt(request.getWorkDate().atTime(slot.getEndTime()).atZone(HOSPITAL_ZONE).toInstant())
                     .status(DoctorWorkSlotStatus.PENDING)
                     .note(note)
                     .submittedAt(now)
                     .conflictActive(true)
-                    .createdAt(now)
                     .updatedAt(now)
                     .build());
         }
@@ -121,7 +117,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         if (effectiveTo.isBefore(effectiveFrom)) {
             throw new BadRequestException("The end date cannot be before the start date.");
         }
-        return doctorWorkSlotRepository.findAllByDoctorIdAndWorkDateBetweenOrderByStartAtAsc(
+        return doctorWorkSlotRepository.findAllByDoctorIdAndWorkDateBetweenOrderByWorkDateAscSlotIdAsc(
                 doctorId,
                 effectiveFrom,
                 effectiveTo);
@@ -145,7 +141,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     @Transactional
     public List<DoctorWorkSlot> decide(String staffId, String submissionId, ScheduleDecisionRequest request) {
         requireStaff(staffId);
-        List<DoctorWorkSlot> slots = doctorWorkSlotRepository.findAllBySubmissionIdOrderByStartAtAsc(submissionId);
+        List<DoctorWorkSlot> slots = doctorWorkSlotRepository.findAllBySubmissionIdOrderBySlotIdAsc(submissionId);
         if (slots.isEmpty()) {
             throw new ResourceNotFoundException("Work schedule submission was not found.");
         }
@@ -158,7 +154,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             throw new BadRequestException("Rejection reason is required when rejecting a work schedule.");
         }
         if (request.getDecision() == ScheduleDecision.APPROVE
-                && slots.stream().anyMatch(slot -> !slot.getStartAt().isAfter(Instant.now()))) {
+                && slots.stream().anyMatch(slot -> !startInstant(slot).isAfter(Instant.now()))) {
             throw new ConflictException("A work schedule with elapsed slots cannot be approved.");
         }
 
@@ -184,7 +180,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     public void cancelPendingSubmission(String doctorId, String submissionId) {
         requireRole(doctorId, UserRole.DOCTOR, "Only doctors can cancel doctor work schedules.");
         List<DoctorWorkSlot> slots = doctorWorkSlotRepository
-                .findAllBySubmissionIdAndDoctorIdOrderByStartAtAsc(submissionId, doctorId);
+                .findAllBySubmissionIdAndDoctorIdOrderBySlotIdAsc(submissionId, doctorId);
         if (slots.isEmpty()) {
             throw new ResourceNotFoundException("Work schedule submission was not found.");
         }
@@ -231,6 +227,12 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
 
     private Instant toInstant(LocalDate workDate, WorkSlot slot) {
         return workDate.atTime(slot.getStartTime()).atZone(HOSPITAL_ZONE).toInstant();
+    }
+
+    private Instant startInstant(DoctorWorkSlot doctorWorkSlot) {
+        WorkSlot slot = workSlotRepository.findById(doctorWorkSlot.getSlotId())
+                .orElseThrow(() -> new ResourceNotFoundException("Work slot definition was not found."));
+        return toInstant(doctorWorkSlot.getWorkDate(), slot);
     }
 
     private User requireRole(String userId, UserRole role, String message) {

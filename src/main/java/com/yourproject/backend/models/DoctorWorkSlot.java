@@ -50,9 +50,6 @@ public class DoctorWorkSlot {
     private String roomId;
     @Transient
     private String roomCode;
-    private Instant startAt;
-    private Instant endAt;
-
     @Indexed
     private DoctorWorkSlotStatus status;
     @Transient
@@ -67,7 +64,6 @@ public class DoctorWorkSlot {
     private String rejectionReason;
     @Transient
     private boolean conflictActive;
-    private Instant createdAt;
     private Instant updatedAt;
 
     @Version

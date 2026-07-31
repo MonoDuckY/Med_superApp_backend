@@ -132,7 +132,7 @@ class WorkScheduleServiceImplTest {
     @Test
     void rejectingScheduleRequiresReason() {
         when(userService.getActiveUserById("staff-1")).thenReturn(staff);
-        when(doctorWorkSlotRepository.findAllBySubmissionIdOrderByStartAtAsc("submission-1"))
+        when(doctorWorkSlotRepository.findAllBySubmissionIdOrderBySlotIdAsc("submission-1"))
                 .thenReturn(List.of(pendingSlot()));
         ScheduleDecisionRequest request = new ScheduleDecisionRequest();
         request.setDecision(ScheduleDecision.REJECT);
@@ -146,7 +146,7 @@ class WorkScheduleServiceImplTest {
         DoctorWorkSlot second = pendingSlot();
         second.setId("work-slot-2");
         when(userService.getActiveUserById("staff-1")).thenReturn(staff);
-        when(doctorWorkSlotRepository.findAllBySubmissionIdOrderByStartAtAsc("submission-1"))
+        when(doctorWorkSlotRepository.findAllBySubmissionIdOrderBySlotIdAsc("submission-1"))
                 .thenReturn(List.of(first, second));
         when(doctorWorkSlotRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
         ScheduleDecisionRequest request = new ScheduleDecisionRequest();
@@ -225,9 +225,10 @@ class WorkScheduleServiceImplTest {
                 .id("work-slot-1")
                 .submissionId("submission-1")
                 .doctorId("doctor-1")
+                .workDate(LocalDate.now().plusDays(2))
+                .slotId("slot-1")
                 .status(DoctorWorkSlotStatus.PENDING)
                 .conflictActive(true)
-                .startAt(LocalDate.now().plusDays(2).atStartOfDay(ZoneId.systemDefault()).toInstant())
                 .build();
     }
 }

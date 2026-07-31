@@ -2,7 +2,6 @@ package com.yourproject.backend.controllers;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -42,10 +41,7 @@ public class PatientAppointmentController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @RequestParam(required = false) String doctorId) {
         List<DoctorWorkSlot> slots = appointmentService.getAvailableSlots(authentication.getName(), date, doctorId);
-        Map<String, String> doctors = appointmentService.getDoctorNames(slots);
-        List<AvailableAppointmentSlotResponse> response = slots.stream()
-                .map(slot -> AvailableAppointmentSlotResponse.from(slot, doctors.get(slot.getDoctorId())))
-                .toList();
+        List<AvailableAppointmentSlotResponse> response = appointmentService.toAvailableSlotResponses(slots);
         return ResponseEntity.ok(ApiResponse.success("Available appointment slots retrieved successfully.", response));
     }
 

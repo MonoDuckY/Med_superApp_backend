@@ -1,6 +1,5 @@
 package com.yourproject.backend.repositories;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -11,11 +10,11 @@ import com.yourproject.backend.models.DoctorWorkSlot;
 import com.yourproject.backend.models.DoctorWorkSlotStatus;
 
 public interface DoctorWorkSlotRepository extends MongoRepository<DoctorWorkSlot, String> {
-    List<DoctorWorkSlot> findAllBySubmissionIdOrderByStartAtAsc(String submissionId);
+    List<DoctorWorkSlot> findAllBySubmissionIdOrderBySlotIdAsc(String submissionId);
 
-    List<DoctorWorkSlot> findAllBySubmissionIdAndDoctorIdOrderByStartAtAsc(String submissionId, String doctorId);
+    List<DoctorWorkSlot> findAllBySubmissionIdAndDoctorIdOrderBySlotIdAsc(String submissionId, String doctorId);
 
-    List<DoctorWorkSlot> findAllByDoctorIdAndWorkDateBetweenOrderByStartAtAsc(
+    List<DoctorWorkSlot> findAllByDoctorIdAndWorkDateBetweenOrderByWorkDateAscSlotIdAsc(
             String doctorId,
             LocalDate from,
             LocalDate to);
@@ -32,8 +31,5 @@ public interface DoctorWorkSlotRepository extends MongoRepository<DoctorWorkSlot
 
     List<DoctorWorkSlot> findAllByWorkDateAndSlotIdIn(LocalDate workDate, Collection<String> slotIds);
 
-    List<DoctorWorkSlot> findAllByStatusAndStartAtBetweenOrderByStartAtAsc(
-            DoctorWorkSlotStatus status,
-            Instant from,
-            Instant to);
+    List<DoctorWorkSlot> findAllByStatusOrderByWorkDateAscSlotIdAsc(DoctorWorkSlotStatus status);
 }

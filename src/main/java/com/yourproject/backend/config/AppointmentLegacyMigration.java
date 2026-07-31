@@ -9,21 +9,24 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.index.IndexOperations;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Component;
 
 import com.yourproject.backend.models.Appointment;
 
 @Component
 @Order(2)
-public class AppointmentIndexMigration implements ApplicationRunner {
-    private static final Logger LOGGER = LoggerFactory.getLogger(AppointmentIndexMigration.class);
+public class AppointmentLegacyMigration implements ApplicationRunner {
+    private static final Logger LOGGER = LoggerFactory.getLogger(AppointmentLegacyMigration.class);
     private static final Set<String> LEGACY_INDEXES = Set.of(
             "active_work_slot_appointment_unique",
             "active_patient_appointment_day_unique");
 
     private final MongoTemplate mongoTemplate;
 
-    public AppointmentIndexMigration(MongoTemplate mongoTemplate) {
+    public AppointmentLegacyMigration(MongoTemplate mongoTemplate) {
         this.mongoTemplate = mongoTemplate;
     }
 
@@ -37,5 +40,13 @@ public class AppointmentIndexMigration implements ApplicationRunner {
                     indexOperations.dropIndex(indexName);
                     LOGGER.info("Removed legacy appointment index: {}", indexName);
                 });
+
+        long modifiedCount = mongoTemplate.updateMulti(
+                Query.query(Criteria.where("createdAt").exists(true)),
+                new Update().unset("createdAt"),
+                Appointment.class).getModifiedCount();
+        if (modifiedCount > 0) {
+            LOGGER.info("Removed legacy createdAt from {} appointments.", modifiedCount);
+        }
     }
 }

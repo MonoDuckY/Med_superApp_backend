@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -40,6 +41,7 @@ import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.models.WorkSlotApprovalStatus;
 import com.yourproject.backend.models.WorkSlotBookingStatus;
+import com.yourproject.backend.models.WorkSlot;
 import com.yourproject.backend.repositories.AppointmentRepository;
 import com.yourproject.backend.repositories.DoctorWorkSlotRepository;
 import com.yourproject.backend.repositories.UserRepository;
@@ -100,10 +102,15 @@ class AppointmentServiceImplTest {
                 .slotName("Slot1")
                 .roomId("room-1")
                 .roomCode("ROOM-101")
-                .startAt(Instant.now().plusSeconds(48 * 60 * 60))
-                .endAt(Instant.now().plusSeconds(48 * 60 * 60 + 1800))
                 .status(DoctorWorkSlotStatus.AVAILABLE)
                 .build();
+        lenient().when(workSlotRepository.findById("slot-1")).thenReturn(Optional.of(
+                WorkSlot.builder()
+                        .id("slot-1")
+                        .name("Slot1")
+                        .startTime(java.time.LocalTime.of(8, 0))
+                        .endTime(java.time.LocalTime.of(8, 30))
+                        .build()));
     }
 
     @Test
@@ -331,8 +338,6 @@ class AppointmentServiceImplTest {
                 .slotName(availableSlot.getSlotName())
                 .roomId(availableSlot.getRoomId())
                 .roomCode(availableSlot.getRoomCode())
-                .startAt(availableSlot.getStartAt())
-                .endAt(availableSlot.getEndAt())
                 .status(status)
                 .build();
     }

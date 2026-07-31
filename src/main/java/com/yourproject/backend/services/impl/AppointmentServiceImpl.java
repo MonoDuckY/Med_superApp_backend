@@ -20,6 +20,7 @@ import com.yourproject.backend.dtos.requests.AppointmentDecisionRequest;
 import com.yourproject.backend.dtos.requests.BookAppointmentRequest;
 import com.yourproject.backend.dtos.requests.CancelAppointmentRequest;
 import com.yourproject.backend.dtos.responses.AppointmentResponse;
+import com.yourproject.backend.dtos.responses.AvailableAppointmentSlotResponse;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ConflictException;
 import com.yourproject.backend.exceptions.ForbiddenException;
@@ -32,6 +33,7 @@ import com.yourproject.backend.models.ScheduleDecision;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.models.DoctorWorkSlotStatus;
+import com.yourproject.backend.models.WorkSlot;
 import com.yourproject.backend.repositories.AppointmentRepository;
 import com.yourproject.backend.repositories.DoctorWorkSlotRepository;
 import com.yourproject.backend.repositories.UserRepository;
@@ -79,12 +81,15 @@ public class AppointmentServiceImpl implements AppointmentService {
             }
         }
 
+        Instant effectiveFrom = from;
+        Instant effectiveTo = to;
         List<DoctorWorkSlot> availableSlots = doctorWorkSlotRepository
-                .findAllByStatusAndStartAtBetweenOrderByStartAtAsc(
-                        DoctorWorkSlotStatus.AVAILABLE,
-                        from,
-                        to)
+                .findAllByStatusOrderByWorkDateAscSlotIdAsc(DoctorWorkSlotStatus.AVAILABLE)
                 .stream()
+                .filter(slot -> {
+                    Instant startAt = startInstant(slot);
+                    return !startAt.isBefore(effectiveFrom) && !startAt.isAfter(effectiveTo);
+                })
                 .filter(slot -> doctorId == null || doctorId.isBlank() || slot.getDoctorId().equals(doctorId))
                 .toList();
         Map<String, User> doctors = userRepository.findAllById(
@@ -141,7 +146,6 @@ public class AppointmentServiceImpl implements AppointmentService {
                 .doctorWorkSlotId(claimedSlot.getId())
                 .status(AppointmentStatus.PENDING_STAFF_CONFIRMATION)
                 .requestedAt(now)
-                .createdAt(now)
                 .updatedAt(now)
                 .build());
     }
@@ -186,7 +190,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         if (request.getDecision() == ScheduleDecision.REJECT && rejectionReason == null) {
             throw new BadRequestException("Rejection reason is required when rejecting an appointment.");
         }
-        if (request.getDecision() == ScheduleDecision.APPROVE && !slot.getStartAt().isAfter(Instant.now())) {
+        if (request.getDecision() == ScheduleDecision.APPROVE && !startInstant(slot).isAfter(Instant.now())) {
             throw new ConflictException("An appointment cannot be confirmed after its work slot has started.");
         }
 
@@ -253,7 +257,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         if (slot.getStatus() != expectedBookingStatus) {
             throw new ConflictException("Doctor work slot status does not match this appointment.");
         }
-        if (!slot.getStartAt().isAfter(Instant.now())) {
+        if (!startInstant(slot).isAfter(Instant.now())) {
             throw new ConflictException("An appointment cannot be cancelled after its work slot has started.");
         }
 
@@ -276,6 +280,28 @@ public class AppointmentServiceImpl implements AppointmentService {
         return userRepository.findAllById(slots.stream().map(DoctorWorkSlot::getDoctorId).distinct().toList())
                 .stream()
                 .collect(Collectors.toMap(User::getId, User::getFullName));
+    }
+
+    @Override
+    public List<AvailableAppointmentSlotResponse> toAvailableSlotResponses(List<DoctorWorkSlot> slots) {
+        Map<String, String> doctorNames = getDoctorNames(slots);
+        Map<String, WorkSlot> definitions = workSlotRepository.findAllById(
+                        slots.stream().map(DoctorWorkSlot::getSlotId).distinct().toList())
+                .stream()
+                .collect(Collectors.toMap(WorkSlot::getId, definition -> definition));
+        return slots.stream()
+                .map(slot -> {
+                    WorkSlot definition = definitions.get(slot.getSlotId());
+                    if (definition == null) {
+                        throw new ResourceNotFoundException("Work slot definition was not found.");
+                    }
+                    return AvailableAppointmentSlotResponse.from(
+                            slot,
+                            doctorNames.get(slot.getDoctorId()),
+                            toInstant(slot.getWorkDate(), definition.getStartTime()),
+                            toInstant(slot.getWorkDate(), definition.getEndTime()));
+                })
+                .toList();
     }
 
     @Override
@@ -305,8 +331,6 @@ public class AppointmentServiceImpl implements AppointmentService {
             appointment.setSlotId(slot.getSlotId());
             appointment.setRoomId(slot.getRoomId());
             appointment.setAppointmentDate(slot.getWorkDate());
-            appointment.setStartAt(slot.getStartAt());
-            appointment.setEndAt(slot.getEndAt());
         });
         List<String> userIds = appointments.stream()
                 .flatMap(appointment -> java.util.stream.Stream.of(
@@ -342,12 +366,23 @@ public class AppointmentServiceImpl implements AppointmentService {
             throw new ConflictException("The selected doctor work slot is not available.");
         }
         Instant now = Instant.now();
-        if (slot.getStartAt().isBefore(now.plus(MINIMUM_BOOKING_LEAD))) {
+        Instant startAt = startInstant(slot);
+        if (startAt.isBefore(now.plus(MINIMUM_BOOKING_LEAD))) {
             throw new BadRequestException("Appointments must be booked at least 12 hours in advance.");
         }
-        if (slot.getStartAt().isAfter(now.plus(MAXIMUM_BOOKING_LEAD))) {
+        if (startAt.isAfter(now.plus(MAXIMUM_BOOKING_LEAD))) {
             throw new BadRequestException("Appointments cannot be booked more than 30 days in advance.");
         }
+    }
+
+    private Instant startInstant(DoctorWorkSlot doctorWorkSlot) {
+        WorkSlot definition = workSlotRepository.findById(doctorWorkSlot.getSlotId())
+                .orElseThrow(() -> new ResourceNotFoundException("Work slot definition was not found."));
+        return toInstant(doctorWorkSlot.getWorkDate(), definition.getStartTime());
+    }
+
+    private Instant toInstant(LocalDate workDate, java.time.LocalTime time) {
+        return workDate.atTime(time).atZone(HOSPITAL_ZONE).toInstant();
     }
 
     private User requirePatient(String userId) {

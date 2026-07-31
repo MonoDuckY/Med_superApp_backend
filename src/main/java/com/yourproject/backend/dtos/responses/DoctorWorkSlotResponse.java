@@ -1,7 +1,7 @@
 package com.yourproject.backend.dtos.responses;
 
-import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Instant;
 
 import com.yourproject.backend.models.DoctorWorkSlot;
 import com.yourproject.backend.models.DoctorWorkSlotStatus;
@@ -18,8 +18,6 @@ public class DoctorWorkSlotResponse {
     private LocalDate workDate;
     private String slotId;
     private String roomId;
-    private Instant startAt;
-    private Instant endAt;
     private DoctorWorkSlotStatus status;
     private String note;
     private Instant submittedAt;
@@ -35,8 +33,6 @@ public class DoctorWorkSlotResponse {
                 .workDate(slot.getWorkDate())
                 .slotId(slot.getSlotId())
                 .roomId(slot.getRoomId())
-                .startAt(slot.getStartAt())
-                .endAt(slot.getEndAt())
                 .status(slot.getStatus())
                 .note(slot.getNote())
                 .submittedAt(slot.getSubmittedAt())

@@ -67,7 +67,6 @@ public class Appointment {
     private String cancellationReason;
     @Transient
     private boolean active;
-    private Instant createdAt;
     private Instant updatedAt;
 
     @Version
