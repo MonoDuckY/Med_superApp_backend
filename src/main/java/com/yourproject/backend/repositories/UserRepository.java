@@ -20,4 +20,7 @@ public interface UserRepository extends MongoRepository<User, String> {
 
     @Query("{'status': 'ACTIVE', '$or': [{'roles': 'DOCTOR'}, {'role': 'DOCTOR'}]}")
     List<User> findActiveDoctors();
+
+    @Query("{'status': 'ACTIVE', '$or': [{'roles': 'PATIENT'}, {'role': 'PATIENT'}]}")
+    List<User> findActivePatients();
 }

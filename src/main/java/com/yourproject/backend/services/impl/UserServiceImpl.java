@@ -109,6 +109,24 @@ public class UserServiceImpl implements UserService {
         User user = getUserById(userId);
         patientDataProtectionService.decryptPatientFields(user);
 
+        java.util.Set<UserRole> effectiveRoles = request.getRoles() == null || request.getRoles().isEmpty()
+                ? user.getRoles()
+                : request.getRoles();
+        if (request.getPassword() != null) {
+            if (request.getPassword().isBlank()) {
+                throw new BadRequestException("Password must not be blank when provided.");
+            }
+            if (effectiveRoles.size() == 1 && effectiveRoles.contains(UserRole.PATIENT)) {
+                throw new BadRequestException("Patient-only accounts authenticate using SMS OTP and do not use passwords.");
+            }
+            PasswordPolicy.validate(request.getPassword());
+            user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
+            user.setPasswordChangedAt(Instant.now());
+            user.setAccessTokenHash(null);
+            user.setRefreshTokenHash(null);
+            user.setRefreshTokenExpiresAt(null);
+        }
+
         if (request.getRoles() != null && !request.getRoles().isEmpty()) {
             user.setRoles(new java.util.LinkedHashSet<>(request.getRoles()));
         }

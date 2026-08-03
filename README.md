@@ -112,7 +112,10 @@ Khuyến nghị lưu token:
 | `POST` | `/api/auth/refresh` | Public | Đổi refresh token lấy cặp token mới. |
 | `POST` | `/api/auth/logout` | Authenticated | Thu hồi refresh token hiện tại. |
 | `POST` | `/api/auth/change-password` | Authenticated | Đổi password hiện tại. |
+| `POST` | `/api/auth/forgot-password/request` | Public | Gửi OTP đặt lại mật khẩu theo số điện thoại. |
+| `POST` | `/api/auth/forgot-password/reset` | Public | Xác minh OTP và đặt mật khẩu mới. |
 | `GET` | `/api/auth/me` | Authenticated | Lấy profile account đang đăng nhập. |
+| `GET` | `/api/staff/patients/search?name={name}&n={count}` | `STAFF` | Tìm tối đa `n` bệnh nhân có tên khớp gần nhất. |
 | `POST` | `/api/admin/users` | `ADMIN` | Tạo account. |
 | `GET` | `/api/admin/users` | `ADMIN` | Lấy danh sách account. |
 | `GET` | `/api/admin/users/{userId}` | `ADMIN` | Lấy chi tiết một account. |
@@ -241,7 +244,42 @@ Yêu cầu password mới:
 
 Sau khi đổi password thành công, backend thu hồi toàn bộ refresh token của account. Frontend nên xóa token hiện tại và điều hướng về màn hình login.
 
-### 6.5 Lấy account hiện tại
+### 6.5 Quên mật khẩu
+
+Yêu cầu OTP khi chưa đăng nhập:
+
+```http
+POST /api/auth/forgot-password/request
+Content-Type: application/json
+```
+
+```json
+{
+  "phoneNumber": "0912345678"
+}
+```
+
+Response luôn dùng thông báo chung để không làm lộ số điện thoại có tài khoản hay không. Tài khoản chỉ có role `PATIENT` không dùng API này vì Patient đăng nhập bằng OTP và không có mật khẩu.
+
+Xác minh OTP và đặt mật khẩu mới:
+
+```http
+POST /api/auth/forgot-password/reset
+Content-Type: application/json
+```
+
+```json
+{
+  "phoneNumber": "0912345678",
+  "code": "123456",
+  "newPassword": "NewPassword2!",
+  "confirmPassword": "NewPassword2!"
+}
+```
+
+OTP hết hạn theo `OTP_EXPIRATION_MINUTES`, chỉ dùng được một lần, áp dụng cooldown và giới hạn số lần nhập. Reset thành công sẽ vô hiệu access token và refresh token hiện tại, xóa trạng thái lockout và yêu cầu đăng nhập lại.
+
+### 6.6 Lấy account hiện tại
 
 ```http
 GET /api/auth/me
@@ -620,6 +658,16 @@ Ví dụ đăng ký ca sáng:
   "note": "Morning shift"
 }
 ```
+
+Admin có thể đặt password mới cho account không phải Patient-only:
+
+```json
+{
+  "password": "AdminReset1!"
+}
+```
+
+Password mới phải đạt password policy. Backend chỉ lưu BCrypt hash và sẽ thu hồi access token, refresh token hiện tại của user để buộc đăng nhập lại.
 
 ### 14.2 API Staff
 

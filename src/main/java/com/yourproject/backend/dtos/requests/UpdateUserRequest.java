@@ -11,6 +11,9 @@ import lombok.Data;
 
 @Data
 public class UpdateUserRequest {
+    @Size(max = 50, message = "Password must not exceed 50 characters.")
+    private String password;
+
     private Set<UserRole> roles;
     public UserRole getRole() { return roles == null || roles.isEmpty() ? null : roles.iterator().next(); }
     public void setRole(UserRole role) { roles = role == null ? null : Set.of(role); }

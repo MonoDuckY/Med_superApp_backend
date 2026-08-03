@@ -114,7 +114,8 @@ class PatientOtpIntegrationTest extends MongoIntegrationTestBase {
         requestOtp("device-a");
 
         PatientOtp invalidatedOtp = patientOtpRepository.findById(previousOtp.getId()).orElseThrow();
-        PatientOtp latestOtp = patientOtpRepository.findTopByPhoneLookupOrderByCreatedAtDesc(patient.getPhoneLookup()).orElseThrow();
+        PatientOtp latestOtp = patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc(
+                patient.getPhoneLookup(), com.yourproject.backend.models.OtpPurpose.PATIENT_LOGIN).orElseThrow();
         assertNotNull(invalidatedOtp.getConsumedAt());
         assertNotEquals(previousOtp.getId(), latestOtp.getId());
         assertNull(latestOtp.getConsumedAt());

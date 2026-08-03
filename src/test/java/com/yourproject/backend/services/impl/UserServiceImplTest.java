@@ -225,6 +225,58 @@ class UserServiceImplTest {
     }
 
     @Test
+    void updateUser_adminSetsNewPasswordAndRevokesExistingTokens() {
+        User user = activeDoctor();
+        user.setAccessTokenHash("access-hash");
+        user.setRefreshTokenHash("refresh-hash");
+        user.setRefreshTokenExpiresAt(Instant.now().plusSeconds(300));
+        UpdateUserRequest request = new UpdateUserRequest();
+        request.setPassword("AdminReset1!");
+        when(userRepository.findById("user-id")).thenReturn(Optional.of(user));
+        when(passwordEncoder.encode("AdminReset1!")).thenReturn("new-password-hash");
+        when(userRepository.save(user)).thenReturn(user);
+
+        User updated = userService.updateUser("user-id", request, "admin-id");
+
+        assertEquals("new-password-hash", updated.getPasswordHash());
+        assertNull(updated.getAccessTokenHash());
+        assertNull(updated.getRefreshTokenHash());
+        assertNull(updated.getRefreshTokenExpiresAt());
+        assertNotNull(updated.getPasswordChangedAt());
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void updateUser_rejectsWeakAdminAssignedPassword() {
+        User user = activeDoctor();
+        UpdateUserRequest request = new UpdateUserRequest();
+        request.setPassword("weak");
+        when(userRepository.findById("user-id")).thenReturn(Optional.of(user));
+
+        assertThrows(BadRequestException.class,
+                () -> userService.updateUser("user-id", request, "admin-id"));
+
+        verify(passwordEncoder, never()).encode(any());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void updateUser_rejectsPasswordForPatientOnlyAccount() {
+        User patient = activeDoctor();
+        patient.setRole(UserRole.PATIENT);
+        patient.setPasswordHash(null);
+        UpdateUserRequest request = new UpdateUserRequest();
+        request.setPassword("AdminReset1!");
+        when(userRepository.findById("user-id")).thenReturn(Optional.of(patient));
+
+        assertThrows(BadRequestException.class,
+                () -> userService.updateUser("user-id", request, "admin-id"));
+
+        verify(passwordEncoder, never()).encode(any());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
     void toggleUserStatus_rejectsSelfChange() {
         assertThrows(BadRequestException.class, () -> userService.toggleUserStatus("user-id", "user-id"));
     }

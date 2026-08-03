@@ -21,6 +21,9 @@ public class PatientOtp {
     private String userId;
     @Indexed
     private String phoneLookup;
+    @Builder.Default
+    @Indexed
+    private OtpPurpose purpose = OtpPurpose.PATIENT_LOGIN;
     private String codeHash;
     private int attempts;
     private Instant createdAt;

@@ -38,6 +38,10 @@ import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.repositories.PatientOtpRepository;
+import com.yourproject.backend.models.OtpPurpose;
+import com.yourproject.backend.models.PatientOtp;
+import com.yourproject.backend.dtos.requests.ForgotPasswordRequest;
+import com.yourproject.backend.dtos.requests.ResetPasswordRequest;
 import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.services.SmsGatewayService;
 import com.yourproject.backend.services.UserService;
@@ -214,6 +218,175 @@ class AuthServiceImplTest {
         assertEquals(null, user.getAccessTokenHash());
         assertEquals(null, user.getRefreshTokenHash());
         verify(userRepository).save(user);
+    }
+
+    @Test
+    void requestPasswordReset_createsOtpForEligibleAccount() {
+        User user = activeDoctor();
+        ForgotPasswordRequest request = new ForgotPasswordRequest();
+        request.setPhoneNumber("0363636363");
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.of(user));
+        when(patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc("phone-lookup", OtpPurpose.PASSWORD_RESET))
+                .thenReturn(Optional.empty());
+        when(patientOtpRepository.findAllByPhoneLookupAndPurposeAndConsumedAtIsNull("phone-lookup", OtpPurpose.PASSWORD_RESET))
+                .thenReturn(List.of());
+        when(patientDataProtectionService.secureLookup(any())).thenReturn("otp-hash");
+        when(patientOtpRepository.save(any(PatientOtp.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        authService.requestPasswordReset(request);
+
+        verify(patientOtpRepository).save(any(PatientOtp.class));
+        verify(smsGatewayService).enqueue(eq("user-id"), eq("+84363636363"), any(), any());
+    }
+
+    @Test
+    void requestPasswordReset_doesNotRevealUnknownAccount() {
+        ForgotPasswordRequest request = new ForgotPasswordRequest();
+        request.setPhoneNumber("0363636363");
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.empty());
+
+        authService.requestPasswordReset(request);
+
+        verify(patientOtpRepository, never()).save(any());
+        verify(smsGatewayService, never()).enqueue(any(), any(), any(), any());
+    }
+
+    @Test
+    void requestPasswordReset_allowsNonPatientAccountWithoutExistingPasswordHash() {
+        User user = activeDoctor();
+        user.setPasswordHash(null);
+        ForgotPasswordRequest request = new ForgotPasswordRequest();
+        request.setPhoneNumber("0363636363");
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.of(user));
+        when(patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc("phone-lookup", OtpPurpose.PASSWORD_RESET))
+                .thenReturn(Optional.empty());
+        when(patientOtpRepository.findAllByPhoneLookupAndPurposeAndConsumedAtIsNull("phone-lookup", OtpPurpose.PASSWORD_RESET))
+                .thenReturn(List.of());
+        when(patientDataProtectionService.secureLookup(any())).thenReturn("otp-hash");
+        when(patientOtpRepository.save(any(PatientOtp.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        authService.requestPasswordReset(request);
+
+        verify(smsGatewayService).enqueue(eq("user-id"), eq("+84363636363"), any(), any());
+    }
+
+    @Test
+    void requestPasswordReset_ignoresPatientOnlyAccountWithoutPassword() {
+        User patient = activeDoctor();
+        patient.setRole(UserRole.PATIENT);
+        patient.setPasswordHash(null);
+        ForgotPasswordRequest request = new ForgotPasswordRequest();
+        request.setPhoneNumber("0363636363");
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.of(patient));
+
+        authService.requestPasswordReset(request);
+
+        verify(patientOtpRepository, never()).save(any());
+        verify(smsGatewayService, never()).enqueue(any(), any(), any(), any());
+    }
+
+    @Test
+    void resetPassword_changesPasswordAndRevokesCurrentTokens() {
+        User user = activeDoctor();
+        user.setAccessTokenHash("access-hash");
+        user.setRefreshTokenHash("refresh-hash");
+        user.setRefreshTokenExpiresAt(Instant.now().plusSeconds(300));
+        PatientOtp otp = PatientOtp.builder()
+                .userId("user-id")
+                .phoneLookup("phone-lookup")
+                .purpose(OtpPurpose.PASSWORD_RESET)
+                .codeHash("otp-hash")
+                .attempts(0)
+                .createdAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(300))
+                .build();
+        ResetPasswordRequest request = resetPasswordRequest();
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.of(user));
+        when(patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc("phone-lookup", OtpPurpose.PASSWORD_RESET))
+                .thenReturn(Optional.of(otp));
+        when(patientDataProtectionService.secureLookup("password-reset:user-id:123456")).thenReturn("otp-hash");
+        when(passwordEncoder.matches("NewPassword2!", "password-hash")).thenReturn(false);
+        when(passwordEncoder.encode("NewPassword2!")).thenReturn("new-password-hash");
+        when(patientOtpRepository.findAllByPhoneLookupAndPurposeAndConsumedAtIsNull("phone-lookup", OtpPurpose.PASSWORD_RESET))
+                .thenReturn(List.of(otp));
+
+        authService.resetPassword(request);
+
+        assertEquals("new-password-hash", user.getPasswordHash());
+        assertEquals(null, user.getAccessTokenHash());
+        assertEquals(null, user.getRefreshTokenHash());
+        assertNotNull(otp.getConsumedAt());
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void resetPassword_rejectsIncorrectOtpAndIncrementsAttempts() {
+        User user = activeDoctor();
+        PatientOtp otp = PatientOtp.builder()
+                .userId("user-id")
+                .phoneLookup("phone-lookup")
+                .purpose(OtpPurpose.PASSWORD_RESET)
+                .codeHash("correct-hash")
+                .attempts(0)
+                .createdAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(300))
+                .build();
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.of(user));
+        when(patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc("phone-lookup", OtpPurpose.PASSWORD_RESET))
+                .thenReturn(Optional.of(otp));
+        when(patientDataProtectionService.secureLookup("password-reset:user-id:123456")).thenReturn("wrong-hash");
+
+        assertThrows(UnauthorizedException.class, () -> authService.resetPassword(resetPasswordRequest()));
+
+        assertEquals(1, otp.getAttempts());
+        verify(patientOtpRepository).save(otp);
+        verify(userRepository, never()).save(user);
+    }
+
+    @Test
+    void resetPassword_setsFirstPasswordWhenExistingHashIsNull() {
+        User user = activeDoctor();
+        user.setPasswordHash(null);
+        PatientOtp otp = PatientOtp.builder()
+                .userId("user-id")
+                .phoneLookup("phone-lookup")
+                .purpose(OtpPurpose.PASSWORD_RESET)
+                .codeHash("otp-hash")
+                .attempts(0)
+                .createdAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(300))
+                .build();
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.of(user));
+        when(patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc("phone-lookup", OtpPurpose.PASSWORD_RESET))
+                .thenReturn(Optional.of(otp));
+        when(patientDataProtectionService.secureLookup("password-reset:user-id:123456")).thenReturn("otp-hash");
+        when(passwordEncoder.encode("NewPassword2!")).thenReturn("new-password-hash");
+        when(patientOtpRepository.findAllByPhoneLookupAndPurposeAndConsumedAtIsNull("phone-lookup", OtpPurpose.PASSWORD_RESET))
+                .thenReturn(List.of(otp));
+
+        authService.resetPassword(resetPasswordRequest());
+
+        assertEquals("new-password-hash", user.getPasswordHash());
+        verify(passwordEncoder, never()).matches(eq("NewPassword2!"), any());
+        verify(userRepository).save(user);
+    }
+
+    private ResetPasswordRequest resetPasswordRequest() {
+        ResetPasswordRequest request = new ResetPasswordRequest();
+        request.setPhoneNumber("0363636363");
+        request.setCode("123456");
+        request.setNewPassword("NewPassword2!");
+        request.setConfirmPassword("NewPassword2!");
+        return request;
     }
 
     private LoginRequest loginRequest() {
