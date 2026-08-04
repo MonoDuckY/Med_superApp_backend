@@ -32,4 +32,6 @@ public interface DoctorWorkSlotRepository extends MongoRepository<DoctorWorkSlot
     List<DoctorWorkSlot> findAllByWorkDateAndSlotIdIn(LocalDate workDate, Collection<String> slotIds);
 
     List<DoctorWorkSlot> findAllByStatusOrderByWorkDateAscSlotIdAsc(DoctorWorkSlotStatus status);
+
+    List<DoctorWorkSlot> findAllByDoctorIdOrderByWorkDateDescSlotIdAsc(String doctorId);
 }

@@ -116,6 +116,17 @@ Khuyến nghị lưu token:
 | `POST` | `/api/auth/forgot-password/reset` | Public | Xác minh OTP và đặt mật khẩu mới. |
 | `GET` | `/api/auth/me` | Authenticated | Lấy profile account đang đăng nhập. |
 | `GET` | `/api/staff/patients/search?name={name}&n={count}` | `STAFF` | Tìm tối đa `n` bệnh nhân có tên khớp gần nhất. |
+| `GET` | `/api/doctor/appointments` | `DOCTOR` | Lấy các appointment thuộc Doctor hiện tại. |
+| `GET` | `/api/doctor/appointments/{appointmentId}` | `DOCTOR` | Lấy hồ sơ khám, vital signs và prescriptions. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/start` | `DOCTOR` | Chuyển appointment sang `IN_PROGRESS`. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/clinical-information` | `DOCTOR` | Cập nhật sức khỏe tổng quát và vital signs. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/diagnosis` | `DOCTOR` | Cập nhật diagnosis của appointment. |
+| `POST` | `/api/doctor/appointments/{appointmentId}/prescriptions` | `DOCTOR` | Tạo prescription cùng medicine schedules. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/prescriptions/{prescriptionId}` | `DOCTOR` | Cập nhật prescription và thay thế schedules. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/complete` | `DOCTOR` | Hoàn thành examination. |
+| `GET` | `/api/patient/medicine-schedules` | `PATIENT` | Lấy lịch uống thuốc của Patient. |
+| `PATCH` | `/api/patient/medicine-schedules/{scheduleId}/time` | `PATIENT` | Đổi thời gian của schedule `NOT_YET`. |
+| `PATCH` | `/api/patient/medicine-schedules/{scheduleId}/take` | `PATIENT` | Đánh dấu schedule là `TAKEN`. |
 | `POST` | `/api/admin/users` | `ADMIN` | Tạo account. |
 | `GET` | `/api/admin/users` | `ADMIN` | Lấy danh sách account. |
 | `GET` | `/api/admin/users/{userId}` | `ADMIN` | Lấy chi tiết một account. |

@@ -24,6 +24,7 @@ import com.yourproject.backend.dtos.requests.RescheduleAppointmentRequest;
 import com.yourproject.backend.dtos.requests.StaffCreateAppointmentRequest;
 import com.yourproject.backend.dtos.responses.AppointmentResponse;
 import com.yourproject.backend.dtos.responses.AvailableAppointmentSlotResponse;
+import com.yourproject.backend.dtos.responses.UserResponse;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ConflictException;
 import com.yourproject.backend.exceptions.ForbiddenException;
@@ -86,11 +87,28 @@ public class AppointmentServiceImpl implements AppointmentService {
 
         Instant effectiveFrom = from;
         Instant effectiveTo = to;
-        List<DoctorWorkSlot> availableSlots = doctorWorkSlotRepository
-                .findAllByStatusOrderByWorkDateAscSlotIdAsc(DoctorWorkSlotStatus.AVAILABLE)
+        List<DoctorWorkSlot> availableCandidates = doctorWorkSlotRepository
+                .findAllByStatusOrderByWorkDateAscSlotIdAsc(DoctorWorkSlotStatus.AVAILABLE);
+        Map<String, WorkSlot> availableDefinitions = workSlotRepository.findAllById(
+                        availableCandidates.stream()
+                                .map(DoctorWorkSlot::getSlotId)
+                                .filter(id -> id != null && !id.isBlank())
+                                .distinct()
+                                .toList())
                 .stream()
+                .collect(Collectors.toMap(WorkSlot::getId, definition -> definition));
+        List<DoctorWorkSlot> availableSlots = availableCandidates.stream()
+                .filter(slot -> slot.getWorkDate() != null)
                 .filter(slot -> {
-                    Instant startAt = startInstant(slot);
+                    WorkSlot definition = availableDefinitions.get(slot.getSlotId());
+                    return definition != null
+                            && definition.getStartTime() != null
+                            && definition.getEndTime() != null;
+                })
+                .filter(slot -> {
+                    Instant startAt = toInstant(
+                            slot.getWorkDate(),
+                            availableDefinitions.get(slot.getSlotId()).getStartTime());
                     return !startAt.isBefore(effectiveFrom) && !startAt.isAfter(effectiveTo);
                 })
                 .toList();
@@ -98,6 +116,8 @@ public class AppointmentServiceImpl implements AppointmentService {
                         availableSlots.stream().map(DoctorWorkSlot::getDoctorId).distinct().toList())
                 .stream()
                 .collect(Collectors.toMap(User::getId, doctor -> doctor));
+        Map<String, String> doctorDisplayNames = doctors.values().stream()
+                .collect(Collectors.toMap(User::getId, this::doctorDisplayName));
         String normalizedDoctorName = doctorName == null
                 ? null
                 : doctorName.trim().toLowerCase(Locale.ROOT);
@@ -109,8 +129,8 @@ public class AppointmentServiceImpl implements AppointmentService {
                             && doctor.getStatus() == AccountStatus.ACTIVE
                             && (normalizedDoctorName == null
                                     || normalizedDoctorName.isBlank()
-                                    || (doctor.getFullName() != null
-                                            && doctor.getFullName().toLowerCase(Locale.ROOT)
+                                    || (doctorDisplayNames.get(doctor.getId()) != null
+                                            && doctorDisplayNames.get(doctor.getId()).toLowerCase(Locale.ROOT)
                                                     .contains(normalizedDoctorName)));
                 })
                 .toList();
@@ -413,9 +433,10 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     @Override
     public Map<String, String> getDoctorNames(List<DoctorWorkSlot> slots) {
-        return userRepository.findAllById(slots.stream().map(DoctorWorkSlot::getDoctorId).distinct().toList())
+        return userRepository.findAllById(slots.stream().map(DoctorWorkSlot::getDoctorId)
+                        .filter(id -> id != null && !id.isBlank()).distinct().toList())
                 .stream()
-                .collect(Collectors.toMap(User::getId, User::getFullName));
+                .collect(Collectors.toMap(User::getId, this::doctorDisplayName));
     }
 
     @Override
@@ -428,15 +449,17 @@ public class AppointmentServiceImpl implements AppointmentService {
         return slots.stream()
                 .map(slot -> {
                     WorkSlot definition = definitions.get(slot.getSlotId());
-                    if (definition == null) {
-                        throw new ResourceNotFoundException("Work slot definition was not found.");
-                    }
+                    if (slot.getWorkDate() == null
+                            || definition == null
+                            || definition.getStartTime() == null
+                            || definition.getEndTime() == null) return null;
                     return AvailableAppointmentSlotResponse.from(
                             slot,
                             doctorNames.get(slot.getDoctorId()),
                             toInstant(slot.getWorkDate(), definition.getStartTime()),
                             toInstant(slot.getWorkDate(), definition.getEndTime()));
                 })
+                .filter(java.util.Objects::nonNull)
                 .toList();
     }
 
@@ -538,5 +561,10 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     private String trimToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private String doctorDisplayName(User doctor) {
+        String fullName = UserResponse.from(doctor, patientDataProtectionService).getFullName();
+        return fullName == null || fullName.isBlank() ? "Unknown doctor" : fullName;
     }
 }

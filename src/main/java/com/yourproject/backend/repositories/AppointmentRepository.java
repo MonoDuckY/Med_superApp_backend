@@ -30,4 +30,6 @@ public interface AppointmentRepository extends MongoRepository<Appointment, Stri
     Optional<Appointment> findFirstByDoctorWorkSlotIdAndStatusIn(
             String doctorWorkSlotId,
             Collection<AppointmentStatus> statuses);
+
+    List<Appointment> findAllByDoctorWorkSlotIdInOrderByRequestedAtDesc(Collection<String> doctorWorkSlotIds);
 }
