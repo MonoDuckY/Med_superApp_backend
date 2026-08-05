@@ -1,67 +1,44 @@
 package com.yourproject.backend.services;
 
-import org.springframework.core.io.ByteArrayResource;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
-import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
-import java.io.IOException;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.client.MultipartBodyBuilder;
+import org.springframework.web.reactive.function.BodyInserters;
+import reactor.core.publisher.Mono;
+import org.springframework.beans.factory.annotation.Value;
 
 @Service
 public class AiServiceClient {
 
     private final WebClient webClient;
 
-    public AiServiceClient() {
-        // Assume Python AI Service runs on localhost:8000
-        this.webClient = WebClient.create("http://localhost:8000");
+    public AiServiceClient(@Value("${ai.service.url:http://127.0.0.1:8000}") String aiServiceUrl) {
+        this.webClient = WebClient.create(aiServiceUrl);
     }
 
-    /**
-     * Gửi ảnh siêu âm sang Python (Endpoint chẩn đoán Clinical - UC-27)
-     */
-    public String analyzeUltrasound(MultipartFile file, String patientId) throws IOException {
-        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("file", new ByteArrayResource(file.getBytes()) {
-            @Override
-            public String getFilename() {
-                return file.getOriginalFilename();
-            }
-        });
-        body.add("patient_id", patientId);
+    public Mono<String> analyzeUltrasound(MultipartFile file, String patientId) {
+        MultipartBodyBuilder builder = new MultipartBodyBuilder();
+        builder.part("file", file.getResource());
+        builder.part("patient_id", patientId != null ? patientId : "Unknown");
 
         return webClient.post()
                 .uri("/api/v1/ai/analyze-ultrasound")
-                .contentType(MediaType.MULTIPART_FORM_DATA)
-                .body(BodyInserters.fromMultipartData(body))
+                .body(BodyInserters.fromMultipartData(builder.build()))
                 .retrieve()
-                .bodyToMono(String.class)
-                .block(); // Block since our Spring Boot app is mostly sync (WebMVC)
+                .bodyToMono(String.class);
     }
 
-    /**
-     * Gửi Dataset sang Python (Endpoint Batch Preprocess - UC-23)
-     */
-    public String preprocessDataset(MultipartFile zipFile, String webhookUrl, String optionsJson) throws IOException {
-        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-        body.add("file", new ByteArrayResource(zipFile.getBytes()) {
-            @Override
-            public String getFilename() {
-                return zipFile.getOriginalFilename();
-            }
-        });
-        body.add("webhook_url", webhookUrl);
-        body.add("options", optionsJson);
+    public Mono<String> batchProcessDataset(MultipartFile file, String options, String webhookUrl) {
+        MultipartBodyBuilder builder = new MultipartBodyBuilder();
+        builder.part("file", file.getResource());
+        builder.part("options", options != null ? options : "{}");
+        builder.part("webhook_url", webhookUrl != null ? webhookUrl : "");
 
         return webClient.post()
                 .uri("/api/v1/ai/research/preprocess-dataset")
-                .contentType(MediaType.MULTIPART_FORM_DATA)
-                .body(BodyInserters.fromMultipartData(body))
+                .body(BodyInserters.fromMultipartData(builder.build()))
                 .retrieve()
-                .bodyToMono(String.class)
-                .block();
+                .bodyToMono(String.class);
     }
 }
