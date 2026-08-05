@@ -35,6 +35,9 @@ dependencies {
 
 	// Firebase Cloud Messaging for the internal Android SMS gateway
 	implementation 'com.google.firebase:firebase-admin:9.10.0'
+
+    //import .env
+    implementation 'me.paulschwarz:spring-dotenv:4.0.0'
 	
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
