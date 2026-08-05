@@ -113,7 +113,8 @@ Khuyến nghị lưu token:
 | `POST` | `/api/auth/logout` | Authenticated | Thu hồi refresh token hiện tại. |
 | `POST` | `/api/auth/change-password` | Authenticated | Đổi password hiện tại. |
 | `POST` | `/api/auth/forgot-password/request` | Public | Gửi OTP đặt lại mật khẩu theo số điện thoại. |
-| `POST` | `/api/auth/forgot-password/reset` | Public | Xác minh OTP và đặt mật khẩu mới. |
+| `POST` | `/api/auth/forgot-password/verify` | Public | Xác minh OTP và nhận reset token dùng một lần. |
+| `POST` | `/api/auth/forgot-password/reset` | Public | Đặt mật khẩu mới bằng reset token. |
 | `GET` | `/api/auth/me` | Authenticated | Lấy profile account đang đăng nhập. |
 | `GET` | `/api/staff/patients/search?name={name}&n={count}` | `STAFF` | Tìm tối đa `n` bệnh nhân có tên khớp gần nhất. |
 | `GET` | `/api/doctor/appointments` | `DOCTOR` | Lấy các appointment thuộc Doctor hiện tại. |
@@ -275,14 +276,27 @@ Response luôn dùng thông báo chung để không làm lộ số điện tho�
 Xác minh OTP và đặt mật khẩu mới:
 
 ```http
-POST /api/auth/forgot-password/reset
+POST /api/auth/forgot-password/verify
 Content-Type: application/json
 ```
 
 ```json
 {
   "phoneNumber": "0912345678",
-  "code": "123456",
+  "code": "123456"
+}
+```
+
+Nếu OTP hợp lệ, response `data` trả về `resetToken` và `expiresInSeconds`. Frontend dùng reset token để mở màn hình nhập mật khẩu mới.
+
+```http
+POST /api/auth/forgot-password/reset
+Content-Type: application/json
+```
+
+```json
+{
+  "resetToken": "token-returned-by-verify-api",
   "newPassword": "NewPassword2!",
   "confirmPassword": "NewPassword2!"
 }

@@ -44,9 +44,17 @@ class AuthForgotPasswordIntegrationTest extends MongoIntegrationTestBase {
             throw new AssertionError("No six-digit reset OTP was found in the fake FCM payload.");
         }
 
+        MvcResult verifyResult = mockMvc.perform(post("/api/auth/forgot-password/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"code\":\"" + matcher.group(1) + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.resetToken").isNotEmpty())
+                .andReturn();
+        String resetToken = JsonPath.read(verifyResult.getResponse().getContentAsString(), "$.data.resetToken");
+
         mockMvc.perform(post("/api/auth/forgot-password/reset")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"code\":\"" + matcher.group(1)
+                        .content("{\"resetToken\":\"" + resetToken
                                 + "\",\"newPassword\":\"NewPassword2!\",\"confirmPassword\":\"NewPassword2!\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("Password reset successfully. Please sign in again."));
@@ -86,9 +94,9 @@ class AuthForgotPasswordIntegrationTest extends MongoIntegrationTestBase {
                         .content("{\"phoneNumber\":\"0912345678\"}"))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/auth/forgot-password/reset")
+        mockMvc.perform(post("/api/auth/forgot-password/verify")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"code\":\"000000\",\"newPassword\":\"NewPassword2!\",\"confirmPassword\":\"NewPassword2!\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"code\":\"000000\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("Password reset OTP is invalid or expired."));
 

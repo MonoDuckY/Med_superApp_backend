@@ -30,4 +30,9 @@ public class PatientOtp {
     @Indexed(expireAfterSeconds = 0)
     private Instant expiresAt;
     private Instant consumedAt;
+    private Instant verifiedAt;
+    @Indexed
+    private String resetTokenHash;
+    private Instant resetTokenExpiresAt;
+    private Instant resetTokenUsedAt;
 }

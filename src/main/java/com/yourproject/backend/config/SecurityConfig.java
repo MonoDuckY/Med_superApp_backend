@@ -50,7 +50,7 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/refresh", "/api/auth/patient-otp/request", "/api/auth/patient-otp/verify", "/api/auth/forgot-password/request", "/api/auth/forgot-password/reset", "/api/sms-gateway/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/refresh", "/api/auth/patient-otp/request", "/api/auth/patient-otp/verify", "/api/auth/forgot-password/request", "/api/auth/forgot-password/verify", "/api/auth/forgot-password/reset", "/api/sms-gateway/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

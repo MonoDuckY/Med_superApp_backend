@@ -20,7 +20,9 @@ import com.yourproject.backend.dtos.requests.RequestPatientOtpRequest;
 import com.yourproject.backend.dtos.requests.VerifyPatientOtpRequest;
 import com.yourproject.backend.dtos.requests.ForgotPasswordRequest;
 import com.yourproject.backend.dtos.requests.ResetPasswordRequest;
+import com.yourproject.backend.dtos.requests.VerifyPasswordResetOtpRequest;
 import com.yourproject.backend.dtos.responses.AuthResponse;
+import com.yourproject.backend.dtos.responses.PasswordResetTokenResponse;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ResourceNotFoundException;
 import com.yourproject.backend.dtos.responses.UserResponse;
@@ -60,6 +62,7 @@ public class AuthServiceImpl implements AuthService {
     @Value("${app.otp.expiration-minutes}") private long otpExpirationMinutes;
     @Value("${app.otp.resend-cooldown-seconds}") private long otpResendCooldownSeconds;
     @Value("${app.otp.max-attempts}") private int otpMaxAttempts;
+    @Value("${app.password-reset.token-expiration-minutes}") private long passwordResetTokenExpirationMinutes;
     @Value("${app.auth.max-failed-login-attempts}") private int maxFailedLoginAttempts;
     @Value("${app.auth.lockout-minutes}") private long lockoutMinutes;
 
@@ -111,8 +114,15 @@ public class AuthServiceImpl implements AuthService {
                         throw new BadRequestException("Please wait before requesting another OTP.");
                     }
                 });
-        patientOtpRepository.findAllByPhoneLookupAndPurposeAndConsumedAtIsNull(phoneLookup, OtpPurpose.PASSWORD_RESET).forEach(previous -> {
-            previous.setConsumedAt(Instant.now());
+        Instant invalidatedAt = Instant.now();
+        patientOtpRepository.findAllByPhoneLookupAndPurpose(phoneLookup, OtpPurpose.PASSWORD_RESET).forEach(previous -> {
+            if (previous.getConsumedAt() == null) {
+                previous.setConsumedAt(invalidatedAt);
+            }
+            if (previous.getResetTokenHash() != null && previous.getResetTokenUsedAt() == null) {
+                previous.setResetTokenHash(null);
+                previous.setResetTokenUsedAt(invalidatedAt);
+            }
             patientOtpRepository.save(previous);
         });
 
@@ -142,7 +152,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    public void resetPassword(ResetPasswordRequest request) {
+    public PasswordResetTokenResponse verifyPasswordResetOtp(VerifyPasswordResetOtpRequest request) {
         String normalizedPhone = PhoneNumberNormalizer.normalize(request.getPhoneNumber());
         String phoneLookup = patientDataProtectionService.phoneLookup(normalizedPhone);
         User user = userRepository.findByPhoneLookup(phoneLookup)
@@ -165,6 +175,37 @@ public class AuthServiceImpl implements AuthService {
             patientOtpRepository.save(otp);
             throw new UnauthorizedException("Password reset OTP is invalid or expired.");
         }
+
+        Instant now = Instant.now();
+        Instant resetTokenExpiresAt = now.plus(Duration.ofMinutes(passwordResetTokenExpirationMinutes));
+        byte[] tokenBytes = new byte[32];
+        SECURE_RANDOM.nextBytes(tokenBytes);
+        String resetToken = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
+        otp.setConsumedAt(now);
+        otp.setVerifiedAt(now);
+        otp.setResetTokenHash(hashToken(resetToken));
+        otp.setResetTokenExpiresAt(resetTokenExpiresAt);
+        otp.setResetTokenUsedAt(null);
+        otp.setExpiresAt(resetTokenExpiresAt);
+        patientOtpRepository.save(otp);
+        return new PasswordResetTokenResponse(resetToken, Duration.between(now, resetTokenExpiresAt).toSeconds());
+    }
+
+    @Override
+    public void resetPassword(ResetPasswordRequest request) {
+        String resetTokenHash = hashToken(request.getResetToken());
+        PatientOtp otp = patientOtpRepository.findByResetTokenHashAndPurpose(resetTokenHash, OtpPurpose.PASSWORD_RESET)
+                .orElseThrow(() -> new UnauthorizedException("Password reset token is invalid or expired."));
+        Instant now = Instant.now();
+        if (otp.getVerifiedAt() == null
+                || otp.getResetTokenExpiresAt() == null
+                || !otp.getResetTokenExpiresAt().isAfter(now)
+                || otp.getResetTokenUsedAt() != null) {
+            throw new UnauthorizedException("Password reset token is invalid or expired.");
+        }
+        User user = userRepository.findById(otp.getUserId())
+                .filter(this::isPasswordResetEligible)
+                .orElseThrow(() -> new UnauthorizedException("Password reset token is invalid or expired."));
         if (!request.getNewPassword().equals(request.getConfirmPassword())) {
             throw new BadRequestException("New password and confirmation do not match.");
         }
@@ -174,7 +215,6 @@ public class AuthServiceImpl implements AuthService {
             throw new BadRequestException("New password must be different from the current password.");
         }
 
-        Instant now = Instant.now();
         user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
         user.setPasswordChangedAt(now);
         user.setUpdatedAt(now);
@@ -184,10 +224,9 @@ public class AuthServiceImpl implements AuthService {
         user.setFailedLoginAttempts(0);
         user.setLockedUntil(null);
         userRepository.save(user);
-        patientOtpRepository.findAllByPhoneLookupAndPurposeAndConsumedAtIsNull(phoneLookup, OtpPurpose.PASSWORD_RESET).forEach(activeOtp -> {
-            activeOtp.setConsumedAt(now);
-            patientOtpRepository.save(activeOtp);
-        });
+        otp.setResetTokenUsedAt(now);
+        otp.setResetTokenHash(null);
+        patientOtpRepository.save(otp);
     }
 
     @Override
