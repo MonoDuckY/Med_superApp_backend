@@ -1,6 +1,7 @@
 package com.yourproject.backend.controllers;
 
 import com.yourproject.backend.services.AiServiceClient;
+import com.yourproject.backend.services.JobTrackingService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -13,9 +14,16 @@ import java.util.Map;
 public class AiController {
 
     private final AiServiceClient aiServiceClient;
+    private final JobTrackingService jobTrackingService;
 
-    public AiController(AiServiceClient aiServiceClient) {
+    public AiController(AiServiceClient aiServiceClient, JobTrackingService jobTrackingService) {
         this.aiServiceClient = aiServiceClient;
+        this.jobTrackingService = jobTrackingService;
+    }
+
+    @GetMapping("/research/batch/{jobId}/status")
+    public ResponseEntity<Map<String, Object>> getJobStatus(@PathVariable String jobId) {
+        return ResponseEntity.ok(jobTrackingService.getJobStatus(jobId));
     }
 
     @PostMapping("/diagnose")

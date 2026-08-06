@@ -19,7 +19,7 @@ public class AiServiceClient {
 
     public Mono<String> analyzeUltrasound(MultipartFile file, String patientId) {
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
-        builder.part("file", file.getResource());
+        builder.part("file", file.getResource()).filename(file.getOriginalFilename());
         builder.part("patient_id", patientId != null ? patientId : "Unknown");
 
         return webClient.post()
@@ -31,7 +31,7 @@ public class AiServiceClient {
 
     public Mono<String> batchProcessDataset(MultipartFile file, String options, String webhookUrl) {
         MultipartBodyBuilder builder = new MultipartBodyBuilder();
-        builder.part("file", file.getResource());
+        builder.part("file", file.getResource()).filename(file.getOriginalFilename());
         builder.part("options", options != null ? options : "{}");
         builder.part("webhook_url", webhookUrl != null ? webhookUrl : "");
 
