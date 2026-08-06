@@ -1,8 +1,10 @@
 # Med Super App Backend — Hướng dẫn tích hợp Frontend
 
+> Đặc tả kỹ thuật của các luồng backend nằm tại [`docs/specs/README.md`](docs/specs/README.md). Mọi thay đổi API, business rule, database hoặc security phải cập nhật spec liên quan và [`CHANGELOG.md`](CHANGELOG.md) trong cùng pull request.
+
 Tài liệu này dành cho Web Admin, Web Doctor và Mobile App. Hiện backend đã triển khai nhóm API **xác thực** và **quản lý tài khoản của Admin**.
 
-> Các API khám bệnh, lịch hẹn, đơn thuốc, AI và ảnh y tế chưa được triển khai; không được tự suy đoán endpoint cho các chức năng đó.
+> Backend hiện có Auth, Admin User, Doctor/Staff scheduling, Patient appointment, Doctor examination, prescription, medicine schedule và Android SMS Gateway. Xem spec để phân biệt chức năng hiện tại với thay đổi ERD đang được lên kế hoạch.
 
 ##-3.6.vẻy importance
 -Cách chạy: clone về
