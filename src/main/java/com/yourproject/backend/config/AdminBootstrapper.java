@@ -49,24 +49,13 @@ public class AdminBootstrapper implements ApplicationRunner {
             throw new IllegalStateException("Both bootstrap admin phone number and password must be provided.");
         }
         String normalizedPhoneNumber = PhoneNumberNormalizer.normalize(phoneNumber);
-        java.util.Optional<User> existingAdmin = userRepository.findByPhoneLookup(
-                patientDataProtectionService.phoneLookup(normalizedPhoneNumber));
+        java.util.Optional<User> existingAdmin = userRepository.findByPhoneLookupAndRoleId(
+                patientDataProtectionService.phoneLookup(normalizedPhoneNumber), UserRole.ADMIN.getId());
         if (existingAdmin.isEmpty()) {
-            existingAdmin = userRepository.findByPhoneNumber(normalizedPhoneNumber);
+            existingAdmin = userRepository.findByPhoneNumberAndRoleId(normalizedPhoneNumber, UserRole.ADMIN.getId());
         }
         if (existingAdmin.isPresent()) {
-            User admin = existingAdmin.get();
-            if (!admin.getRoles().contains(UserRole.ADMIN)) {
-                admin.setRole(UserRole.ADMIN);
-                admin.setStatus(AccountStatus.ACTIVE);
-                admin.setAccessTokenHash(null);
-                admin.setRefreshTokenHash(null);
-                admin.setRefreshTokenExpiresAt(null);
-                userRepository.save(admin);
-                LOGGER.warn("Bootstrap administrator role was missing and has been repaired. Sign in again.");
-            } else {
-                LOGGER.info("Bootstrap administrator account already exists; creation skipped.");
-            }
+            LOGGER.info("Bootstrap administrator account already exists; creation skipped.");
         } else {
             CreateUserRequest request = new CreateUserRequest();
             request.setPhoneNumber(phoneNumber);

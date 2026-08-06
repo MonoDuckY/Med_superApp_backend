@@ -2,7 +2,6 @@ package com.yourproject.backend.dtos.responses;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.Set;
 
 import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.User;
@@ -16,7 +15,7 @@ import lombok.Value;
 @Builder
 public class UserResponse {
     String id;
-    Set<UserRole> roles;
+    UserRole role;
     AccountStatus status;
     String fullName;
     String gender;
@@ -43,7 +42,7 @@ public class UserResponse {
 
     public static UserResponse fromUnprotected(User user) {
         return UserResponse.builder()
-                .id(user.getId()).roles(user.getRoles()).status(user.getStatus())
+                .id(user.getId()).role(user.getRole()).status(user.getStatus())
                 .fullName(user.getFullName())
                 .gender(user.getGender()).dateOfBirth(user.getDateOfBirth())
                 .phoneNumber(user.getPhoneNumber()).address(user.getAddress())
@@ -57,7 +56,7 @@ public class UserResponse {
     }
 
     private static User copyOf(User user) {
-        return User.builder().id(user.getId()).passwordHash(user.getPasswordHash()).roles(user.getRoles())
+        return User.builder().id(user.getId()).passwordHash(user.getPasswordHash()).roleId(user.getRoleId())
                 .status(user.getStatus()).fullName(user.getFullName())
                 .gender(user.getGender()).dateOfBirth(user.getDateOfBirth()).address(user.getAddress())
                 .citizenIdentificationCode(user.getCitizenIdentificationCode()).healthInsuranceCode(user.getHealthInsuranceCode())

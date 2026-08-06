@@ -36,23 +36,23 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public User createUser(CreateUserRequest request, String createdBy) {
-        if (request.getRoles() == null || request.getRoles().isEmpty()) {
-            throw new BadRequestException("At least one role is required.");
+        if (request.getRole() == null) {
+            throw new BadRequestException("Role is required.");
         }
         String phoneNumber = PhoneNumberNormalizer.normalize(request.getPhoneNumber());
         String phoneLookup = patientDataProtectionService.phoneLookup(phoneNumber);
-        if (userRepository.existsByPhoneLookup(phoneLookup)) {
-            throw new ConflictException("Phone number already exists.");
+        if (userRepository.existsByPhoneLookupAndRoleId(phoneLookup, request.getRole().getId())) {
+            throw new ConflictException("An account with this phone number and role already exists.");
         }
 
-        boolean patientOnly = request.getRoles().size() == 1 && request.getRoles().contains(UserRole.PATIENT);
-        if (!patientOnly) {
+        boolean patient = request.getRole() == UserRole.PATIENT;
+        if (!patient) {
             PasswordPolicy.validate(request.getPassword());
         }
         Instant now = Instant.now();
         User user = User.builder()
-                .passwordHash(patientOnly ? null : passwordEncoder.encode(request.getPassword()))
-                .roles(new java.util.LinkedHashSet<>(request.getRoles()))
+                .passwordHash(patient ? null : passwordEncoder.encode(request.getPassword()))
+                .roleId(request.getRole().getId())
                 .status(AccountStatus.ACTIVE)
                 .patientId(null)
                 .fullName(trimToNull(request.getFullName()))
@@ -71,7 +71,7 @@ public class UserServiceImpl implements UserService {
                 .build();
 
         validateAccountProfile(user);
-        if (user.getRoles().contains(UserRole.PATIENT)) {
+        if (user.getRole() == UserRole.PATIENT) {
             patientDataProtectionService.encryptPatientFields(user);
         }
         return userRepository.save(user);
@@ -93,9 +93,10 @@ public class UserServiceImpl implements UserService {
     }
 
     @Override
-    public User findByPhoneNumber(String phoneNumber) {
+    public User findByPhoneNumberAndRole(String phoneNumber, UserRole role) {
         String normalizedPhoneNumber = PhoneNumberNormalizer.normalize(phoneNumber);
-        return userRepository.findByPhoneLookup(patientDataProtectionService.phoneLookup(normalizedPhoneNumber))
+        return userRepository.findByPhoneLookupAndRoleId(
+                        patientDataProtectionService.phoneLookup(normalizedPhoneNumber), role.getId())
                 .orElseThrow(() -> new UnauthorizedException("Invalid phone number or password."));
     }
 
@@ -109,15 +110,13 @@ public class UserServiceImpl implements UserService {
         User user = getUserById(userId);
         patientDataProtectionService.decryptPatientFields(user);
 
-        java.util.Set<UserRole> effectiveRoles = request.getRoles() == null || request.getRoles().isEmpty()
-                ? user.getRoles()
-                : request.getRoles();
+        UserRole effectiveRole = request.getRole() == null ? user.getRole() : request.getRole();
         if (request.getPassword() != null) {
             if (request.getPassword().isBlank()) {
                 throw new BadRequestException("Password must not be blank when provided.");
             }
-            if (effectiveRoles.size() == 1 && effectiveRoles.contains(UserRole.PATIENT)) {
-                throw new BadRequestException("Patient-only accounts authenticate using SMS OTP and do not use passwords.");
+            if (effectiveRole == UserRole.PATIENT) {
+                throw new BadRequestException("Patient accounts authenticate using SMS OTP and do not use passwords.");
             }
             PasswordPolicy.validate(request.getPassword());
             user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
@@ -127,8 +126,16 @@ public class UserServiceImpl implements UserService {
             user.setRefreshTokenExpiresAt(null);
         }
 
-        if (request.getRoles() != null && !request.getRoles().isEmpty()) {
-            user.setRoles(new java.util.LinkedHashSet<>(request.getRoles()));
+        if (request.getRole() != null) {
+            String newRoleId = request.getRole().getId();
+            if (!newRoleId.equals(user.getRoleId())
+                    && userRepository.existsByPhoneLookupAndRoleId(user.getPhoneLookup(), newRoleId)) {
+                throw new ConflictException("An account with this phone number and role already exists.");
+            }
+            user.setRoleId(newRoleId);
+            user.setAccessTokenHash(null);
+            user.setRefreshTokenHash(null);
+            user.setRefreshTokenExpiresAt(null);
         }
         if (request.getStatus() != null) {
             user.setStatus(request.getStatus());
@@ -145,8 +152,9 @@ public class UserServiceImpl implements UserService {
         if (request.getPhoneNumber() != null) {
             String phoneNumber = PhoneNumberNormalizer.normalize(request.getPhoneNumber());
             String phoneLookup = patientDataProtectionService.phoneLookup(phoneNumber);
-            if (!phoneLookup.equals(user.getPhoneLookup()) && userRepository.existsByPhoneLookup(phoneLookup)) {
-                throw new ConflictException("Phone number already exists.");
+            if (!phoneLookup.equals(user.getPhoneLookup())
+                    && userRepository.existsByPhoneLookupAndRoleId(phoneLookup, user.getRoleId())) {
+                throw new ConflictException("An account with this phone number and role already exists.");
             }
             user.setPhoneNumber(phoneNumber);
             user.setPhoneLookup(phoneLookup);
@@ -166,7 +174,7 @@ public class UserServiceImpl implements UserService {
 
         user.setUpdatedAt(Instant.now());
         validateAccountProfile(user);
-        if (user.getRoles().contains(UserRole.PATIENT)) {
+        if (user.getRole() == UserRole.PATIENT) {
             patientDataProtectionService.encryptPatientFields(user);
         }
         return userRepository.save(user);
@@ -191,7 +199,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public void changePassword(String userId, ChangePasswordRequest request) {
         User user = getActiveUserById(userId);
-        if (user.getRoles().size() == 1 && user.getRoles().contains(UserRole.PATIENT)) {
+        if (user.getRole() == UserRole.PATIENT) {
             throw new ForbiddenException("Patient accounts authenticate using SMS OTP and do not have passwords.");
         }
         if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPasswordHash())) {
@@ -220,8 +228,8 @@ public class UserServiceImpl implements UserService {
     }
 
     private void validateAccountProfile(User user) {
-        if (user.getRoles() == null || user.getRoles().isEmpty()) {
-            throw new BadRequestException("At least one role is required.");
+        if (user.getRoleId() == null || user.getRoleId().isBlank()) {
+            throw new BadRequestException("Role is required.");
         }
 
         if (isBlank(user.getPhoneNumber())) {
@@ -236,10 +244,10 @@ public class UserServiceImpl implements UserService {
             throw new BadRequestException("Date of birth cannot be in the future.");
         }
 
-        if (user.getRoles().contains(UserRole.DOCTOR) && isBlank(user.getCertificate())) {
+        if (user.getRole() == UserRole.DOCTOR && isBlank(user.getCertificate())) {
             throw new BadRequestException("Doctor accounts require a practice certificate.");
         }
-        if (!user.getRoles().contains(UserRole.PATIENT)) {
+        if (user.getRole() != UserRole.PATIENT) {
             return;
         }
 

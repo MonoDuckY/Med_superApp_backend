@@ -32,7 +32,7 @@ class AuthForgotPasswordIntegrationTest extends MongoIntegrationTestBase {
 
         mockMvc.perform(post("/api/auth/forgot-password/request")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("If the account is eligible, a password reset OTP has been sent."));
 
@@ -46,7 +46,7 @@ class AuthForgotPasswordIntegrationTest extends MongoIntegrationTestBase {
 
         MvcResult verifyResult = mockMvc.perform(post("/api/auth/forgot-password/verify")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"code\":\"" + matcher.group(1) + "\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"code\":\"" + matcher.group(1) + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.resetToken").isNotEmpty())
                 .andReturn();
@@ -71,7 +71,7 @@ class AuthForgotPasswordIntegrationTest extends MongoIntegrationTestBase {
                         .content("{\"refreshToken\":\"" + oldTokens.refreshToken() + "\"}"))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"NewPassword2!\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"NewPassword2!\"}"))
                 .andExpect(status().isOk());
     }
 
@@ -79,7 +79,7 @@ class AuthForgotPasswordIntegrationTest extends MongoIntegrationTestBase {
     void unknownPhoneReturnsGenericSuccessWithoutCreatingOtp() throws Exception {
         mockMvc.perform(post("/api/auth/forgot-password/request")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").doesNotExist());
 
@@ -91,12 +91,12 @@ class AuthForgotPasswordIntegrationTest extends MongoIntegrationTestBase {
         User doctor = saveActiveDoctor("+84912345678", "OldPassword1!");
         mockMvc.perform(post("/api/auth/forgot-password/request")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\"}"))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/auth/forgot-password/verify")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"code\":\"000000\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"code\":\"000000\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("Password reset OTP is invalid or expired."));
 
@@ -107,7 +107,7 @@ class AuthForgotPasswordIntegrationTest extends MongoIntegrationTestBase {
     private TokenPair login(String phoneNumber, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"" + phoneNumber + "\",\"password\":\"" + password + "\"}"))
+                        .content("{\"phoneNumber\":\"" + phoneNumber + "\",\"role\":\"DOCTOR\",\"password\":\"" + password + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn();
         String body = result.getResponse().getContentAsString();

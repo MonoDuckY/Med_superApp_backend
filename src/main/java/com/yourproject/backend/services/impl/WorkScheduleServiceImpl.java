@@ -380,7 +380,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
 
     private User requireRole(String userId, UserRole role, String message) {
         User user = userService.getActiveUserById(userId);
-        if (!user.getRoles().contains(role)) {
+        if (user.getRole() != role) {
             throw new ForbiddenException(message);
         }
         return user;
@@ -388,7 +388,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
 
     private void requireStaff(String userId) {
         User user = userService.getActiveUserById(userId);
-        if (!user.getRoles().contains(UserRole.STAFF)) {
+        if (user.getRole() != UserRole.STAFF) {
             throw new ForbiddenException("Only staff can review work schedules.");
         }
     }

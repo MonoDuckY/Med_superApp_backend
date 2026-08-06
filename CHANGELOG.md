@@ -6,6 +6,7 @@ All notable backend changes are documented in this file. This project follows a 
 
 ### Added
 
+- Role catalog collection seeded with stable IDs: `1=ADMIN`, `2=DOCTOR`, `3=STAFF`, `4=RESEARCHER`, `5=PATIENT`.
 - Feature specifications under `docs/specs` for API conventions, authentication, user management, scheduling, appointments, clinical medication, SMS gateway, data protection and MongoDB schema.
 - Three-step forgot-password flow with OTP verification and a one-time reset token.
 - Doctor examination, prescription and Patient medicine-schedule APIs.
@@ -13,6 +14,10 @@ All notable backend changes are documented in this file. This project follows a 
 
 ### Changed
 
+- Role catalog startup synchronization now replaces legacy role documents whose IDs do not match the fixed `1..5` mapping.
+- User now references one role through `roleId`; authentication and authorization use the singular role.
+- Login and forgot-password account selection now require `role` and use `(phoneLookup, roleId)`.
+- Phone numbers may be reused by accounts with different roles, while remaining unique within one role.
 - Password reset now uses `request → verify → reset`; the final request no longer contains OTP.
 - Medicine schedule uses full `scheduledAt` date-time and supports `NOT_YET`, `TAKEN`, `MISSED`.
 - Appointment supports `IN_PROGRESS` examination state.
@@ -24,8 +29,6 @@ All notable backend changes are documented in this file. This project follows a 
 
 ### Planned
 
-- Align User with one role and `(phoneLookup, role)` uniqueness.
-- Add Role catalog collection.
 - Replace VitalSign with MedicalRecord and migrate diagnosis/prescription references.
 
 ## Documentation update rule

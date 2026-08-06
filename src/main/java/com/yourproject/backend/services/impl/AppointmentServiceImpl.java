@@ -125,7 +125,7 @@ public class AppointmentServiceImpl implements AppointmentService {
                 .filter(slot -> {
                     User doctor = doctors.get(slot.getDoctorId());
                     return doctor != null
-                            && doctor.getRoles().contains(UserRole.DOCTOR)
+                            && doctor.getRole() == UserRole.DOCTOR
                             && doctor.getStatus() == AccountStatus.ACTIVE
                             && (normalizedDoctorName == null
                                     || normalizedDoctorName.isBlank()
@@ -143,7 +143,7 @@ public class AppointmentServiceImpl implements AppointmentService {
         DoctorWorkSlot currentSlot = doctorWorkSlotRepository.findById(request.getDoctorWorkSlotId())
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor work slot was not found."));
         User doctor = userService.getActiveUserById(currentSlot.getDoctorId());
-        if (!doctor.getRoles().contains(UserRole.DOCTOR)) {
+        if (doctor.getRole() != UserRole.DOCTOR) {
             throw new ConflictException("The selected work slot does not belong to an active doctor.");
         }
         validateBookableSlot(currentSlot);
@@ -331,7 +331,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     public Appointment createByStaff(String staffId, StaffCreateAppointmentRequest request) {
         requireStaff(staffId);
         User patient = userService.getActiveUserById(request.getPatientId().trim());
-        if (!patient.getRoles().contains(UserRole.PATIENT)) {
+        if (patient.getRole() != UserRole.PATIENT) {
             throw new BadRequestException("The selected user is not a patient.");
         }
         DoctorWorkSlot target = requireStaffBookableSlot(request.getDoctorWorkSlotId());
@@ -391,7 +391,7 @@ public class AppointmentServiceImpl implements AppointmentService {
             throw new ConflictException("The selected doctor work slot has already started.");
         }
         User doctor = userService.getActiveUserById(slot.getDoctorId());
-        if (!doctor.getRoles().contains(UserRole.DOCTOR)) {
+        if (doctor.getRole() != UserRole.DOCTOR) {
             throw new ConflictException("The selected work slot does not belong to an active doctor.");
         }
         return slot;
@@ -546,7 +546,7 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     private User requirePatient(String userId) {
         User patient = userService.getActiveUserById(userId);
-        if (!patient.getRoles().contains(UserRole.PATIENT)) {
+        if (patient.getRole() != UserRole.PATIENT) {
             throw new ForbiddenException("Only patients can use patient appointment operations.");
         }
         return patient;
@@ -554,7 +554,7 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     private void requireStaff(String userId) {
         User staff = userService.getActiveUserById(userId);
-        if (!staff.getRoles().contains(UserRole.STAFF)) {
+        if (staff.getRole() != UserRole.STAFF) {
             throw new ForbiddenException("Only staff can review appointments.");
         }
     }

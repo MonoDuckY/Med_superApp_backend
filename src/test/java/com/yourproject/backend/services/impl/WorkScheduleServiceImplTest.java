@@ -84,8 +84,8 @@ class WorkScheduleServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        doctor = User.builder().id("doctor-1").role(UserRole.DOCTOR).status(AccountStatus.ACTIVE).build();
-        staff = User.builder().id("staff-1").role(UserRole.STAFF).status(AccountStatus.ACTIVE).build();
+        doctor = User.builder().id("doctor-1").roleId(UserRole.DOCTOR.name()).status(AccountStatus.ACTIVE).build();
+        staff = User.builder().id("staff-1").roleId(UserRole.STAFF.name()).status(AccountStatus.ACTIVE).build();
         room = ClinicRoom.builder().id("room-1").code("ROOM-101").active(true).build();
         morningSlots = new ArrayList<>();
         for (int index = 0; index < 8; index++) {
@@ -181,16 +181,16 @@ class WorkScheduleServiceImplTest {
     }
 
     @Test
-    void doctorAndStaffUserCanUseStaffScheduleOperations() {
-        User multiRoleUser = User.builder().id("multi-role-user")
-                .roles(Set.of(UserRole.STAFF, UserRole.DOCTOR))
+    void staffUserCanUseStaffScheduleOperations() {
+        User multiRoleUser = User.builder().id("staff-user")
+                .roleId(UserRole.STAFF.name())
                 .status(AccountStatus.ACTIVE).build();
-        when(userService.getActiveUserById("multi-role-user")).thenReturn(multiRoleUser);
+        when(userService.getActiveUserById("staff-user")).thenReturn(multiRoleUser);
         when(doctorWorkSlotRepository.findAllByStatusOrderBySubmittedAtDesc(
                 DoctorWorkSlotStatus.AVAILABLE)).thenReturn(List.of());
 
         List<DoctorWorkSlot> result = service.getSchedules(
-                "multi-role-user", DoctorWorkSlotStatus.AVAILABLE);
+                "staff-user", DoctorWorkSlotStatus.AVAILABLE);
 
         assertEquals(0, result.size());
     }
@@ -198,7 +198,7 @@ class WorkScheduleServiceImplTest {
     @Test
     void adminWithoutStaffRoleCannotUseStaffScheduleOperations() {
         User admin = User.builder().id("admin-user")
-                .roles(Set.of(UserRole.ADMIN)).status(AccountStatus.ACTIVE).build();
+                .roleId(UserRole.ADMIN.name()).status(AccountStatus.ACTIVE).build();
         when(userService.getActiveUserById("admin-user")).thenReturn(admin);
 
         assertThrows(ForbiddenException.class,

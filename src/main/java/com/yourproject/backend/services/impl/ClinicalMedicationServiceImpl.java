@@ -343,14 +343,14 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
 
     private void requireDoctor(String doctorId) {
         User doctor = userService.getActiveUserById(doctorId);
-        if (!doctor.getRoles().contains(UserRole.DOCTOR)) {
+        if (doctor.getRole() != UserRole.DOCTOR) {
             throw new ForbiddenException("Only doctors can access examination operations.");
         }
     }
 
     private void requirePatient(String patientId) {
         User patient = userService.getActiveUserById(patientId);
-        if (!patient.getRoles().contains(UserRole.PATIENT)) {
+        if (patient.getRole() != UserRole.PATIENT) {
             throw new ForbiddenException("Only patients can access medicine schedules.");
         }
     }

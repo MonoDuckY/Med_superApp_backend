@@ -3,12 +3,10 @@
 ## Current account identity
 
 - Username đăng nhập là số điện thoại Việt Nam đã normalize thành `+84xxxxxxxxx`.
-- Code hiện tại yêu cầu `phoneLookup` unique toàn hệ thống.
-- User hiện có thể chứa nhiều role trong `roles`; trường legacy `role` vẫn được hỗ trợ.
+- Mỗi User tham chiếu đúng một Role qua `roleId`.
+- Một số điện thoại có thể thuộc nhiều account khác role; cặp `(phoneLookup, roleId)` phải unique.
 - Chỉ account `ACTIVE` được xác thực.
 - `PATIENT`-only đăng nhập bằng OTP và không dùng password.
-
-> Planned: ERD mới yêu cầu một role/User và unique `(phoneLookup, role)`. Chưa áp dụng vào code hiện tại.
 
 ## Public endpoints
 
@@ -32,7 +30,7 @@
 
 ## Password login
 
-Request gồm `phoneNumber`, `password`, tùy chọn `deviceId`. Password sai tăng `failedLoginAttempts`; đạt ngưỡng cấu hình thì đặt `lockedUntil`. Login thành công reset lockout, cập nhật `lastLoginAt`, phát access/refresh token và lưu hash token trong User.
+Request gồm `phoneNumber`, `role`, `password`, tùy chọn `deviceId`. Backend dùng `(phoneLookup, roleId)` để chọn đúng account. Password sai tăng `failedLoginAttempts`; đạt ngưỡng cấu hình thì đặt `lockedUntil`. Login thành công reset lockout, cập nhật `lastLoginAt`, phát access/refresh token và lưu hash token trong User.
 
 ## Patient OTP
 
@@ -44,7 +42,7 @@ Request gồm `phoneNumber`, `password`, tùy chọn `deviceId`. Password sai t�
 
 ## JWT and sessions
 
-- Access token là JWT HS256, subject là User ID và claim `roles` chứa role names.
+- Access token là JWT HS256, subject là User ID và claim `role` chứa role name hiện tại.
 - Access token mặc định sống 15 phút.
 - Refresh token là chuỗi random, mặc định sống 7 ngày.
 - Database chỉ lưu SHA-256 hash của access/refresh token.

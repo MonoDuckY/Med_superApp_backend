@@ -39,7 +39,7 @@ public class SchedulingCatalogServiceImpl implements SchedulingCatalogService {
     @Override
     public ClinicRoom createClinicRoom(String requestedBy, CreateClinicRoomRequest request) {
         User staff = userService.getActiveUserById(requestedBy);
-        if (!staff.getRoles().contains(UserRole.STAFF)) {
+        if (staff.getRole() != UserRole.STAFF) {
             throw new ForbiddenException("Only staff can create clinic rooms.");
         }
 

@@ -4,7 +4,8 @@
 
 | Collection | Mục đích/liên kết logic |
 | --- | --- |
-| `users` | Account, profile, role(s), token hash, trusted device và patient encrypted fields |
+| `roles` | Danh mục role với ID cố định: `1=ADMIN`, `2=DOCTOR`, `3=STAFF`, `4=RESEARCHER`, `5=PATIENT`; `roleName` unique |
+| `users` | Account, profile, một `roleId`, token hash, trusted device và patient encrypted fields |
 | `patient_otps` | Patient login OTP và password-reset OTP/token theo `purpose` |
 | `sms_gateway_devices` | Android gateway registration/FCM token |
 | `sms_gateway_jobs` | Trạng thái lệnh gửi SMS |
@@ -22,7 +23,8 @@ Quan hệ là manual reference bằng string/ObjectId; MongoDB không áp dụng
 
 ## Important indexes
 
-- User phone/phoneLookup hiện unique, sparse.
+- User có unique compound index `(phoneLookup, roleId)`, cho phép cùng phone ở các role khác nhau.
+- Role có unique index trên `roleName`.
 - VitalSign có index `appointmentId`.
 - Prescription có index `appointmentId`.
 - PatientOtp có index user, phone lookup, purpose và TTL expiration.
@@ -31,8 +33,6 @@ Quan hệ là manual reference bằng string/ObjectId; MongoDB không áp dụng
 
 ## Planned ERD changes
 
-- Tạo `roles` và chuyển User về một role.
-- Cho phone trùng khác role bằng unique compound `(phoneLookup, role)`.
 - Thay `vital_signs` bằng `medical_records` unique theo appointmentId.
 - Chuyển diagnosis từ Appointment sang MedicalRecord.
 - Chuyển Prescription từ `appointmentId` sang `medicalRecordId`.

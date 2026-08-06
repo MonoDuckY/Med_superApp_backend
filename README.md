@@ -361,7 +361,7 @@ Response `201`: `data` là `UserResponse`; backend không trả `password` hoặ
 
 Quy tắc quan trọng:
 
-- `phoneNumber` là bắt buộc và unique cho mọi role; backend lưu chuẩn quốc tế `+84xxxxxxxxx`.
+- `phoneNumber` là bắt buộc và được lưu theo chuẩn quốc tế `+84xxxxxxxxx`. Cùng một số có thể dùng cho các role khác nhau, nhưng cặp `phoneNumber + role` phải unique.
 - Nhập `0912345678` được chuyển thành `+84912345678`; nhập `+84912345678` giữ nguyên.
 - `PATIENT`: bắt buộc có `patientId`, `fullName`, `gender`, `dateOfBirth`, `phoneNumber`.
 - `patientId` là unique.

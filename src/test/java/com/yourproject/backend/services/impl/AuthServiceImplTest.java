@@ -91,7 +91,7 @@ class AuthServiceImplTest {
     void login_issuesAccessAndRefreshTokensForActiveAccountWithCorrectPassword() {
         User user = activeDoctor();
         LoginRequest request = loginRequest();
-        when(userService.findByPhoneNumber("0363636363")).thenReturn(user);
+        when(userService.findByPhoneNumberAndRole("0363636363", UserRole.DOCTOR)).thenReturn(user);
         when(userService.getActiveUserById("user-id")).thenReturn(user);
         when(passwordEncoder.matches("Validpass1", "password-hash")).thenReturn(true);
         when(jwtUtils.generateAccessToken(user)).thenReturn("access-token");
@@ -109,7 +109,7 @@ class AuthServiceImplTest {
     @Test
     void login_rejectsIncorrectPassword() {
         User user = activeDoctor();
-        when(userService.findByPhoneNumber("0363636363")).thenReturn(user);
+        when(userService.findByPhoneNumberAndRole("0363636363", UserRole.DOCTOR)).thenReturn(user);
         when(userService.getActiveUserById("user-id")).thenReturn(user);
         when(passwordEncoder.matches("Validpass1", "password-hash")).thenReturn(false);
 
@@ -121,7 +121,7 @@ class AuthServiceImplTest {
     @Test
     void login_rejectsInactiveAccount() {
         User user = activeDoctor();
-        when(userService.findByPhoneNumber("0363636363")).thenReturn(user);
+        when(userService.findByPhoneNumberAndRole("0363636363", UserRole.DOCTOR)).thenReturn(user);
         when(userService.getActiveUserById("user-id"))
                 .thenThrow(new UnauthorizedException("This account is inactive."));
 
@@ -134,7 +134,7 @@ class AuthServiceImplTest {
         User patient = activeDoctor();
         patient.setRole(UserRole.PATIENT);
         patient.setPasswordHash(null);
-        when(userService.findByPhoneNumber("0363636363")).thenReturn(patient);
+        when(userService.findByPhoneNumberAndRole("0363636363", UserRole.DOCTOR)).thenReturn(patient);
         when(userService.getActiveUserById("user-id")).thenReturn(patient);
 
         assertThrows(BadRequestException.class, () -> authService.login(loginRequest()));
@@ -147,7 +147,7 @@ class AuthServiceImplTest {
         request.setPhoneNumber(null);
 
         assertThrows(BadRequestException.class, () -> authService.login(request));
-        verify(userService, never()).findByPhoneNumber(any());
+        verify(userService, never()).findByPhoneNumberAndRole(any(), any());
     }
 
     @Test
@@ -228,8 +228,9 @@ class AuthServiceImplTest {
         User user = activeDoctor();
         ForgotPasswordRequest request = new ForgotPasswordRequest();
         request.setPhoneNumber("0363636363");
+        request.setRole(UserRole.DOCTOR);
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.of(user));
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(Optional.of(user));
         when(patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc("phone-lookup", OtpPurpose.PASSWORD_RESET))
                 .thenReturn(Optional.empty());
         when(patientOtpRepository.findAllByPhoneLookupAndPurpose("phone-lookup", OtpPurpose.PASSWORD_RESET))
@@ -248,8 +249,9 @@ class AuthServiceImplTest {
     void requestPasswordReset_doesNotRevealUnknownAccount() {
         ForgotPasswordRequest request = new ForgotPasswordRequest();
         request.setPhoneNumber("0363636363");
+        request.setRole(UserRole.DOCTOR);
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.empty());
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(Optional.empty());
 
         authService.requestPasswordReset(request);
 
@@ -263,8 +265,9 @@ class AuthServiceImplTest {
         user.setPasswordHash(null);
         ForgotPasswordRequest request = new ForgotPasswordRequest();
         request.setPhoneNumber("0363636363");
+        request.setRole(UserRole.DOCTOR);
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.of(user));
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(Optional.of(user));
         when(patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc("phone-lookup", OtpPurpose.PASSWORD_RESET))
                 .thenReturn(Optional.empty());
         when(patientOtpRepository.findAllByPhoneLookupAndPurpose("phone-lookup", OtpPurpose.PASSWORD_RESET))
@@ -285,8 +288,9 @@ class AuthServiceImplTest {
         patient.setPasswordHash(null);
         ForgotPasswordRequest request = new ForgotPasswordRequest();
         request.setPhoneNumber("0363636363");
+        request.setRole(UserRole.PATIENT);
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.of(patient));
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.PATIENT.getId())).thenReturn(Optional.of(patient));
 
         authService.requestPasswordReset(request);
 
@@ -308,7 +312,7 @@ class AuthServiceImplTest {
                 .build();
         VerifyPasswordResetOtpRequest request = verifyPasswordResetOtpRequest();
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.of(user));
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(Optional.of(user));
         when(patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc("phone-lookup", OtpPurpose.PASSWORD_RESET))
                 .thenReturn(Optional.of(otp));
         when(patientDataProtectionService.secureLookup("password-reset:user-id:123456")).thenReturn("otp-hash");
@@ -337,7 +341,7 @@ class AuthServiceImplTest {
                 .expiresAt(Instant.now().plusSeconds(300))
                 .build();
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.of(user));
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(Optional.of(user));
         when(patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc("phone-lookup", OtpPurpose.PASSWORD_RESET))
                 .thenReturn(Optional.of(otp));
         when(patientDataProtectionService.secureLookup("password-reset:user-id:123456")).thenReturn("wrong-hash");
@@ -406,6 +410,7 @@ class AuthServiceImplTest {
     private VerifyPasswordResetOtpRequest verifyPasswordResetOtpRequest() {
         VerifyPasswordResetOtpRequest request = new VerifyPasswordResetOtpRequest();
         request.setPhoneNumber("0363636363");
+        request.setRole(UserRole.DOCTOR);
         request.setCode("123456");
         return request;
     }
@@ -413,6 +418,7 @@ class AuthServiceImplTest {
     private LoginRequest loginRequest() {
         LoginRequest request = new LoginRequest();
         request.setPhoneNumber("0363636363");
+        request.setRole(UserRole.DOCTOR);
         request.setPassword("Validpass1");
         request.setDeviceId("device-id");
         return request;
@@ -424,7 +430,7 @@ class AuthServiceImplTest {
                 .phoneNumber("+84363636363")
                 .passwordHash("password-hash")
                 .fullName("Dr Nguyen")
-                .role(UserRole.DOCTOR)
+                .roleId(UserRole.DOCTOR.name())
                 .status(AccountStatus.ACTIVE)
                 .createdAt(Instant.now())
                 .build();

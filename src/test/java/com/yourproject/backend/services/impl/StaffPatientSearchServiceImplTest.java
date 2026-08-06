@@ -66,7 +66,7 @@ class StaffPatientSearchServiceImplTest {
     private User patient(String id, String fullName) {
         return User.builder()
                 .id(id)
-                .roles(java.util.Set.of(UserRole.PATIENT))
+                .roleId(UserRole.PATIENT.name())
                 .status(AccountStatus.ACTIVE)
                 .fullName(fullName)
                 .phoneNumber("+8490000000" + id)

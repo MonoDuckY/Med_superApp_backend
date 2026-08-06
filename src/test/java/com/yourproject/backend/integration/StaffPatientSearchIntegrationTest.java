@@ -48,7 +48,7 @@ class StaffPatientSearchIntegrationTest extends MongoIntegrationTestBase {
     private User saveNamedPatient(String fullName, String phoneNumber) {
         Instant now = Instant.now();
         User patient = User.builder()
-                .roles(Set.of(UserRole.PATIENT))
+                .roleId(UserRole.PATIENT.name())
                 .status(AccountStatus.ACTIVE)
                 .fullName(fullName)
                 .gender("NONE")
@@ -66,7 +66,7 @@ class StaffPatientSearchIntegrationTest extends MongoIntegrationTestBase {
         String body = mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                         .post("/api/auth/login")
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"" + phoneNumber + "\",\"password\":\"" + password + "\"}"))
+                        .content("{\"phoneNumber\":\"" + phoneNumber + "\",\"role\":\"STAFF\",\"password\":\"" + password + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return com.jayway.jsonpath.JsonPath.read(body, "$.data.accessToken");

@@ -54,7 +54,7 @@ class UserServiceImplTest {
     void createUser_createsDoctorWithNormalizedPhoneNumberAndHashedPassword() {
         CreateUserRequest request = doctorRequest();
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.existsByPhoneLookup("phone-lookup")).thenReturn(false);
+        when(userRepository.existsByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(false);
         when(passwordEncoder.encode("Newabc123!")).thenReturn("bcrypt-hash");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -71,7 +71,7 @@ class UserServiceImplTest {
     void createUser_rejectsDuplicatePhoneNumber() {
         CreateUserRequest request = doctorRequest();
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.existsByPhoneLookup("phone-lookup")).thenReturn(true);
+        when(userRepository.existsByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(true);
 
         assertThrows(ConflictException.class, () -> userService.createUser(request, "admin-id"));
         verify(userRepository, never()).save(any(User.class));
@@ -82,7 +82,7 @@ class UserServiceImplTest {
         CreateUserRequest request = doctorRequest();
         request.setCertificate(null);
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.existsByPhoneLookup("phone-lookup")).thenReturn(false);
+        when(userRepository.existsByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(false);
         when(passwordEncoder.encode("Newabc123!")).thenReturn("bcrypt-hash");
 
         assertThrows(BadRequestException.class, () -> userService.createUser(request, "admin-id"));
@@ -94,7 +94,7 @@ class UserServiceImplTest {
         CreateUserRequest request = patientRequest();
         request.setDateOfBirth(LocalDate.now().plusDays(1));
         when(patientDataProtectionService.phoneLookup("+84912345678")).thenReturn("phone-lookup");
-        when(userRepository.existsByPhoneLookup("phone-lookup")).thenReturn(false);
+        when(userRepository.existsByPhoneLookupAndRoleId("phone-lookup", UserRole.PATIENT.getId())).thenReturn(false);
 
         assertThrows(BadRequestException.class, () -> userService.createUser(request, "admin-id"));
         verify(userRepository, never()).save(any(User.class));
@@ -105,7 +105,7 @@ class UserServiceImplTest {
         CreateUserRequest request = patientRequest();
         request.setPassword(null);
         when(patientDataProtectionService.phoneLookup("+84912345678")).thenReturn("phone-lookup");
-        when(userRepository.existsByPhoneLookup("phone-lookup")).thenReturn(false);
+        when(userRepository.existsByPhoneLookupAndRoleId("phone-lookup", UserRole.PATIENT.getId())).thenReturn(false);
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         User createdUser = userService.createUser(request, "admin-id");
@@ -187,18 +187,19 @@ class UserServiceImplTest {
     @Test
     void findByPhoneNumber_rejectsUnknownPhoneLookup() {
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.empty());
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(Optional.empty());
 
-        assertThrows(UnauthorizedException.class, () -> userService.findByPhoneNumber("0363636363"));
+        assertThrows(UnauthorizedException.class,
+                () -> userService.findByPhoneNumberAndRole("0363636363", UserRole.DOCTOR));
     }
 
     @Test
     void findByPhoneNumber_returnsUserForNormalizedPhoneLookup() {
         User user = activeDoctor();
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.of(user));
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(Optional.of(user));
 
-        assertEquals(user, userService.findByPhoneNumber("0363636363"));
+        assertEquals(user, userService.findByPhoneNumberAndRole("0363636363", UserRole.DOCTOR));
         verify(patientDataProtectionService).phoneLookup("+84363636363");
     }
 
@@ -394,11 +395,11 @@ class UserServiceImplTest {
 
     private void stubPatientPhone() {
         when(patientDataProtectionService.phoneLookup("+84912345678")).thenReturn("phone-lookup");
-        when(userRepository.existsByPhoneLookup("phone-lookup")).thenReturn(false);
+        when(userRepository.existsByPhoneLookupAndRoleId("phone-lookup", UserRole.PATIENT.getId())).thenReturn(false);
     }
 
     private User activeDoctor() {
-        return User.builder().id("user-id").role(UserRole.DOCTOR).status(AccountStatus.ACTIVE)
+        return User.builder().id("user-id").roleId(UserRole.DOCTOR.name()).status(AccountStatus.ACTIVE)
                 .fullName("Dr Nguyen").phoneNumber("+84363636363").phoneLookup("phone-lookup")
                 .passwordHash("password-hash").certificate("Practice certificate").createdAt(Instant.now()).build();
     }

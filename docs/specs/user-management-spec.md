@@ -14,9 +14,10 @@ Toàn bộ `/api/admin/users/**` yêu cầu `ADMIN`.
 | `PATCH` | `/api/admin/users/{userId}` | Cập nhật profile, role/status và password tùy chọn |
 | `PATCH` | `/api/admin/users/{userId}/status` | Toggle `ACTIVE ↔ INACTIVE` |
 
-## Current role rules
+## Role rules
 
-- Request hiện dùng `roles` và yêu cầu ít nhất một role.
+- Request dùng `role` và yêu cầu đúng một role.
+- User lưu `roleId` theo catalog cố định (`1=ADMIN`, `2=DOCTOR`, `3=STAFF`, `4=RESEARCHER`, `5=PATIENT`).
 - Patient-only không cần password và xác thực bằng SMS OTP.
 - Các account khác phải có password hợp lệ.
 - Doctor phải có certificate.
@@ -24,7 +25,7 @@ Toàn bộ `/api/admin/users/**` yêu cầu `ADMIN`.
 
 ## Profile validation
 
-- `phoneNumber` bắt buộc, normalize về `+84` và hiện phải unique toàn hệ thống.
+- `phoneNumber` bắt buộc, normalize về `+84`; cặp `(phoneLookup, roleId)` phải unique.
 - `fullName` bắt buộc.
 - `dateOfBirth` không được ở tương lai.
 - Patient yêu cầu `fullName`, `gender`, `dateOfBirth`, `phoneNumber`.
@@ -33,7 +34,3 @@ Toàn bộ `/api/admin/users/**` yêu cầu `ADMIN`.
 ## Status behavior
 
 Khi chuyển sang `INACTIVE`, access/refresh token hash bị xóa. Account inactive không login, refresh hoặc gọi endpoint bảo vệ được.
-
-## Planned ERD migration
-
-ERD mới yêu cầu một role/User và cho phone trùng giữa role. Khi triển khai, request/response phải đổi `roles` thành `role`, repository lookup phải dùng `(phoneLookup, role)` và MongoDB phải dùng compound unique index tương ứng.

@@ -10,17 +10,17 @@ import com.yourproject.backend.models.User;
 
 public interface UserRepository extends MongoRepository<User, String> {
     java.util.Optional<User> findByRefreshTokenHash(String refreshTokenHash);
-    Optional<User> findByPhoneLookup(String phoneLookup);
+    Optional<User> findByPhoneLookupAndRoleId(String phoneLookup, String roleId);
 
-    Optional<User> findByPhoneNumber(String phoneNumber);
+    Optional<User> findByPhoneNumberAndRoleId(String phoneNumber, String roleId);
 
-    boolean existsByPhoneLookup(String phoneLookup);
+    boolean existsByPhoneLookupAndRoleId(String phoneLookup, String roleId);
 
     boolean existsByPatientIdLookup(String patientIdLookup);
 
-    @Query("{'status': 'ACTIVE', '$or': [{'roles': 'DOCTOR'}, {'role': 'DOCTOR'}]}")
+    @Query("{'status': 'ACTIVE', 'roleId': 'DOCTOR'}")
     List<User> findActiveDoctors();
 
-    @Query("{'status': 'ACTIVE', '$or': [{'roles': 'PATIENT'}, {'role': 'PATIENT'}]}")
+    @Query("{'status': 'ACTIVE', 'roleId': 'PATIENT'}")
     List<User> findActivePatients();
 }

@@ -1,7 +1,6 @@
 package com.yourproject.backend.dtos.requests;
 
 import java.time.LocalDate;
-import java.util.Set;
 
 import com.yourproject.backend.models.UserRole;
 
@@ -16,16 +15,7 @@ public class CreateUserRequest {
     private String password;
 
     @NotNull(message = "Roles are required.")
-    @Size(min = 1, message = "At least one role is required.")
-    private Set<UserRole> roles;
-
-    public UserRole getRole() {
-        return roles == null || roles.isEmpty() ? null : roles.iterator().next();
-    }
-
-    public void setRole(UserRole role) {
-        roles = role == null ? null : Set.of(role);
-    }
+    private UserRole role;
 
     @Size(max = 100, message = "Full name must not exceed 100 characters.")
     private String fullName;

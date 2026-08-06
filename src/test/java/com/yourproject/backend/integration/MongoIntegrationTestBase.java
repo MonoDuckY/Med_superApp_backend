@@ -126,7 +126,7 @@ public abstract class MongoIntegrationTestBase {
         Instant now = Instant.now();
         return userRepository.save(User.builder()
                 .fullName("Dr Integration")
-                .role(UserRole.DOCTOR)
+                .roleId(UserRole.DOCTOR.getId())
                 .status(AccountStatus.ACTIVE)
                 .phoneNumber(normalizedPhone)
                 .phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
@@ -142,7 +142,7 @@ public abstract class MongoIntegrationTestBase {
         Instant now = Instant.now();
         return userRepository.save(User.builder()
                 .fullName("Admin Integration")
-                .role(UserRole.ADMIN)
+                .roleId(UserRole.ADMIN.getId())
                 .status(AccountStatus.ACTIVE)
                 .phoneNumber(normalizedPhone)
                 .phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
@@ -157,7 +157,7 @@ public abstract class MongoIntegrationTestBase {
         Instant now = Instant.now();
         return userRepository.save(User.builder()
                 .fullName("Staff Integration")
-                .role(UserRole.STAFF)
+                .roleId(UserRole.STAFF.getId())
                 .status(AccountStatus.ACTIVE)
                 .phoneNumber(normalizedPhone)
                 .phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
@@ -176,7 +176,7 @@ public abstract class MongoIntegrationTestBase {
         Instant now = Instant.now();
         User patient = User.builder()
                 .fullName("Patient Integration")
-                .role(UserRole.PATIENT)
+                .roleId(UserRole.PATIENT.getId())
                 .status(AccountStatus.ACTIVE)
                 .gender("NONE")
                 .dateOfBirth(java.time.LocalDate.of(1995, 1, 1))

@@ -68,8 +68,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse requestPatientOtp(RequestPatientOtpRequest request) {
-        User user=userService.findByPhoneNumber(request.getPhoneNumber()); user=userService.getActiveUserById(user.getId());
-        if(!user.getRoles().contains(UserRole.PATIENT)) throw new BadRequestException("Only patient accounts can use SMS OTP.");
+        User user=userService.findByPhoneNumberAndRole(request.getPhoneNumber(), UserRole.PATIENT); user=userService.getActiveUserById(user.getId());
         if (isTrustedDevice(user, request.getDeviceId())) { userService.recordSuccessfulLogin(user); return issueTokens(user, request.getDeviceId()); }
         String phoneLookup=patientDataProtectionService.phoneLookup(com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()));
         patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc(phoneLookup, OtpPurpose.PATIENT_LOGIN).ifPresent(previous->{if(previous.getCreatedAt().plusSeconds(otpResendCooldownSeconds).isAfter(Instant.now())) throw new BadRequestException("Please wait before requesting another OTP.");});
@@ -90,8 +89,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse verifyPatientOtp(VerifyPatientOtpRequest request) {
-        User user=userService.findByPhoneNumber(request.getPhoneNumber()); user=userService.getActiveUserById(user.getId());
-        if(!user.getRoles().contains(UserRole.PATIENT)) throw new BadRequestException("Only patient accounts can use SMS OTP.");
+        User user=userService.findByPhoneNumberAndRole(request.getPhoneNumber(), UserRole.PATIENT); user=userService.getActiveUserById(user.getId());
         String lookup=patientDataProtectionService.phoneLookup(com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()));
         PatientOtp otp=patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc(lookup, OtpPurpose.PATIENT_LOGIN).orElseThrow(()->new UnauthorizedException("OTP is invalid or expired."));
         if(otp.getConsumedAt()!=null||otp.getExpiresAt().isBefore(Instant.now())||otp.getAttempts()>=otpMaxAttempts) throw new UnauthorizedException("OTP is invalid or expired.");
@@ -103,7 +101,7 @@ public class AuthServiceImpl implements AuthService {
     public void requestPasswordReset(ForgotPasswordRequest request) {
         String normalizedPhone = PhoneNumberNormalizer.normalize(request.getPhoneNumber());
         String phoneLookup = patientDataProtectionService.phoneLookup(normalizedPhone);
-        User user = userRepository.findByPhoneLookup(phoneLookup).orElse(null);
+        User user = userRepository.findByPhoneLookupAndRoleId(phoneLookup, request.getRole().getId()).orElse(null);
         if (!isPasswordResetEligible(user)) {
             return;
         }
@@ -155,7 +153,7 @@ public class AuthServiceImpl implements AuthService {
     public PasswordResetTokenResponse verifyPasswordResetOtp(VerifyPasswordResetOtpRequest request) {
         String normalizedPhone = PhoneNumberNormalizer.normalize(request.getPhoneNumber());
         String phoneLookup = patientDataProtectionService.phoneLookup(normalizedPhone);
-        User user = userRepository.findByPhoneLookup(phoneLookup)
+        User user = userRepository.findByPhoneLookupAndRoleId(phoneLookup, request.getRole().getId())
                 .filter(this::isPasswordResetEligible)
                 .orElseThrow(() -> new UnauthorizedException("Password reset OTP is invalid or expired."));
         PatientOtp otp = patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc(phoneLookup, OtpPurpose.PASSWORD_RESET)
@@ -232,9 +230,9 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public AuthResponse login(LoginRequest request) {
         validateLoginRequest(request);
-        User user = userService.findByPhoneNumber(request.getPhoneNumber());
+        User user = userService.findByPhoneNumberAndRole(request.getPhoneNumber(), request.getRole());
         user = userService.getActiveUserById(user.getId());
-        if (user.getRoles().size() == 1 && user.getRoles().contains(UserRole.PATIENT)) {
+        if (user.getRole() == UserRole.PATIENT) {
             throw new BadRequestException("Patient accounts must sign in using SMS OTP.");
         }
         if (user.getLockedUntil()!=null && user.getLockedUntil().isAfter(Instant.now())) throw new UnauthorizedException("Account is temporarily locked. Please try again later.");
@@ -319,6 +317,9 @@ public class AuthServiceImpl implements AuthService {
         if (request == null || request.getPhoneNumber() == null || request.getPhoneNumber().isBlank()) {
             throw new BadRequestException("Phone number is required.");
         }
+        if (request.getRole() == null) {
+            throw new BadRequestException("Role is required.");
+        }
         if (request.getPassword() == null || request.getPassword().isBlank()) {
             throw new BadRequestException("Password is required.");
         }
@@ -326,7 +327,7 @@ public class AuthServiceImpl implements AuthService {
     private boolean isPasswordResetEligible(User user) {
         return user != null
                 && user.getStatus() == AccountStatus.ACTIVE
-                && !(user.getRoles().size() == 1 && user.getRoles().contains(UserRole.PATIENT));
+                && user.getRole() != UserRole.PATIENT;
     }
     private boolean isTrustedDevice(User user,String deviceId){return deviceId!=null&&!deviceId.isBlank()&&deviceId.trim().equals(user.getDeviceId());}
     private void trustDevice(User user,String deviceId){if(deviceId==null||deviceId.isBlank())return;user.setDeviceId(deviceId.trim());userRepository.save(user);}

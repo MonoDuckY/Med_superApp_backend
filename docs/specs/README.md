@@ -36,4 +36,4 @@ Quy trình hoàn thành task:
 
 ## Current known divergence
 
-ERD cập nhật ngày 2026-08-05 đề xuất `MedicalRecord`, collection `Role`, một role cho mỗi User và phone có thể trùng theo role. Những thay đổi này chưa được triển khai trong code tại thời điểm tạo bộ spec này. Spec hiện tại mô tả hành vi code đang chạy; khi migration được triển khai phải cập nhật lại các file liên quan.
+ERD cập nhật ngày 2026-08-05 còn khác code ở migration `VitalSign` sang `MedicalRecord`. Collection `roles`, một role cho mỗi User và phone trùng giữa các role đã được triển khai.
