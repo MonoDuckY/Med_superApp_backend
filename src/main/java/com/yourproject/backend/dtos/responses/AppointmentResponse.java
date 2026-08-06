@@ -25,7 +25,6 @@ public class AppointmentResponse {
     private WorkSlotResponse slot;
     private ClinicRoomResponse room;
     private AppointmentStatus status;
-    private String diagnosis;
     private Instant requestedAt;
     private String cancelledBy;
     private Instant cancelledAt;
@@ -60,7 +59,6 @@ public class AppointmentResponse {
                 .slot(slot == null ? null : WorkSlotResponse.from(slot))
                 .room(room == null ? null : ClinicRoomResponse.from(room))
                 .status(appointment.getStatus())
-                .diagnosis(appointment.getDiagnosis())
                 .requestedAt(appointment.getRequestedAt())
                 .cancelledBy(appointment.getCancelledBy())
                 .cancelledAt(appointment.getCancelledAt())

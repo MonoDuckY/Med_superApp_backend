@@ -16,7 +16,14 @@
 | `PATCH` | `/api/doctor/work-schedules/{submissionId}` | Sửa submission pending |
 | `DELETE` | `/api/doctor/work-schedules/{submissionId}` | Hủy submission theo rule hiện tại |
 
-`session` là `MORNING`, `AFTERNOON` hoặc `FULL_TIME`; session chỉ dùng để chọn các WorkSlot theo giờ, không lưu như field nghiệp vụ chính.
+`session` là `MORNING`, `AFTERNOON`, `FULL_TIME` hoặc `NIGHT`; session chỉ dùng để chọn các WorkSlot theo giờ, không lưu như field nghiệp vụ chính.
+
+- `MORNING`: 08:00–12:00, gồm 8 slot.
+- `AFTERNOON`: 13:00–17:00, gồm 8 slot.
+- `FULL_TIME`: toàn bộ 16 slot ca ngày, không bao gồm ca đêm.
+- `NIGHT`: 17:00 của `workDate` đến 08:00 ngày kế tiếp, gồm 30 slot 30 phút.
+- Catalog gồm `Slot1`–`Slot46`; `Slot17`–`Slot46` là các slot ca đêm.
+- Với slot ca đêm có `startTime` từ 00:00 đến trước 08:00, thời điểm thực tế được tính trên `workDate + 1 ngày`.
 
 ## Staff endpoints
 

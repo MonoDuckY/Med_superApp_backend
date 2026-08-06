@@ -121,6 +121,31 @@ class WorkScheduleServiceImplTest {
     }
 
     @Test
+    void submitNightCreatesThirtySlotsFromFivePmUntilEightAmNextDay() {
+        List<WorkSlot> nightSlots = new ArrayList<>();
+        for (int index = 0; index < 30; index++) {
+            LocalTime startTime = LocalTime.of(17, 0).plusMinutes(index * 30L);
+            nightSlots.add(WorkSlot.builder()
+                    .id("night-slot-" + (index + 1))
+                    .name("Slot" + (index + 17))
+                    .startTime(startTime)
+                    .endTime(startTime.plusMinutes(30))
+                    .build());
+        }
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+        when(clinicRoomRepository.findById("room-1")).thenReturn(Optional.of(room));
+        when(workSlotRepository.findAllByOrderByStartTimeAsc()).thenReturn(nightSlots);
+        when(doctorWorkSlotRepository.findAllByWorkDateAndSlotIdIn(any(), any())).thenReturn(List.of());
+        when(doctorWorkSlotRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<DoctorWorkSlot> result = service.submit("doctor-1", request(WorkSession.NIGHT));
+
+        assertEquals(30, result.size());
+        assertEquals("night-slot-1", result.get(0).getSlotId());
+        assertEquals("night-slot-30", result.get(29).getSlotId());
+    }
+
+    @Test
     void submitRejectsExistingDoctorOrRoomConflict() {
         when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
         when(clinicRoomRepository.findById("room-1")).thenReturn(Optional.of(room));

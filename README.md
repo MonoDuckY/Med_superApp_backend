@@ -120,10 +120,10 @@ Khuyến nghị lưu token:
 | `GET` | `/api/auth/me` | Authenticated | Lấy profile account đang đăng nhập. |
 | `GET` | `/api/staff/patients/search?name={name}&n={count}` | `STAFF` | Tìm tối đa `n` bệnh nhân có tên khớp gần nhất. |
 | `GET` | `/api/doctor/appointments` | `DOCTOR` | Lấy các appointment thuộc Doctor hiện tại. |
-| `GET` | `/api/doctor/appointments/{appointmentId}` | `DOCTOR` | Lấy hồ sơ khám, vital signs và prescriptions. |
+| `GET` | `/api/doctor/appointments/{appointmentId}` | `DOCTOR` | Lấy hồ sơ khám, MedicalRecord và prescriptions. |
 | `PATCH` | `/api/doctor/appointments/{appointmentId}/start` | `DOCTOR` | Chuyển appointment sang `IN_PROGRESS`. |
-| `PATCH` | `/api/doctor/appointments/{appointmentId}/clinical-information` | `DOCTOR` | Cập nhật sức khỏe tổng quát và vital signs. |
-| `PATCH` | `/api/doctor/appointments/{appointmentId}/diagnosis` | `DOCTOR` | Cập nhật diagnosis của appointment. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/clinical-information` | `DOCTOR` | Cập nhật sức khỏe tổng quát và MedicalRecord. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/diagnosis` | `DOCTOR` | Cập nhật diagnosis trong MedicalRecord. |
 | `POST` | `/api/doctor/appointments/{appointmentId}/prescriptions` | `DOCTOR` | Tạo prescription cùng medicine schedules. |
 | `PATCH` | `/api/doctor/appointments/{appointmentId}/prescriptions/{prescriptionId}` | `DOCTOR` | Cập nhật prescription và thay thế schedules. |
 | `PATCH` | `/api/doctor/appointments/{appointmentId}/complete` | `DOCTOR` | Hoàn thành examination. |

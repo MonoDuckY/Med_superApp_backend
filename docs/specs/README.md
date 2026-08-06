@@ -11,7 +11,7 @@ Thư mục này là nguồn đặc tả kỹ thuật cho hành vi backend đang 
 | `user-management-spec.md` | Admin quản lý account và hồ sơ User |
 | `scheduling-spec.md` | Room, work slot, Doctor schedule và Staff approval |
 | `appointment-spec.md` | Patient/Staff booking, confirm, reject, cancel và reschedule |
-| `clinical-medication-spec.md` | Doctor examination, vital signs, diagnosis, prescription và medicine schedule |
+| `clinical-medication-spec.md` | Doctor examination, MedicalRecord, diagnosis, prescription và medicine schedule |
 | `sms-gateway-spec.md` | Firebase và Android SMS Gateway |
 | `data-protection-spec.md` | BCrypt, AES-256-GCM, HMAC lookup và token hashing |
 | `database-spec.md` | Các MongoDB collection và liên kết logic hiện tại |
@@ -36,4 +36,4 @@ Quy trình hoàn thành task:
 
 ## Current known divergence
 
-ERD cập nhật ngày 2026-08-05 còn khác code ở migration `VitalSign` sang `MedicalRecord`. Collection `roles`, một role cho mỗi User và phone trùng giữa các role đã được triển khai.
+Collection `roles`, một role cho mỗi User, phone trùng giữa các role và migration `VitalSign` sang `MedicalRecord` đã được triển khai.

@@ -18,9 +18,9 @@ import com.yourproject.backend.dtos.requests.UpsertPrescriptionRequest;
 import com.yourproject.backend.dtos.responses.AppointmentResponse;
 import com.yourproject.backend.dtos.responses.DoctorExaminationResponse;
 import com.yourproject.backend.dtos.responses.MedicineScheduleResponse;
+import com.yourproject.backend.dtos.responses.MedicalRecordResponse;
 import com.yourproject.backend.dtos.responses.PrescriptionResponse;
 import com.yourproject.backend.dtos.responses.UserResponse;
-import com.yourproject.backend.dtos.responses.VitalSignResponse;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ConflictException;
 import com.yourproject.backend.exceptions.ForbiddenException;
@@ -31,16 +31,16 @@ import com.yourproject.backend.models.DoctorWorkSlot;
 import com.yourproject.backend.models.DoctorWorkSlotStatus;
 import com.yourproject.backend.models.MedicineSchedule;
 import com.yourproject.backend.models.MedicineScheduleStatus;
+import com.yourproject.backend.models.MedicalRecord;
 import com.yourproject.backend.models.Prescription;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
-import com.yourproject.backend.models.VitalSign;
 import com.yourproject.backend.repositories.AppointmentRepository;
 import com.yourproject.backend.repositories.DoctorWorkSlotRepository;
 import com.yourproject.backend.repositories.MedicineScheduleRepository;
+import com.yourproject.backend.repositories.MedicalRecordRepository;
 import com.yourproject.backend.repositories.PrescriptionRepository;
 import com.yourproject.backend.repositories.UserRepository;
-import com.yourproject.backend.repositories.VitalSignRepository;
 import com.yourproject.backend.services.AppointmentService;
 import com.yourproject.backend.services.ClinicalMedicationService;
 import com.yourproject.backend.services.PatientDataProtectionService;
@@ -55,7 +55,7 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
     private final DoctorWorkSlotRepository doctorWorkSlotRepository;
     private final PrescriptionRepository prescriptionRepository;
     private final MedicineScheduleRepository medicineScheduleRepository;
-    private final VitalSignRepository vitalSignRepository;
+    private final MedicalRecordRepository medicalRecordRepository;
     private final UserRepository userRepository;
     private final UserService userService;
     private final AppointmentService appointmentService;
@@ -115,18 +115,14 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
         patientDataProtectionService.encryptPatientFields(patient);
         userRepository.save(patient);
 
-        if (request.getVitalSigns() != null) {
-            vitalSignRepository.deleteAllByAppointmentId(appointmentId);
-            List<VitalSign> vitalSigns = request.getVitalSigns().stream()
-                    .map(item -> VitalSign.builder()
-                            .appointmentId(appointmentId)
-                            .vitalName(item.getVitalName().trim())
-                            .vitalNumber(item.getVitalNumber().trim())
-                            .vitalUnit(trimToNull(item.getVitalUnit()))
-                            .build())
-                    .toList();
-            vitalSignRepository.saveAll(vitalSigns);
-        }
+        MedicalRecord medicalRecord = getOrCreateMedicalRecord(appointmentId);
+        setIfPresent(request.getNote(), medicalRecord::setNote);
+        setIfPresent(request.getBloodPressure(), medicalRecord::setBloodPressure);
+        if (request.getHeartRate() != null) medicalRecord.setHeartRate(request.getHeartRate());
+        if (request.getBreathingRate() != null) medicalRecord.setBreathingRate(request.getBreathingRate());
+        if (request.getBodyTemperature() != null) medicalRecord.setBodyTemperature(request.getBodyTemperature());
+        if (request.getBloodLipids() != null) medicalRecord.setBloodLipids(request.getBloodLipids());
+        medicalRecordRepository.save(medicalRecord);
         appointment.setUpdatedAt(Instant.now());
         appointmentRepository.save(appointment);
         return toExaminationResponse(appointment);
@@ -136,7 +132,9 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
     public DoctorExaminationResponse updateDiagnosis(
             String doctorId, String appointmentId, UpdateDiagnosisRequest request) {
         Appointment appointment = requireMutableExamination(doctorId, appointmentId);
-        appointment.setDiagnosis(request.getDiagnosis().trim());
+        MedicalRecord medicalRecord = getOrCreateMedicalRecord(appointmentId);
+        medicalRecord.setDiagnosis(request.getDiagnosis().trim());
+        medicalRecordRepository.save(medicalRecord);
         appointment.setUpdatedAt(Instant.now());
         return toExaminationResponse(appointmentRepository.save(appointment));
     }
@@ -146,9 +144,10 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
     public PrescriptionResponse createPrescription(
             String doctorId, String appointmentId, UpsertPrescriptionRequest request) {
         requireMutableExamination(doctorId, appointmentId);
+        MedicalRecord medicalRecord = medicalRecordRepository.save(getOrCreateMedicalRecord(appointmentId));
         validateSchedules(request.getMedicineSchedules());
         Prescription prescription = prescriptionRepository.save(Prescription.builder()
-                .appointmentId(appointmentId)
+                .medicalRecordId(medicalRecord.getId())
                 .content(trimToNull(request.getContent()))
                 .build());
         List<MedicineSchedule> schedules = saveSchedules(prescription.getId(), request.getMedicineSchedules());
@@ -165,7 +164,9 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
         requireMutableExamination(doctorId, appointmentId);
         Prescription prescription = prescriptionRepository.findById(prescriptionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Prescription was not found."));
-        if (!appointmentId.equals(prescription.getAppointmentId())) {
+        MedicalRecord medicalRecord = medicalRecordRepository.findByAppointmentId(appointmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Medical record was not found."));
+        if (!medicalRecord.getId().equals(prescription.getMedicalRecordId())) {
             throw new ForbiddenException("Prescription does not belong to this appointment.");
         }
         validateSchedules(request.getMedicineSchedules());
@@ -180,13 +181,16 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
     @Transactional
     public DoctorExaminationResponse completeExamination(String doctorId, String appointmentId) {
         Appointment appointment = requireMutableExamination(doctorId, appointmentId);
-        if (trimToNull(appointment.getDiagnosis()) == null) {
+        MedicalRecord medicalRecord = medicalRecordRepository.findByAppointmentId(appointmentId)
+                .orElseThrow(() -> new BadRequestException("Medical record is required before completing an examination."));
+        if (trimToNull(medicalRecord.getDiagnosis()) == null) {
             throw new BadRequestException("Diagnosis is required before completing an examination.");
         }
-        if (vitalSignRepository.findAllByAppointmentIdOrderByVitalNameAsc(appointmentId).isEmpty()) {
+        if (!hasClinicalMeasurements(medicalRecord)) {
             throw new BadRequestException("Clinical vital signs are required before completing an examination.");
         }
-        List<Prescription> prescriptions = prescriptionRepository.findAllByAppointmentIdOrderByIdAsc(appointmentId);
+        List<Prescription> prescriptions = prescriptionRepository
+                .findAllByMedicalRecordIdOrderByIdAsc(medicalRecord.getId());
         if (prescriptions.isEmpty()) {
             throw new BadRequestException("At least one prescription is required before completing an examination.");
         }
@@ -206,7 +210,10 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
                 .filter(appointment -> appointment.getStatus() == AppointmentStatus.COMPLETED)
                 .map(Appointment::getId).toList();
         if (appointmentIds.isEmpty()) return List.of();
-        List<String> prescriptionIds = prescriptionRepository.findAllByAppointmentIdIn(appointmentIds).stream()
+        List<String> medicalRecordIds = medicalRecordRepository.findAllByAppointmentIdIn(appointmentIds).stream()
+                .map(MedicalRecord::getId).toList();
+        if (medicalRecordIds.isEmpty()) return List.of();
+        List<String> prescriptionIds = prescriptionRepository.findAllByMedicalRecordIdIn(medicalRecordIds).stream()
                 .map(Prescription::getId).toList();
         if (prescriptionIds.isEmpty()) return List.of();
         return medicineScheduleRepository.findAllByPrescriptionIdInOrderByScheduledAtAsc(prescriptionIds)
@@ -243,15 +250,17 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
 
     private DoctorExaminationResponse toExaminationResponse(Appointment appointment) {
         User patient = requirePatientForAppointment(appointment);
-        List<Prescription> prescriptions = prescriptionRepository.findAllByAppointmentIdOrderByIdAsc(appointment.getId());
+        MedicalRecord medicalRecord = medicalRecordRepository.findByAppointmentId(appointment.getId()).orElse(null);
+        List<Prescription> prescriptions = medicalRecord == null
+                ? List.of()
+                : prescriptionRepository.findAllByMedicalRecordIdOrderByIdAsc(medicalRecord.getId());
         var schedulesByPrescription = medicineScheduleRepository
                 .findAllByPrescriptionIdInOrderByScheduledAtAsc(prescriptions.stream().map(Prescription::getId).toList())
                 .stream().collect(Collectors.groupingBy(MedicineSchedule::getPrescriptionId));
         return DoctorExaminationResponse.builder()
                 .appointment(appointmentService.toResponse(appointment))
                 .patient(UserResponse.from(patient, patientDataProtectionService))
-                .vitalSigns(vitalSignRepository.findAllByAppointmentIdOrderByVitalNameAsc(appointment.getId())
-                        .stream().map(VitalSignResponse::from).toList())
+                .medicalRecord(MedicalRecordResponse.from(medicalRecord))
                 .prescriptions(prescriptions.stream()
                         .map(prescription -> PrescriptionResponse.from(
                                 prescription,
@@ -299,7 +308,9 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
                 .orElseThrow(() -> new ResourceNotFoundException("Medicine schedule was not found."));
         Prescription prescription = prescriptionRepository.findById(schedule.getPrescriptionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Prescription was not found."));
-        Appointment appointment = appointmentRepository.findById(prescription.getAppointmentId())
+        MedicalRecord medicalRecord = medicalRecordRepository.findById(prescription.getMedicalRecordId())
+                .orElseThrow(() -> new ResourceNotFoundException("Medical record was not found."));
+        Appointment appointment = appointmentRepository.findById(medicalRecord.getAppointmentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment was not found."));
         String ownerId = trimToNull(appointment.getPatientId()) != null
                 ? appointment.getPatientId()
@@ -353,6 +364,19 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
         if (patient.getRole() != UserRole.PATIENT) {
             throw new ForbiddenException("Only patients can access medicine schedules.");
         }
+    }
+
+    private MedicalRecord getOrCreateMedicalRecord(String appointmentId) {
+        return medicalRecordRepository.findByAppointmentId(appointmentId)
+                .orElseGet(() -> MedicalRecord.builder().appointmentId(appointmentId).build());
+    }
+
+    private boolean hasClinicalMeasurements(MedicalRecord medicalRecord) {
+        return trimToNull(medicalRecord.getBloodPressure()) != null
+                || medicalRecord.getHeartRate() != null
+                || medicalRecord.getBreathingRate() != null
+                || medicalRecord.getBodyTemperature() != null
+                || medicalRecord.getBloodLipids() != null;
     }
 
     private void setIfPresent(String value, Consumer<String> setter) {

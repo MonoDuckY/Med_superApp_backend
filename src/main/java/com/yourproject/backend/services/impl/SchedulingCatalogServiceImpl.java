@@ -28,7 +28,9 @@ public class SchedulingCatalogServiceImpl implements SchedulingCatalogService {
 
     @Override
     public List<WorkSlot> getActiveWorkSlots() {
-        return workSlotRepository.findAllByOrderByStartTimeAsc();
+        return workSlotRepository.findAllByOrderByStartTimeAsc().stream()
+                .sorted(java.util.Comparator.comparingInt(this::slotNumber))
+                .toList();
     }
 
     @Override
@@ -57,5 +59,13 @@ public class SchedulingCatalogServiceImpl implements SchedulingCatalogService {
                 .createdAt(now)
                 .updatedAt(now)
                 .build());
+    }
+
+    private int slotNumber(WorkSlot slot) {
+        try {
+            return Integer.parseInt(slot.getName().substring("Slot".length()));
+        } catch (RuntimeException exception) {
+            return Integer.MAX_VALUE;
+        }
     }
 }

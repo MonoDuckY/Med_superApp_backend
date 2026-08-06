@@ -46,6 +46,7 @@ import com.yourproject.backend.repositories.ClinicRoomRepository;
 import com.yourproject.backend.services.AppointmentService;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.services.UserService;
+import com.yourproject.backend.utils.WorkSlotTimeUtils;
 
 import lombok.RequiredArgsConstructor;
 
@@ -103,7 +104,8 @@ public class AppointmentServiceImpl implements AppointmentService {
                     WorkSlot definition = availableDefinitions.get(slot.getSlotId());
                     return definition != null
                             && definition.getStartTime() != null
-                            && definition.getEndTime() != null;
+                            && definition.getEndTime() != null
+                            && !WorkSlotTimeUtils.isNight(definition);
                 })
                 .filter(slot -> {
                     Instant startAt = toInstant(
@@ -145,6 +147,11 @@ public class AppointmentServiceImpl implements AppointmentService {
         User doctor = userService.getActiveUserById(currentSlot.getDoctorId());
         if (doctor.getRole() != UserRole.DOCTOR) {
             throw new ConflictException("The selected work slot does not belong to an active doctor.");
+        }
+        WorkSlot definition = workSlotRepository.findById(currentSlot.getSlotId())
+                .orElseThrow(() -> new ResourceNotFoundException("Work slot definition was not found."));
+        if (WorkSlotTimeUtils.isNight(definition)) {
+            throw new ForbiddenException("Night-shift appointments can only be created by staff.");
         }
         validateBookableSlot(currentSlot);
         boolean alreadyBookedThatDay = appointmentRepository.findAllForPatient(patient.getId()).stream()
@@ -541,7 +548,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     private Instant toInstant(LocalDate workDate, java.time.LocalTime time) {
-        return workDate.atTime(time).atZone(HOSPITAL_ZONE).toInstant();
+        return WorkSlotTimeUtils.resolveStart(workDate, time).atZone(HOSPITAL_ZONE).toInstant();
     }
 
     private User requirePatient(String userId) {

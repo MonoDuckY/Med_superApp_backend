@@ -10,6 +10,6 @@ import lombok.Value;
 public class DoctorExaminationResponse {
     AppointmentResponse appointment;
     UserResponse patient;
-    List<VitalSignResponse> vitalSigns;
+    MedicalRecordResponse medicalRecord;
     List<PrescriptionResponse> prescriptions;
 }

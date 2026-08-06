@@ -139,6 +139,38 @@ class AppointmentServiceImplTest {
     }
 
     @Test
+    void patientCannotBookNightShiftSlotDirectly() {
+        when(userService.getActiveUserById("patient-user-1")).thenReturn(patient);
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+        when(doctorWorkSlotRepository.findById("work-slot-1")).thenReturn(Optional.of(availableSlot));
+        when(workSlotRepository.findById("slot-1")).thenReturn(Optional.of(WorkSlot.builder()
+                .id("slot-1")
+                .startTime(java.time.LocalTime.of(17, 0))
+                .endTime(java.time.LocalTime.of(17, 30))
+                .build()));
+        BookAppointmentRequest request = new BookAppointmentRequest();
+        request.setDoctorWorkSlotId("work-slot-1");
+
+        assertThrows(ForbiddenException.class, () -> service.book("patient-user-1", request));
+    }
+
+    @Test
+    void patientAvailableSlotSearchExcludesNightShiftSlots() {
+        when(userService.getActiveUserById("patient-user-1")).thenReturn(patient);
+        when(doctorWorkSlotRepository.findAllByStatusOrderByWorkDateAscSlotIdAsc(
+                DoctorWorkSlotStatus.AVAILABLE)).thenReturn(List.of(availableSlot));
+        when(workSlotRepository.findAllById(List.of("slot-1"))).thenReturn(List.of(WorkSlot.builder()
+                .id("slot-1")
+                .startTime(java.time.LocalTime.of(17, 0))
+                .endTime(java.time.LocalTime.of(17, 30))
+                .build()));
+
+        List<DoctorWorkSlot> result = service.getAvailableSlots("patient-user-1", null, null);
+
+        assertEquals(0, result.size());
+    }
+
+    @Test
     void bookRejectsSecondActiveAppointmentOnSameDay() {
         when(userService.getActiveUserById("patient-user-1")).thenReturn(patient);
         when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
@@ -395,6 +427,32 @@ class AppointmentServiceImplTest {
 
         assertEquals(AppointmentStatus.CONFIRMED, result.getStatus());
         assertEquals("patient-user-1", result.getPatientId());
+        assertEquals("work-slot-1", result.getDoctorWorkSlotId());
+    }
+
+    @Test
+    void staffCanCreateAppointmentForNightShiftSlot() {
+        StaffCreateAppointmentRequest request = new StaffCreateAppointmentRequest();
+        request.setPatientId("patient-user-1");
+        request.setDoctorWorkSlotId("work-slot-1");
+        DoctorWorkSlot claimed = copySlot(DoctorWorkSlotStatus.BOOKED);
+        when(userService.getActiveUserById("staff-1")).thenReturn(staff);
+        when(userService.getActiveUserById("patient-user-1")).thenReturn(patient);
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+        when(doctorWorkSlotRepository.findById("work-slot-1")).thenReturn(Optional.of(availableSlot));
+        when(workSlotRepository.findById("slot-1")).thenReturn(Optional.of(WorkSlot.builder()
+                .id("slot-1")
+                .startTime(java.time.LocalTime.of(1, 0))
+                .endTime(java.time.LocalTime.of(1, 30))
+                .build()));
+        when(appointmentRepository.findAllForPatient("patient-user-1")).thenReturn(List.of());
+        when(mongoTemplate.findAndModify(any(Query.class), any(Update.class),
+                any(FindAndModifyOptions.class), eq(DoctorWorkSlot.class))).thenReturn(claimed);
+        when(appointmentRepository.save(any(Appointment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Appointment result = service.createByStaff("staff-1", request);
+
+        assertEquals(AppointmentStatus.CONFIRMED, result.getStatus());
         assertEquals("work-slot-1", result.getDoctorWorkSlotId());
     }
 

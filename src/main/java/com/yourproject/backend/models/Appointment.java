@@ -52,7 +52,6 @@ public class Appointment {
     @Indexed
     private AppointmentStatus status;
 
-    private String diagnosis;
     @Transient
     private String note;
     private Instant requestedAt;

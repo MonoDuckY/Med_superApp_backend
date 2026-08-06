@@ -48,7 +48,7 @@ class StaffPatientSearchIntegrationTest extends MongoIntegrationTestBase {
     private User saveNamedPatient(String fullName, String phoneNumber) {
         Instant now = Instant.now();
         User patient = User.builder()
-                .roleId(UserRole.PATIENT.name())
+                .roleId(UserRole.PATIENT.getId())
                 .status(AccountStatus.ACTIVE)
                 .fullName(fullName)
                 .gender("NONE")

@@ -4,8 +4,7 @@ import java.util.Optional;
 import java.util.List;
 
 import org.springframework.data.mongodb.repository.MongoRepository;
-import org.springframework.data.mongodb.repository.Query;
-
+import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.User;
 
 public interface UserRepository extends MongoRepository<User, String> {
@@ -18,9 +17,5 @@ public interface UserRepository extends MongoRepository<User, String> {
 
     boolean existsByPatientIdLookup(String patientIdLookup);
 
-    @Query("{'status': 'ACTIVE', 'roleId': 'DOCTOR'}")
-    List<User> findActiveDoctors();
-
-    @Query("{'status': 'ACTIVE', 'roleId': 'PATIENT'}")
-    List<User> findActivePatients();
+    List<User> findAllByStatusAndRoleId(AccountStatus status, String roleId);
 }

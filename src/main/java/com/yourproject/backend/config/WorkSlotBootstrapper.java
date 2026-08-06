@@ -21,12 +21,20 @@ public class WorkSlotBootstrapper implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        for (int index = 0; index < 16; index++) {
+        for (int index = 0; index < 46; index++) {
             String name = "Slot" + (index + 1);
-            WorkSession session = index < 8 ? WorkSession.MORNING : WorkSession.AFTERNOON;
-            LocalTime startTime = index < 8
-                    ? LocalTime.of(8, 0).plusMinutes(index * 30L)
-                    : LocalTime.of(13, 0).plusMinutes((index - 8) * 30L);
+            WorkSession session;
+            LocalTime startTime;
+            if (index < 8) {
+                session = WorkSession.MORNING;
+                startTime = LocalTime.of(8, 0).plusMinutes(index * 30L);
+            } else if (index < 16) {
+                session = WorkSession.AFTERNOON;
+                startTime = LocalTime.of(13, 0).plusMinutes((index - 8) * 30L);
+            } else {
+                session = WorkSession.NIGHT;
+                startTime = LocalTime.of(17, 0).plusMinutes((index - 16) * 30L);
+            }
             LocalTime endTime = startTime.plusMinutes(30);
 
             WorkSlot slot = workSlotRepository.findByName(name).orElseGet(WorkSlot::new);

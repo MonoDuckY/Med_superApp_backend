@@ -29,7 +29,7 @@ class UserProfileIntegrationTest extends MongoIntegrationTestBase {
     @Test
     void authenticatedUserRetrievesOwnProfile() throws Exception {
         String normalizedPhone = "+84912345678";
-        userRepository.save(User.builder().fullName("Dr Profile").roleId(UserRole.DOCTOR.name()).status(AccountStatus.ACTIVE)
+        userRepository.save(User.builder().fullName("Dr Profile").roleId(UserRole.DOCTOR.getId()).status(AccountStatus.ACTIVE)
                 .phoneNumber(normalizedPhone).phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
                 .passwordHash(passwordEncoder.encode("Password123!")).certificate("Practice certificate").build());
 

@@ -32,7 +32,7 @@ class StaffPatientSearchServiceImplTest {
 
     @Test
     void searchByName_normalizesVietnameseNamesAndReturnsClosestLimitedResults() {
-        when(userRepository.findActivePatients()).thenReturn(List.of(
+        when(userRepository.findAllByStatusAndRoleId(AccountStatus.ACTIVE, UserRole.PATIENT.getId())).thenReturn(List.of(
                 patient("3", "Nguyen Van Binh"),
                 patient("1", "Nguyễn Văn An"),
                 patient("2", "Nguyễn Văn Anh"),
@@ -47,7 +47,7 @@ class StaffPatientSearchServiceImplTest {
 
     @Test
     void searchByName_supportsTypoMatching() {
-        when(userRepository.findActivePatients()).thenReturn(List.of(
+        when(userRepository.findAllByStatusAndRoleId(AccountStatus.ACTIVE, UserRole.PATIENT.getId())).thenReturn(List.of(
                 patient("1", "Nguyễn Văn An"),
                 patient("2", "Trần Minh Đức")));
 

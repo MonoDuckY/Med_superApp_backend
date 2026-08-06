@@ -40,6 +40,7 @@ import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.services.WorkScheduleService;
+import com.yourproject.backend.utils.WorkSlotTimeUtils;
 
 import lombok.RequiredArgsConstructor;
 
@@ -288,12 +289,17 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
 
     private List<WorkSlot> getSlots(WorkSession session) {
         List<WorkSlot> slots = workSlotRepository.findAllByOrderByStartTimeAsc();
-        if (session == WorkSession.FULL_TIME) return slots;
         LocalTime noon = LocalTime.NOON;
-        return slots.stream()
-                .filter(slot -> session == WorkSession.MORNING
-                        ? slot.getStartTime().isBefore(noon)
-                        : !slot.getStartTime().isBefore(noon))
+        return slots.stream().filter(slot -> switch (session) {
+                    case MORNING -> !WorkSlotTimeUtils.isNight(slot)
+                            && slot.getStartTime().isBefore(noon);
+                    case AFTERNOON -> !WorkSlotTimeUtils.isNight(slot)
+                            && !slot.getStartTime().isBefore(noon);
+                    case FULL_TIME -> !WorkSlotTimeUtils.isNight(slot);
+                    case NIGHT -> WorkSlotTimeUtils.isNight(slot);
+                })
+                .sorted(java.util.Comparator.comparing(slot ->
+                        WorkSlotTimeUtils.resolveStart(LocalDate.of(2000, 1, 1), slot.getStartTime())))
                 .toList();
     }
 
@@ -369,7 +375,9 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     }
 
     private Instant toInstant(LocalDate workDate, WorkSlot slot) {
-        return workDate.atTime(slot.getStartTime()).atZone(HOSPITAL_ZONE).toInstant();
+        return WorkSlotTimeUtils.resolveStart(workDate, slot.getStartTime())
+                .atZone(HOSPITAL_ZONE)
+                .toInstant();
     }
 
     private Instant startInstant(DoctorWorkSlot doctorWorkSlot) {

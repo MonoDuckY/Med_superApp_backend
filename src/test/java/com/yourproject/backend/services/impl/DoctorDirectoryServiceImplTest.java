@@ -12,7 +12,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.yourproject.backend.dtos.responses.PatientDoctorResponse;
+import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.User;
+import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.repositories.UserRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,7 +37,8 @@ class DoctorDirectoryServiceImplTest {
                 .fullName("Nguyen Van A")
                 .phoneNumber("+84911111111")
                 .build();
-        when(userRepository.findActiveDoctors()).thenReturn(List.of(second, first));
+        when(userRepository.findAllByStatusAndRoleId(AccountStatus.ACTIVE, UserRole.DOCTOR.getId()))
+                .thenReturn(List.of(second, first));
 
         List<PatientDoctorResponse> result = service.getActiveDoctors();
 

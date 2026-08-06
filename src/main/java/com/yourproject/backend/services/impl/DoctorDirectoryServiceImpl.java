@@ -6,6 +6,8 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 
 import com.yourproject.backend.dtos.responses.PatientDoctorResponse;
+import com.yourproject.backend.models.AccountStatus;
+import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.services.DoctorDirectoryService;
 
@@ -18,7 +20,7 @@ public class DoctorDirectoryServiceImpl implements DoctorDirectoryService {
 
     @Override
     public List<PatientDoctorResponse> getActiveDoctors() {
-        return userRepository.findActiveDoctors().stream()
+        return userRepository.findAllByStatusAndRoleId(AccountStatus.ACTIVE, UserRole.DOCTOR.getId()).stream()
                 .map(PatientDoctorResponse::from)
                 .sorted(Comparator.comparing(
                         PatientDoctorResponse::getFullName,

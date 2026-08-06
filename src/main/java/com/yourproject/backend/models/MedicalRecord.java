@@ -9,17 +9,23 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-@Document(collection = "vital_signs")
+@Document(collection = "medical_records")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class VitalSign {
+public class MedicalRecord {
     @Id
     private String id;
-    private String vitalName;
-    private String vitalNumber;
-    private String vitalUnit;
-    @Indexed
+
+    @Indexed(unique = true)
     private String appointmentId;
+
+    private String diagnosis;
+    private String note;
+    private String bloodPressure;
+    private Integer heartRate;
+    private Integer breathingRate;
+    private Double bodyTemperature;
+    private Double bloodLipids;
 }

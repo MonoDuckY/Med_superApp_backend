@@ -18,6 +18,6 @@ public class Prescription {
     @Id
     private String id;
     @Indexed
-    private String appointmentId;
+    private String medicalRecordId;
     private String content;
 }

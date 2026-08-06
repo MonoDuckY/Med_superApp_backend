@@ -8,6 +8,6 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import com.yourproject.backend.models.Prescription;
 
 public interface PrescriptionRepository extends MongoRepository<Prescription, String> {
-    List<Prescription> findAllByAppointmentIdOrderByIdAsc(String appointmentId);
-    List<Prescription> findAllByAppointmentIdIn(Collection<String> appointmentIds);
+    List<Prescription> findAllByMedicalRecordIdOrderByIdAsc(String medicalRecordId);
+    List<Prescription> findAllByMedicalRecordIdIn(Collection<String> medicalRecordIds);
 }

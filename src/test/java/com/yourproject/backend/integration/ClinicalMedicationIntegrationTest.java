@@ -48,21 +48,23 @@ class ClinicalMedicationIntegrationTest extends MongoIntegrationTestBase {
                                   "height":170,
                                   "weight":65,
                                   "bloodType":"O+",
-                                  "vitalSigns":[
-                                    {"vitalName":"BLOOD_PRESSURE","vitalNumber":"120/80","vitalUnit":"mmHg"},
-                                    {"vitalName":"TEMPERATURE","vitalNumber":"37.2","vitalUnit":"C"}
-                                  ]
+                                  "note":"Initial examination",
+                                  "bloodPressure":"120/80",
+                                  "heartRate":78,
+                                  "breathingRate":18,
+                                  "bodyTemperature":37.2,
+                                  "bloodLipids":4.5
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.vitalSigns[0].vitalNumber").exists());
+                .andExpect(jsonPath("$.data.medicalRecord.bloodPressure").value("120/80"));
 
         mockMvc.perform(patch("/api/doctor/appointments/{id}/diagnosis", appointment.getId())
                         .header("Authorization", "Bearer " + doctorToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"diagnosis\":\"Acute cough\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.appointment.diagnosis").value("Acute cough"));
+                .andExpect(jsonPath("$.data.medicalRecord.diagnosis").value("Acute cough"));
 
         Instant firstTime = Instant.now().plusSeconds(7200);
         Instant secondTime = Instant.now().plusSeconds(10800);
@@ -112,7 +114,7 @@ class ClinicalMedicationIntegrationTest extends MongoIntegrationTestBase {
 
         assertEquals(MedicineScheduleStatus.TAKEN,
                 medicineScheduleRepository.findById(scheduleId).orElseThrow().getStatus());
-        assertNotNull(vitalSignRepository.findAllByAppointmentIdOrderByVitalNameAsc(appointment.getId()));
+        assertNotNull(medicalRecordRepository.findByAppointmentId(appointment.getId()).orElseThrow());
     }
 
     @Test

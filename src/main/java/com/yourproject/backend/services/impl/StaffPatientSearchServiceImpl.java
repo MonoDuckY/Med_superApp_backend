@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import com.yourproject.backend.dtos.responses.StaffPatientSearchResponse;
 import com.yourproject.backend.dtos.responses.UserResponse;
 import com.yourproject.backend.exceptions.BadRequestException;
+import com.yourproject.backend.models.AccountStatus;
+import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.services.StaffPatientSearchService;
@@ -34,7 +36,7 @@ public class StaffPatientSearchServiceImpl implements StaffPatientSearchService 
             throw new BadRequestException("Result count must be between 1 and 50.");
         }
 
-        return userRepository.findActivePatients().stream()
+        return userRepository.findAllByStatusAndRoleId(AccountStatus.ACTIVE, UserRole.PATIENT.getId()).stream()
                 .map(user -> UserResponse.from(user, patientDataProtectionService))
                 .filter(user -> user.getFullName() != null && !user.getFullName().isBlank())
                 .map(user -> new RankedPatient(

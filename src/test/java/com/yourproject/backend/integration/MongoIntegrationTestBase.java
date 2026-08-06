@@ -24,7 +24,7 @@ import com.yourproject.backend.repositories.DoctorWorkSlotRepository;
 import com.yourproject.backend.repositories.SmsGatewayDeviceRepository;
 import com.yourproject.backend.repositories.SmsGatewayJobRepository;
 import com.yourproject.backend.repositories.UserRepository;
-import com.yourproject.backend.repositories.VitalSignRepository;
+import com.yourproject.backend.repositories.MedicalRecordRepository;
 import com.yourproject.backend.repositories.PrescriptionRepository;
 import com.yourproject.backend.repositories.MedicineScheduleRepository;
 import com.yourproject.backend.services.FcmGatewayService;
@@ -46,7 +46,7 @@ public abstract class MongoIntegrationTestBase {
     protected UserRepository userRepository;
 
     @Autowired
-    protected VitalSignRepository vitalSignRepository;
+    protected MedicalRecordRepository medicalRecordRepository;
 
     @Autowired
     protected PrescriptionRepository prescriptionRepository;
@@ -113,7 +113,7 @@ public abstract class MongoIntegrationTestBase {
         appointmentRepository.deleteAll();
         medicineScheduleRepository.deleteAll();
         prescriptionRepository.deleteAll();
-        vitalSignRepository.deleteAll();
+        medicalRecordRepository.deleteAll();
         doctorWorkSlotRepository.deleteAll();
         clinicRoomRepository.deleteAll();
         patientOtpRepository.deleteAll();

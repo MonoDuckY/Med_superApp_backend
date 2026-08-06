@@ -12,14 +12,14 @@ import lombok.Value;
 @Builder
 public class PrescriptionResponse {
     String id;
-    String appointmentId;
+    String medicalRecordId;
     String content;
     List<MedicineScheduleResponse> medicineSchedules;
 
     public static PrescriptionResponse from(Prescription prescription, List<MedicineSchedule> schedules) {
         return PrescriptionResponse.builder()
                 .id(prescription.getId())
-                .appointmentId(prescription.getAppointmentId())
+                .medicalRecordId(prescription.getMedicalRecordId())
                 .content(prescription.getContent())
                 .medicineSchedules(schedules.stream().map(MedicineScheduleResponse::from).toList())
                 .build();

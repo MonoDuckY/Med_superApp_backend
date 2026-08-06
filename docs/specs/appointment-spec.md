@@ -24,6 +24,8 @@
 ## Business rules
 
 - Patient chỉ đặt DoctorWorkSlot `AVAILABLE`.
+- Patient không nhìn thấy và không được đặt trực tiếp DoctorWorkSlot ca đêm.
+- Staff được phép tạo hoặc reschedule appointment vào DoctorWorkSlot ca đêm bằng các API Staff hiện có.
 - Booking tạo appointment `PENDING_STAFF_CONFIRMATION` và giữ slot ở `SCHEDULING`.
 - Staff confirm chuyển appointment sang `CONFIRMED` và slot sang `BOOKED`.
 - Reject/cancel giải phóng slot khi phù hợp.
