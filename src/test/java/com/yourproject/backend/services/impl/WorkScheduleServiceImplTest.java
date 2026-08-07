@@ -206,6 +206,37 @@ class WorkScheduleServiceImplTest {
     }
 
     @Test
+    void doctorGetsAllDoctorSchedulesWithinDateRangeAndStatus() {
+        LocalDate from = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        LocalDate to = from.plusDays(7);
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+        when(doctorWorkSlotRepository.findAllByWorkDateBetweenAndStatusOrderByWorkDateAscSlotIdAsc(
+                from, to, DoctorWorkSlotStatus.AVAILABLE)).thenReturn(List.of(pendingSlot()));
+
+        List<DoctorWorkSlot> result = service.getAllDoctorSchedules(
+                "doctor-1", from, to, DoctorWorkSlotStatus.AVAILABLE);
+
+        assertEquals(1, result.size());
+    }
+
+    @Test
+    void getAllDoctorSchedulesRejectsInvalidDateRange() {
+        LocalDate from = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+
+        assertThrows(BadRequestException.class, () -> service.getAllDoctorSchedules(
+                "doctor-1", from, from.minusDays(1), null));
+    }
+
+    @Test
+    void nonDoctorCannotGetAllDoctorSchedules() {
+        when(userService.getActiveUserById("staff-1")).thenReturn(staff);
+
+        assertThrows(ForbiddenException.class, () -> service.getAllDoctorSchedules(
+                "staff-1", null, null, null));
+    }
+
+    @Test
     void staffUserCanUseStaffScheduleOperations() {
         User multiRoleUser = User.builder().id("staff-user")
                 .roleId(UserRole.STAFF.name())

@@ -6,6 +6,7 @@ All notable backend changes are documented in this file. This project follows a 
 
 ### Added
 
+- Doctor-wide work-schedule search endpoint at `GET /api/doctor/work-schedules/all`.
 - Staff doctor directory endpoint at `GET /api/staff/doctors`.
 - Doctor night work session with 30-minute slots from 17:00 through 08:00 the following day.
 - Role catalog collection seeded with stable IDs: `1=ADMIN`, `2=DOCTOR`, `3=STAFF`, `4=RESEARCHER`, `5=PATIENT`.

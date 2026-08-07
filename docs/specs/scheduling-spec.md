@@ -12,6 +12,7 @@
 | --- | --- | --- |
 | `GET` | `/api/doctor/work-schedules/options` | Lấy slot và room active |
 | `GET` | `/api/doctor/work-schedules` | Lấy submission theo khoảng ngày |
+| `GET` | `/api/doctor/work-schedules/all` | Doctor xem lịch của mọi Doctor theo `from`, `to`, `status` |
 | `POST` | `/api/doctor/work-schedules` | Submit `workDate`, `session`, `roomId`, `note` |
 | `PATCH` | `/api/doctor/work-schedules/{submissionId}` | Sửa submission pending |
 | `DELETE` | `/api/doctor/work-schedules/{submissionId}` | Hủy submission theo rule hiện tại |

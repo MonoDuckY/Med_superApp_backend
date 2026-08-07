@@ -122,6 +122,7 @@ Khuyến nghị lưu token:
 | `GET` | `/api/patient/doctors` | `PATIENT` | Lấy danh sách Doctor active. |
 | `GET` | `/api/staff/doctors` | `STAFF` | Lấy danh sách Doctor active cho Staff. |
 | `GET` | `/api/doctor/appointments` | `DOCTOR` | Lấy các appointment thuộc Doctor hiện tại. |
+| `GET` | `/api/doctor/work-schedules/all` | `DOCTOR` | Lấy lịch làm việc của mọi Doctor; hỗ trợ `from`, `to`, `status`. |
 | `GET` | `/api/doctor/appointments/{appointmentId}` | `DOCTOR` | Lấy hồ sơ khám, MedicalRecord và prescriptions. |
 | `PATCH` | `/api/doctor/appointments/{appointmentId}/start` | `DOCTOR` | Chuyển appointment sang `IN_PROGRESS`. |
 | `PATCH` | `/api/doctor/appointments/{appointmentId}/clinical-information` | `DOCTOR` | Cập nhật sức khỏe tổng quát và MedicalRecord. |

@@ -130,6 +130,25 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     }
 
     @Override
+    public List<DoctorWorkSlot> getAllDoctorSchedules(
+            String requestingDoctorId,
+            LocalDate from,
+            LocalDate to,
+            DoctorWorkSlotStatus status) {
+        requireRole(requestingDoctorId, UserRole.DOCTOR, "Only doctors can view all doctor work schedules.");
+        LocalDate effectiveFrom = from == null ? LocalDate.now(HOSPITAL_ZONE) : from;
+        LocalDate effectiveTo = to == null ? effectiveFrom.plusDays(30) : to;
+        if (effectiveTo.isBefore(effectiveFrom)) {
+            throw new BadRequestException("The end date cannot be before the start date.");
+        }
+        return status == null
+                ? doctorWorkSlotRepository.findAllByWorkDateBetweenOrderByWorkDateAscSlotIdAsc(
+                        effectiveFrom, effectiveTo)
+                : doctorWorkSlotRepository.findAllByWorkDateBetweenAndStatusOrderByWorkDateAscSlotIdAsc(
+                        effectiveFrom, effectiveTo, status);
+    }
+
+    @Override
     public List<DoctorWorkSlot> getPendingSchedules(String staffId) {
         requireStaff(staffId);
         return doctorWorkSlotRepository.findAllByStatusOrderBySubmittedAtAsc(DoctorWorkSlotStatus.PENDING);
