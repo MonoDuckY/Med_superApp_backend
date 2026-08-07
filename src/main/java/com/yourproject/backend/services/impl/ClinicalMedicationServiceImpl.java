@@ -1,6 +1,8 @@
 package com.yourproject.backend.services.impl;
 
 import java.time.Instant;
+import java.time.ZoneId;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -21,6 +23,7 @@ import com.yourproject.backend.dtos.responses.MedicineScheduleResponse;
 import com.yourproject.backend.dtos.responses.MedicalRecordResponse;
 import com.yourproject.backend.dtos.responses.PrescriptionResponse;
 import com.yourproject.backend.dtos.responses.UserResponse;
+import com.yourproject.backend.dtos.responses.UserSummaryResponse;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ConflictException;
 import com.yourproject.backend.exceptions.ForbiddenException;
@@ -51,6 +54,7 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class ClinicalMedicationServiceImpl implements ClinicalMedicationService {
+    private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private final AppointmentRepository appointmentRepository;
     private final DoctorWorkSlotRepository doctorWorkSlotRepository;
     private final PrescriptionRepository prescriptionRepository;
@@ -78,6 +82,28 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
     public DoctorExaminationResponse getDoctorExamination(String doctorId, String appointmentId) {
         Appointment appointment = requireDoctorAppointment(doctorId, appointmentId);
         return toExaminationResponse(appointment);
+    }
+
+    @Override
+    public List<UserSummaryResponse> getDoctorPatients(String doctorId) {
+        requireDoctor(doctorId);
+        LinkedHashMap<String, UserSummaryResponse> patients = new LinkedHashMap<>();
+        for (Appointment appointment : findDoctorAppointments(doctorId)) {
+            User patient = requirePatientForAppointment(appointment);
+            patients.putIfAbsent(
+                    patient.getId(),
+                    UserSummaryResponse.from(patient, patientDataProtectionService));
+        }
+        return List.copyOf(patients.values());
+    }
+
+    @Override
+    public List<DoctorExaminationResponse> getPatientMedicalRecordHistory(String doctorId, String patientId) {
+        requireDoctor(doctorId);
+        requirePatient(patientId);
+        return appointmentRepository.findAllForPatient(patientId).stream()
+                .map(this::toExaminationResponse)
+                .toList();
     }
 
     @Override
@@ -230,6 +256,10 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
         if (!request.getScheduledAt().isAfter(Instant.now())) {
             throw new BadRequestException("Medicine schedule time must be in the future.");
         }
+        if (!schedule.getScheduledAt().atZone(VIETNAM_ZONE).toLocalDate()
+                .equals(request.getScheduledAt().atZone(VIETNAM_ZONE).toLocalDate())) {
+            throw new BadRequestException("Medicine schedule time must remain on the same calendar day.");
+        }
         if (medicineScheduleRepository.existsByPrescriptionIdAndMedicineNameAndDosageAndScheduledAt(
                 schedule.getPrescriptionId(), schedule.getMedicineName(), schedule.getDosage(), request.getScheduledAt())) {
             throw new ConflictException("The same medicine schedule already exists at the selected time.");
@@ -295,11 +325,23 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
     }
 
     private User requirePatientForAppointment(Appointment appointment) {
-        String patientId = trimToNull(appointment.getPatientId()) != null
-                ? appointment.getPatientId()
-                : appointment.getPatientUserId();
+        String patientId = resolvePatientId(appointment);
         if (patientId == null) throw new ResourceNotFoundException("Appointment patient was not found.");
         return userService.getActiveUserById(patientId);
+    }
+
+    private List<Appointment> findDoctorAppointments(String doctorId) {
+        List<String> workSlotIds = doctorWorkSlotRepository.findAllByDoctorIdOrderByWorkDateDescSlotIdAsc(doctorId)
+                .stream().map(DoctorWorkSlot::getId).toList();
+        return workSlotIds.isEmpty()
+                ? List.of()
+                : appointmentRepository.findAllByDoctorWorkSlotIdInOrderByRequestedAtDesc(workSlotIds);
+    }
+
+    private String resolvePatientId(Appointment appointment) {
+        return trimToNull(appointment.getPatientId()) != null
+                ? appointment.getPatientId()
+                : appointment.getPatientUserId();
     }
 
     private MedicineSchedule requirePatientSchedule(String patientId, String scheduleId) {

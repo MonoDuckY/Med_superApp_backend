@@ -6,6 +6,7 @@ All notable backend changes are documented in this file. This project follows a 
 
 ### Added
 
+- Doctor Patient directory and cross-doctor Patient medical-history endpoints.
 - HMAC-backed citizen-identification lookup and startup backfill for existing users.
 - Doctor-wide work-schedule search endpoint at `GET /api/doctor/work-schedules/all`.
 - Staff doctor directory endpoint at `GET /api/staff/doctors`.
@@ -18,6 +19,8 @@ All notable backend changes are documented in this file. This project follows a 
 
 ### Changed
 
+- Patient medicine-schedule rescheduling must remain on the original Vietnam calendar day.
+- Doctor Patient medical history now includes all of the Patient's appointments, including appointments handled by other Doctors.
 - Startup migration links legacy prescriptions using `appointmentId` to the new MedicalRecord schema.
 - Admin User GET and Staff Patient search support phone-number and citizen-identification filters.
 - Doctor work-schedule responses now include the resolved WorkSlot object for every `slotId`.

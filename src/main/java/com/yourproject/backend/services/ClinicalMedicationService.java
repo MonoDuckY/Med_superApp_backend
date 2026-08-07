@@ -10,11 +10,14 @@ import com.yourproject.backend.dtos.responses.AppointmentResponse;
 import com.yourproject.backend.dtos.responses.DoctorExaminationResponse;
 import com.yourproject.backend.dtos.responses.MedicineScheduleResponse;
 import com.yourproject.backend.dtos.responses.PrescriptionResponse;
+import com.yourproject.backend.dtos.responses.UserSummaryResponse;
 import com.yourproject.backend.models.AppointmentStatus;
 
 public interface ClinicalMedicationService {
     List<AppointmentResponse> getDoctorAppointments(String doctorId, AppointmentStatus status);
     DoctorExaminationResponse getDoctorExamination(String doctorId, String appointmentId);
+    List<UserSummaryResponse> getDoctorPatients(String doctorId);
+    List<DoctorExaminationResponse> getPatientMedicalRecordHistory(String doctorId, String patientId);
     DoctorExaminationResponse startExamination(String doctorId, String appointmentId);
     DoctorExaminationResponse updateClinicalInformation(
             String doctorId, String appointmentId, UpdateClinicalInformationRequest request);

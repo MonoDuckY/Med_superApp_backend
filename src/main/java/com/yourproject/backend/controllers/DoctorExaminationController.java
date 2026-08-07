@@ -22,6 +22,7 @@ import com.yourproject.backend.dtos.responses.ApiResponse;
 import com.yourproject.backend.dtos.responses.AppointmentResponse;
 import com.yourproject.backend.dtos.responses.DoctorExaminationResponse;
 import com.yourproject.backend.dtos.responses.PrescriptionResponse;
+import com.yourproject.backend.dtos.responses.UserSummaryResponse;
 import com.yourproject.backend.models.AppointmentStatus;
 import com.yourproject.backend.services.ClinicalMedicationService;
 
@@ -51,6 +52,22 @@ public class DoctorExaminationController {
         return ResponseEntity.ok(ApiResponse.success(
                 "Examination information retrieved successfully.",
                 clinicalMedicationService.getDoctorExamination(authentication.getName(), appointmentId)));
+    }
+
+    @GetMapping("/patients")
+    public ResponseEntity<ApiResponse<List<UserSummaryResponse>>> getPatients(Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Doctor patients retrieved successfully.",
+                clinicalMedicationService.getDoctorPatients(authentication.getName())));
+    }
+
+    @GetMapping("/patients/{patientId}/medical-records")
+    public ResponseEntity<ApiResponse<List<DoctorExaminationResponse>>> getPatientMedicalRecordHistory(
+            Authentication authentication,
+            @PathVariable String patientId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Patient medical record history retrieved successfully.",
+                clinicalMedicationService.getPatientMedicalRecordHistory(authentication.getName(), patientId)));
     }
 
     @PatchMapping("/{appointmentId}/start")
