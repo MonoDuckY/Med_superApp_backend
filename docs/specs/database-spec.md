@@ -24,6 +24,7 @@ Quan hệ là manual reference bằng string/ObjectId; MongoDB không áp dụng
 ## Important indexes
 
 - User có unique compound index `(phoneLookup, roleId)`, cho phép cùng phone ở các role khác nhau.
+- User có index `citizenIdentificationLookup` để query CCCD đã mã hóa.
 - Role có unique index trên `roleName`.
 - MedicalRecord có unique index `appointmentId`.
 - Prescription có index `medicalRecordId`.

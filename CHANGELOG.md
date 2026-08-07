@@ -6,6 +6,7 @@ All notable backend changes are documented in this file. This project follows a 
 
 ### Added
 
+- HMAC-backed citizen-identification lookup and startup backfill for existing users.
 - Doctor-wide work-schedule search endpoint at `GET /api/doctor/work-schedules/all`.
 - Staff doctor directory endpoint at `GET /api/staff/doctors`.
 - Doctor night work session with 30-minute slots from 17:00 through 08:00 the following day.
@@ -17,6 +18,8 @@ All notable backend changes are documented in this file. This project follows a 
 
 ### Changed
 
+- Startup migration links legacy prescriptions using `appointmentId` to the new MedicalRecord schema.
+- Admin User GET and Staff Patient search support phone-number and citizen-identification filters.
 - Doctor work-schedule responses now include the resolved WorkSlot object for every `slotId`.
 - Doctor directory and Staff patient search now query the fixed numeric role IDs instead of legacy role names.
 - Startup migration converts legacy User `roleId` names to the fixed numeric IDs.

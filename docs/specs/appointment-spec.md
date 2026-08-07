@@ -15,6 +15,7 @@
 | Method | Endpoint | Chức năng |
 | --- | --- | --- |
 | `GET` | `/api/staff/doctors` | Lấy danh sách Doctor active cho Staff |
+| `GET` | `/api/staff/patients/search` | Tìm Patient bằng `name`, `phoneNumber` hoặc `citizenIdentificationCode` |
 | `GET` | `/api/staff/scheduling/appointments/pending` | Lấy appointment pending |
 | `GET` | `/api/staff/scheduling/appointments` | Lọc appointment theo status |
 | `PATCH` | `/api/staff/scheduling/appointments/{id}/decision` | Confirm/reject appointment |

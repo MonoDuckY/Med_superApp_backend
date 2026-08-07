@@ -24,10 +24,12 @@ public class StaffPatientController {
 
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<List<StaffPatientSearchResponse>>> searchPatients(
-            @RequestParam String name,
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String phoneNumber,
+            @RequestParam(required = false) String citizenIdentificationCode,
             @RequestParam(defaultValue = "10") int n) {
         return ResponseEntity.ok(ApiResponse.success(
                 "Matching patients retrieved successfully.",
-                staffPatientSearchService.searchByName(name, n)));
+                staffPatientSearchService.search(name, phoneNumber, citizenIdentificationCode, n)));
     }
 }

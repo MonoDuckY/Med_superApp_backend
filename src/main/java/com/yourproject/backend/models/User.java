@@ -51,6 +51,8 @@ public class User {
     private String phoneNumber;
 
     private String phoneLookup;
+    @Indexed
+    private String citizenIdentificationLookup;
     @Transient
     private String patientIdLookup;
 

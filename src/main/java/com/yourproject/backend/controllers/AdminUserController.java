@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import com.yourproject.backend.dtos.requests.CreateUserRequest;
 import com.yourproject.backend.dtos.requests.UpdateUserRequest;
@@ -20,6 +21,7 @@ import com.yourproject.backend.dtos.responses.ApiResponse;
 import com.yourproject.backend.dtos.responses.UserResponse;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.services.PatientDataProtectionService;
+import com.yourproject.backend.models.UserRole;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -41,8 +43,12 @@ public class AdminUserController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<UserResponse>>> getUsers() {
-        List<UserResponse> users = userService.getAllUsers().stream().map(user -> UserResponse.from(user, patientDataProtectionService)).toList();
+    public ResponseEntity<ApiResponse<List<UserResponse>>> getUsers(
+            @RequestParam(required = false) String phoneNumber,
+            @RequestParam(required = false) String citizenIdentificationCode,
+            @RequestParam(required = false) UserRole role) {
+        List<UserResponse> users = userService.searchUsers(phoneNumber, citizenIdentificationCode, role).stream()
+                .map(user -> UserResponse.from(user, patientDataProtectionService)).toList();
         return ResponseEntity.ok(ApiResponse.success("User accounts retrieved successfully.", users));
     }
 

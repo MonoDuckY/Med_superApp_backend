@@ -19,6 +19,8 @@ public interface UserService {
 
     List<User> getAllUsers();
 
+    List<User> searchUsers(String phoneNumber, String citizenIdentificationCode, UserRole role);
+
     User updateUser(String userId, UpdateUserRequest request, String updatedBy);
 
     User toggleUserStatus(String userId, String requestedBy);

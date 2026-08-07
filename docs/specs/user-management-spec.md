@@ -9,7 +9,7 @@ Toàn bộ `/api/admin/users/**` yêu cầu `ADMIN`.
 | Method | Endpoint | Chức năng |
 | --- | --- | --- |
 | `POST` | `/api/admin/users` | Tạo account active |
-| `GET` | `/api/admin/users` | Lấy toàn bộ account |
+| `GET` | `/api/admin/users` | Lấy account; hỗ trợ `phoneNumber`, `citizenIdentificationCode`, `role` |
 | `GET` | `/api/admin/users/{userId}` | Lấy account theo ID |
 | `PATCH` | `/api/admin/users/{userId}` | Cập nhật profile, role/status và password tùy chọn |
 | `PATCH` | `/api/admin/users/{userId}/status` | Toggle `ACTIVE ↔ INACTIVE` |
@@ -30,6 +30,8 @@ Toàn bộ `/api/admin/users/**` yêu cầu `ADMIN`.
 - `dateOfBirth` không được ở tương lai.
 - Patient yêu cầu `fullName`, `gender`, `dateOfBirth`, `phoneNumber`.
 - Password dài 8–50, có lowercase, uppercase và ít nhất một digit hoặc special character.
+
+Phone được tìm bằng `phoneLookup`; CCCD được tìm bằng `citizenIdentificationLookup`. Cả hai là HMAC lookup nên Patient vẫn có thể được query dù dữ liệu gốc lưu AES-GCM ciphertext.
 
 ## Status behavior
 

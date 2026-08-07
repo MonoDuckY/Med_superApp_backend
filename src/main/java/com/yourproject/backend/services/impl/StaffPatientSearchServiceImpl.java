@@ -15,6 +15,7 @@ import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.services.StaffPatientSearchService;
+import com.yourproject.backend.utils.PhoneNumberNormalizer;
 
 import lombok.RequiredArgsConstructor;
 
@@ -28,23 +29,50 @@ public class StaffPatientSearchServiceImpl implements StaffPatientSearchService 
 
     @Override
     public List<StaffPatientSearchResponse> searchByName(String name, int limit) {
+        return search(name, null, null, limit);
+    }
+
+    @Override
+    public List<StaffPatientSearchResponse> search(
+            String name,
+            String phoneNumber,
+            String citizenIdentificationCode,
+            int limit) {
         String query = normalize(name);
-        if (query.isBlank()) {
-            throw new BadRequestException("Patient name is required.");
+        boolean hasPhone = phoneNumber != null && !phoneNumber.isBlank();
+        boolean hasCitizenId = citizenIdentificationCode != null && !citizenIdentificationCode.isBlank();
+        if (query.isBlank() && !hasPhone && !hasCitizenId) {
+            throw new BadRequestException("Name, phone number, or citizen identification code is required.");
         }
         if (limit < 1 || limit > MAX_RESULTS) {
             throw new BadRequestException("Result count must be between 1 and 50.");
         }
 
-        return userRepository.findAllByStatusAndRoleId(AccountStatus.ACTIVE, UserRole.PATIENT.getId()).stream()
+        String citizenLookup = hasCitizenId
+                ? patientDataProtectionService.secureLookup(
+                        "citizen-id:" + citizenIdentificationCode.trim().toUpperCase(Locale.ROOT))
+                : null;
+        List<com.yourproject.backend.models.User> candidates = hasPhone
+                ? userRepository.findAllByPhoneLookup(patientDataProtectionService.phoneLookup(
+                        PhoneNumberNormalizer.normalize(phoneNumber)))
+                : hasCitizenId
+                        ? userRepository.findAllByCitizenIdentificationLookup(citizenLookup)
+                        : userRepository.findAllByStatusAndRoleId(AccountStatus.ACTIVE, UserRole.PATIENT.getId());
+
+        return candidates.stream()
+                .filter(user -> user.getStatus() == AccountStatus.ACTIVE && user.getRole() == UserRole.PATIENT)
+                .filter(user -> !hasCitizenId || citizenLookup.equals(user.getCitizenIdentificationLookup()))
                 .map(user -> UserResponse.from(user, patientDataProtectionService))
-                .filter(user -> user.getFullName() != null && !user.getFullName().isBlank())
+                .filter(user -> query.isBlank()
+                        || (user.getFullName() != null && !user.getFullName().isBlank()))
                 .map(user -> new RankedPatient(
                         StaffPatientSearchResponse.builder()
                                 .id(user.getId())
                                 .fullName(user.getFullName())
+                                .phoneNumber(user.getPhoneNumber())
+                                .citizenIdentificationCode(user.getCitizenIdentificationCode())
                                 .build(),
-                        rank(query, normalize(user.getFullName()))))
+                        query.isBlank() ? new MatchRank(0, 0, 0) : rank(query, normalize(user.getFullName()))))
                 .sorted(Comparator.comparing(RankedPatient::rank)
                         .thenComparing(item -> normalize(item.patient().getFullName()))
                         .thenComparing(item -> item.patient().getId()))

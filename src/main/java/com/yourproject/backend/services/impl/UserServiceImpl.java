@@ -62,6 +62,7 @@ public class UserServiceImpl implements UserService {
                 .phoneLookup(phoneLookup)
                 .address(trimToNull(request.getAddress()))
                 .citizenIdentificationCode(trimToNull(request.getCitizenIdentificationCode()))
+                .citizenIdentificationLookup(citizenLookup(request.getCitizenIdentificationCode()))
                 .healthInsuranceCode(trimToNull(request.getHealthInsuranceCode()))
                 .certificate(trimToNull(request.getCertificate()))
                 .createdAt(now)
@@ -103,6 +104,28 @@ public class UserServiceImpl implements UserService {
     @Override
     public List<User> getAllUsers() {
         return userRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt"));
+    }
+
+    @Override
+    public List<User> searchUsers(String phoneNumber, String citizenIdentificationCode, UserRole role) {
+        boolean hasPhone = phoneNumber != null && !phoneNumber.isBlank();
+        boolean hasCitizenId = citizenIdentificationCode != null && !citizenIdentificationCode.isBlank();
+        if (!hasPhone && !hasCitizenId) {
+            return getAllUsers().stream()
+                    .filter(user -> role == null || user.getRole() == role)
+                    .toList();
+        }
+
+        List<User> candidates = hasPhone
+                ? userRepository.findAllByPhoneLookup(patientDataProtectionService.phoneLookup(
+                        PhoneNumberNormalizer.normalize(phoneNumber)))
+                : userRepository.findAllByCitizenIdentificationLookup(citizenLookup(citizenIdentificationCode));
+        String expectedCitizenLookup = hasCitizenId ? citizenLookup(citizenIdentificationCode) : null;
+        return candidates.stream()
+                .filter(user -> role == null || user.getRole() == role)
+                .filter(user -> !hasCitizenId
+                        || expectedCitizenLookup.equals(user.getCitizenIdentificationLookup()))
+                .toList();
     }
 
     @Override
@@ -164,6 +187,7 @@ public class UserServiceImpl implements UserService {
         }
         if (request.getCitizenIdentificationCode() != null) {
             user.setCitizenIdentificationCode(trimToNull(request.getCitizenIdentificationCode()));
+            user.setCitizenIdentificationLookup(citizenLookup(request.getCitizenIdentificationCode()));
         }
         if (request.getHealthInsuranceCode() != null) {
             user.setHealthInsuranceCode(trimToNull(request.getHealthInsuranceCode()));
@@ -256,6 +280,13 @@ public class UserServiceImpl implements UserService {
             throw new BadRequestException(
                     "Patient accounts require full name, gender, date of birth, and phone number.");
         }
+    }
+
+    private String citizenLookup(String citizenIdentificationCode) {
+        String normalized = trimToNull(citizenIdentificationCode);
+        return normalized == null
+                ? null
+                : patientDataProtectionService.secureLookup("citizen-id:" + normalized.toUpperCase(java.util.Locale.ROOT));
     }
 
     private String trimToNull(String value) {

@@ -118,7 +118,7 @@ Khuyến nghị lưu token:
 | `POST` | `/api/auth/forgot-password/verify` | Public | Xác minh OTP và nhận reset token dùng một lần. |
 | `POST` | `/api/auth/forgot-password/reset` | Public | Đặt mật khẩu mới bằng reset token. |
 | `GET` | `/api/auth/me` | Authenticated | Lấy profile account đang đăng nhập. |
-| `GET` | `/api/staff/patients/search?name={name}&n={count}` | `STAFF` | Tìm tối đa `n` bệnh nhân có tên khớp gần nhất. |
+| `GET` | `/api/staff/patients/search?name={name}&phoneNumber={phone}&citizenIdentificationCode={cccd}&n={count}` | `STAFF` | Tìm Patient bằng tên, số điện thoại hoặc CCCD. |
 | `GET` | `/api/patient/doctors` | `PATIENT` | Lấy danh sách Doctor active. |
 | `GET` | `/api/staff/doctors` | `STAFF` | Lấy danh sách Doctor active cho Staff. |
 | `GET` | `/api/doctor/appointments` | `DOCTOR` | Lấy các appointment thuộc Doctor hiện tại. |
@@ -134,7 +134,7 @@ Khuyến nghị lưu token:
 | `PATCH` | `/api/patient/medicine-schedules/{scheduleId}/time` | `PATIENT` | Đổi thời gian của schedule `NOT_YET`. |
 | `PATCH` | `/api/patient/medicine-schedules/{scheduleId}/take` | `PATIENT` | Đánh dấu schedule là `TAKEN`. |
 | `POST` | `/api/admin/users` | `ADMIN` | Tạo account. |
-| `GET` | `/api/admin/users` | `ADMIN` | Lấy danh sách account. |
+| `GET` | `/api/admin/users` | `ADMIN` | Lấy hoặc lọc account theo phone, CCCD và role. |
 | `GET` | `/api/admin/users/{userId}` | `ADMIN` | Lấy chi tiết một account. |
 | `PATCH` | `/api/admin/users/{userId}` | `ADMIN` | Cập nhật các field được gửi lên. |
 | `DELETE` | `/api/admin/users/{userId}` | `ADMIN` | Khóa account, không xóa cứng dữ liệu. |

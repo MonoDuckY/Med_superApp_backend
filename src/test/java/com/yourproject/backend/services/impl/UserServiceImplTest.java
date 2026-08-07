@@ -214,6 +214,31 @@ class UserServiceImplTest {
     }
 
     @Test
+    void searchUsers_findsAccountsByNormalizedPhoneAndRole() {
+        User doctor = activeDoctor();
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findAllByPhoneLookup("phone-lookup")).thenReturn(List.of(doctor));
+
+        List<User> result = userService.searchUsers("0363636363", null, UserRole.DOCTOR);
+
+        assertEquals(List.of(doctor), result);
+    }
+
+    @Test
+    void searchUsers_findsAccountsByCitizenIdentificationLookup() {
+        User doctor = activeDoctor();
+        doctor.setCitizenIdentificationLookup("citizen-lookup");
+        when(patientDataProtectionService.secureLookup("citizen-id:012345678901"))
+                .thenReturn("citizen-lookup");
+        when(userRepository.findAllByCitizenIdentificationLookup("citizen-lookup"))
+                .thenReturn(List.of(doctor));
+
+        List<User> result = userService.searchUsers(null, "012345678901", null);
+
+        assertEquals(List.of(doctor), result);
+    }
+
+    @Test
     void updateUser_updatesExistingUser() {
         User user = activeDoctor();
         UpdateUserRequest request = new UpdateUserRequest();
