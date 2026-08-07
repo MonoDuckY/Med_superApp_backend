@@ -25,7 +25,6 @@ class PatientDataProtectionServiceTest {
         protectionService.encryptPatientFields(patient);
 
         assertNull(patient.getPhoneNumber());
-        assertNull(patient.getPatientId());
         assertNull(patient.getFullName());
         assertNull(patient.getGender());
         assertNull(patient.getDateOfBirth());
@@ -34,7 +33,6 @@ class PatientDataProtectionServiceTest {
         assertNull(patient.getHealthInsuranceCode());
         assertNotEquals("Nguyen Van A", patient.getPatientFullNameEncrypted());
         assertTrue(patient.getPatientPhoneEncrypted().startsWith("v1:"));
-        assertTrue(patient.getPatientIdEncrypted().startsWith("v1:"));
         assertNotNull(patient.getPatientGenderEncrypted());
         assertNotNull(patient.getPatientDateOfBirthEncrypted());
         assertNotNull(patient.getPatientAddressEncrypted());
@@ -46,10 +44,9 @@ class PatientDataProtectionServiceTest {
     @Test
     void decryptPatientFields_restoresEveryPatientField() {
         User patient = User.builder()
-                .role(UserRole.PATIENT)
+                .roleId(UserRole.PATIENT.name())
                 .encryptionVersion(1)
                 .patientPhoneEncrypted(protectionService.encryptSensitiveValue("+84363636363"))
-                .patientIdEncrypted(protectionService.encryptSensitiveValue("PAT-001"))
                 .patientFullNameEncrypted(protectionService.encryptSensitiveValue("Nguyen Van A"))
                 .patientGenderEncrypted(protectionService.encryptSensitiveValue("MALE"))
                 .patientDateOfBirthEncrypted(protectionService.encryptSensitiveValue("1995-01-01"))
@@ -61,7 +58,6 @@ class PatientDataProtectionServiceTest {
         protectionService.decryptPatientFields(patient);
 
         assertEquals("+84363636363", patient.getPhoneNumber());
-        assertEquals("PAT-001", patient.getPatientId());
         assertEquals("Nguyen Van A", patient.getFullName());
         assertEquals("MALE", patient.getGender());
         assertEquals(LocalDate.of(1995, 1, 1), patient.getDateOfBirth());
@@ -81,18 +77,8 @@ class PatientDataProtectionServiceTest {
     }
 
     @Test
-    void patientIdLookup_isStableForTheSamePatientId() {
-        assertEquals(protectionService.patientIdLookup("PAT-000001"), protectionService.patientIdLookup("PAT-000001"));
-    }
-
-    @Test
-    void patientIdLookup_returnsDifferentValueForDifferentPatientId() {
-        assertNotEquals(protectionService.patientIdLookup("PAT-000001"), protectionService.patientIdLookup("PAT-000002"));
-    }
-
-    @Test
     void encryptPatientFields_leavesNonPatientDataUntouched() {
-        User doctor = User.builder().role(UserRole.DOCTOR).phoneNumber("+84363636363").fullName("Dr Nguyen").build();
+        User doctor = User.builder().roleId(UserRole.DOCTOR.name()).phoneNumber("+84363636363").fullName("Dr Nguyen").build();
 
         protectionService.encryptPatientFields(doctor);
 
@@ -102,14 +88,14 @@ class PatientDataProtectionServiceTest {
 
     @Test
     void decryptPatientFields_rejectsMalformedCiphertext() {
-        User patient = User.builder().role(UserRole.PATIENT).encryptionVersion(1)
+        User patient = User.builder().roleId(UserRole.PATIENT.name()).encryptionVersion(1)
                 .patientPhoneEncrypted("v1:not-valid-base64").build();
 
         assertThrows(IllegalStateException.class, () -> protectionService.decryptPatientFields(patient));
     }
 
     private User patientWithPlaintextFields() {
-        return User.builder().role(UserRole.PATIENT).phoneNumber("+84363636363").patientId("PAT-001")
+        return User.builder().roleId(UserRole.PATIENT.name()).phoneNumber("+84363636363").patientId("PAT-001")
                 .fullName("Nguyen Van A").gender("MALE").dateOfBirth(LocalDate.of(1995, 1, 1))
                 .address("Ha Noi").citizenIdentificationCode("001095000001").healthInsuranceCode("HN-001").build();
     }

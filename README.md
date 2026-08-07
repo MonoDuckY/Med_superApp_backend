@@ -1,8 +1,10 @@
 # Med Super App Backend — Hướng dẫn tích hợp Frontend
 
+> Đặc tả kỹ thuật của các luồng backend nằm tại [`docs/specs/README.md`](docs/specs/README.md). Mọi thay đổi API, business rule, database hoặc security phải cập nhật spec liên quan và [`CHANGELOG.md`](CHANGELOG.md) trong cùng pull request.
+
 Tài liệu này dành cho Web Admin, Web Doctor và Mobile App. Hiện backend đã triển khai nhóm API **xác thực** và **quản lý tài khoản của Admin**.
 
-> Các API khám bệnh, lịch hẹn, đơn thuốc, AI và ảnh y tế chưa được triển khai; không được tự suy đoán endpoint cho các chức năng đó.
+> Backend hiện có Auth, Admin User, Doctor/Staff scheduling, Patient appointment, Doctor examination, prescription, medicine schedule và Android SMS Gateway. Xem spec để phân biệt chức năng hiện tại với thay đổi ERD đang được lên kế hoạch.
 
 ##-3.6.vẻy importance
 -Cách chạy: clone về
@@ -112,9 +114,27 @@ Khuyến nghị lưu token:
 | `POST` | `/api/auth/refresh` | Public | Đổi refresh token lấy cặp token mới. |
 | `POST` | `/api/auth/logout` | Authenticated | Thu hồi refresh token hiện tại. |
 | `POST` | `/api/auth/change-password` | Authenticated | Đổi password hiện tại. |
+| `POST` | `/api/auth/forgot-password/request` | Public | Gửi OTP đặt lại mật khẩu theo số điện thoại. |
+| `POST` | `/api/auth/forgot-password/verify` | Public | Xác minh OTP và nhận reset token dùng một lần. |
+| `POST` | `/api/auth/forgot-password/reset` | Public | Đặt mật khẩu mới bằng reset token. |
 | `GET` | `/api/auth/me` | Authenticated | Lấy profile account đang đăng nhập. |
+| `GET` | `/api/staff/patients/search?name={name}&phoneNumber={phone}&citizenIdentificationCode={cccd}&n={count}` | `STAFF` | Tìm Patient bằng tên, số điện thoại hoặc CCCD. |
+| `GET` | `/api/patient/doctors` | `PATIENT` | Lấy danh sách Doctor active. |
+| `GET` | `/api/staff/doctors` | `STAFF` | Lấy danh sách Doctor active cho Staff. |
+| `GET` | `/api/doctor/appointments` | `DOCTOR` | Lấy các appointment thuộc Doctor hiện tại. |
+| `GET` | `/api/doctor/work-schedules/all` | `DOCTOR` | Lấy lịch làm việc của mọi Doctor; hỗ trợ `from`, `to`, `status`. |
+| `GET` | `/api/doctor/appointments/{appointmentId}` | `DOCTOR` | Lấy hồ sơ khám, MedicalRecord và prescriptions. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/start` | `DOCTOR` | Chuyển appointment sang `IN_PROGRESS`. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/clinical-information` | `DOCTOR` | Cập nhật sức khỏe tổng quát và MedicalRecord. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/diagnosis` | `DOCTOR` | Cập nhật diagnosis trong MedicalRecord. |
+| `POST` | `/api/doctor/appointments/{appointmentId}/prescriptions` | `DOCTOR` | Tạo prescription cùng medicine schedules. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/prescriptions/{prescriptionId}` | `DOCTOR` | Cập nhật prescription và thay thế schedules. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/complete` | `DOCTOR` | Hoàn thành examination. |
+| `GET` | `/api/patient/medicine-schedules` | `PATIENT` | Lấy lịch uống thuốc của Patient. |
+| `PATCH` | `/api/patient/medicine-schedules/{scheduleId}/time` | `PATIENT` | Đổi thời gian của schedule `NOT_YET`. |
+| `PATCH` | `/api/patient/medicine-schedules/{scheduleId}/take` | `PATIENT` | Đánh dấu schedule là `TAKEN`. |
 | `POST` | `/api/admin/users` | `ADMIN` | Tạo account. |
-| `GET` | `/api/admin/users` | `ADMIN` | Lấy danh sách account. |
+| `GET` | `/api/admin/users` | `ADMIN` | Lấy hoặc lọc account theo phone, CCCD và role. |
 | `GET` | `/api/admin/users/{userId}` | `ADMIN` | Lấy chi tiết một account. |
 | `PATCH` | `/api/admin/users/{userId}` | `ADMIN` | Cập nhật các field được gửi lên. |
 | `DELETE` | `/api/admin/users/{userId}` | `ADMIN` | Khóa account, không xóa cứng dữ liệu. |
@@ -241,7 +261,55 @@ Yêu cầu password mới:
 
 Sau khi đổi password thành công, backend thu hồi toàn bộ refresh token của account. Frontend nên xóa token hiện tại và điều hướng về màn hình login.
 
-### 6.5 Lấy account hiện tại
+### 6.5 Quên mật khẩu
+
+Yêu cầu OTP khi chưa đăng nhập:
+
+```http
+POST /api/auth/forgot-password/request
+Content-Type: application/json
+```
+
+```json
+{
+  "phoneNumber": "0912345678"
+}
+```
+
+Response luôn dùng thông báo chung để không làm lộ số điện thoại có tài khoản hay không. Tài khoản chỉ có role `PATIENT` không dùng API này vì Patient đăng nhập bằng OTP và không có mật khẩu.
+
+Xác minh OTP và đặt mật khẩu mới:
+
+```http
+POST /api/auth/forgot-password/verify
+Content-Type: application/json
+```
+
+```json
+{
+  "phoneNumber": "0912345678",
+  "code": "123456"
+}
+```
+
+Nếu OTP hợp lệ, response `data` trả về `resetToken` và `expiresInSeconds`. Frontend dùng reset token để mở màn hình nhập mật khẩu mới.
+
+```http
+POST /api/auth/forgot-password/reset
+Content-Type: application/json
+```
+
+```json
+{
+  "resetToken": "token-returned-by-verify-api",
+  "newPassword": "NewPassword2!",
+  "confirmPassword": "NewPassword2!"
+}
+```
+
+OTP hết hạn theo `OTP_EXPIRATION_MINUTES`, chỉ dùng được một lần, áp dụng cooldown và giới hạn số lần nhập. Reset thành công sẽ vô hiệu access token và refresh token hiện tại, xóa trạng thái lockout và yêu cầu đăng nhập lại.
+
+### 6.6 Lấy account hiện tại
 
 ```http
 GET /api/auth/me
@@ -296,7 +364,7 @@ Response `201`: `data` là `UserResponse`; backend không trả `password` hoặ
 
 Quy tắc quan trọng:
 
-- `phoneNumber` là bắt buộc và unique cho mọi role; backend lưu chuẩn quốc tế `+84xxxxxxxxx`.
+- `phoneNumber` là bắt buộc và được lưu theo chuẩn quốc tế `+84xxxxxxxxx`. Cùng một số có thể dùng cho các role khác nhau, nhưng cặp `phoneNumber + role` phải unique.
 - Nhập `0912345678` được chuyển thành `+84912345678`; nhập `+84912345678` giữ nguyên.
 - `PATIENT`: bắt buộc có `patientId`, `fullName`, `gender`, `dateOfBirth`, `phoneNumber`.
 - `patientId` là unique.
@@ -620,6 +688,16 @@ Ví dụ đăng ký ca sáng:
   "note": "Morning shift"
 }
 ```
+
+Admin có thể đặt password mới cho account không phải Patient-only:
+
+```json
+{
+  "password": "AdminReset1!"
+}
+```
+
+Password mới phải đạt password policy. Backend chỉ lưu BCrypt hash và sẽ thu hồi access token, refresh token hiện tại của user để buộc đăng nhập lại.
 
 ### 14.2 API Staff
 

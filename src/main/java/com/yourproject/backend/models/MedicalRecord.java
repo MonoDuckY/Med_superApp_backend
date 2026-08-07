@@ -1,7 +1,5 @@
 package com.yourproject.backend.models;
 
-import java.time.Instant;
-
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -11,23 +9,23 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-@Document(collection = "refresh_tokens")
+@Document(collection = "medical_records")
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder
-public class RefreshToken {
+public class MedicalRecord {
     @Id
     private String id;
 
     @Indexed(unique = true)
-    private String tokenHash;
+    private String appointmentId;
 
-    @Indexed
-    private String userId;
-
-    private String deviceId;
-    private Instant expiresAt;
-    private Instant revokedAt;
-    private Instant createdAt;
+    private String diagnosis;
+    private String note;
+    private String bloodPressure;
+    private Integer heartRate;
+    private Integer breathingRate;
+    private Double bodyTemperature;
+    private Double bloodLipids;
 }

@@ -6,7 +6,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import com.yourproject.backend.dtos.requests.CreateUserRequest;
 import com.yourproject.backend.dtos.requests.UpdateUserRequest;
@@ -21,6 +21,7 @@ import com.yourproject.backend.dtos.responses.ApiResponse;
 import com.yourproject.backend.dtos.responses.UserResponse;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.services.PatientDataProtectionService;
+import com.yourproject.backend.models.UserRole;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -42,8 +43,12 @@ public class AdminUserController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<List<UserResponse>>> getUsers() {
-        List<UserResponse> users = userService.getAllUsers().stream().map(user -> UserResponse.from(user, patientDataProtectionService)).toList();
+    public ResponseEntity<ApiResponse<List<UserResponse>>> getUsers(
+            @RequestParam(required = false) String phoneNumber,
+            @RequestParam(required = false) String citizenIdentificationCode,
+            @RequestParam(required = false) UserRole role) {
+        List<UserResponse> users = userService.searchUsers(phoneNumber, citizenIdentificationCode, role).stream()
+                .map(user -> UserResponse.from(user, patientDataProtectionService)).toList();
         return ResponseEntity.ok(ApiResponse.success("User accounts retrieved successfully.", users));
     }
 
@@ -62,11 +67,11 @@ public class AdminUserController {
         return ResponseEntity.ok(ApiResponse.success("User account updated successfully.", user));
     }
 
-    @DeleteMapping("/{userId}")
-    public ResponseEntity<ApiResponse<Void>> deactivateUser(
+    @PatchMapping("/{userId}/status")
+    public ResponseEntity<ApiResponse<UserResponse>> toggleUserStatus(
             Authentication authentication,
             @PathVariable String userId) {
-        userService.deactivateUser(userId, authentication.getName());
-        return ResponseEntity.ok(ApiResponse.success("User account deactivated successfully.", null));
+        UserResponse user = UserResponse.from(userService.toggleUserStatus(userId, authentication.getName()), patientDataProtectionService);
+        return ResponseEntity.ok(ApiResponse.success("User account status changed successfully.", user));
     }
 }

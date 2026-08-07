@@ -54,7 +54,7 @@ class UserServiceImplTest {
     void createUser_createsDoctorWithNormalizedPhoneNumberAndHashedPassword() {
         CreateUserRequest request = doctorRequest();
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.existsByPhoneLookup("phone-lookup")).thenReturn(false);
+        when(userRepository.existsByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(false);
         when(passwordEncoder.encode("Newabc123!")).thenReturn("bcrypt-hash");
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -71,7 +71,7 @@ class UserServiceImplTest {
     void createUser_rejectsDuplicatePhoneNumber() {
         CreateUserRequest request = doctorRequest();
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.existsByPhoneLookup("phone-lookup")).thenReturn(true);
+        when(userRepository.existsByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(true);
 
         assertThrows(ConflictException.class, () -> userService.createUser(request, "admin-id"));
         verify(userRepository, never()).save(any(User.class));
@@ -82,7 +82,7 @@ class UserServiceImplTest {
         CreateUserRequest request = doctorRequest();
         request.setCertificate(null);
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.existsByPhoneLookup("phone-lookup")).thenReturn(false);
+        when(userRepository.existsByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(false);
         when(passwordEncoder.encode("Newabc123!")).thenReturn("bcrypt-hash");
 
         assertThrows(BadRequestException.class, () -> userService.createUser(request, "admin-id"));
@@ -94,27 +94,23 @@ class UserServiceImplTest {
         CreateUserRequest request = patientRequest();
         request.setDateOfBirth(LocalDate.now().plusDays(1));
         when(patientDataProtectionService.phoneLookup("+84912345678")).thenReturn("phone-lookup");
-        when(userRepository.existsByPhoneLookup("phone-lookup")).thenReturn(false);
+        when(userRepository.existsByPhoneLookupAndRoleId("phone-lookup", UserRole.PATIENT.getId())).thenReturn(false);
 
         assertThrows(BadRequestException.class, () -> userService.createUser(request, "admin-id"));
         verify(userRepository, never()).save(any(User.class));
     }
 
     @Test
-    void createUser_generatesPatientId() {
+    void createUser_createsPatientWithoutPassword() {
         CreateUserRequest request = patientRequest();
         request.setPassword(null);
         when(patientDataProtectionService.phoneLookup("+84912345678")).thenReturn("phone-lookup");
-        when(userRepository.existsByPhoneLookup("phone-lookup")).thenReturn(false);
-        when(patientDataProtectionService.patientIdLookup(any())).thenReturn("patient-lookup");
-        when(userRepository.existsByPatientIdLookup("patient-lookup")).thenReturn(false);
+        when(userRepository.existsByPhoneLookupAndRoleId("phone-lookup", UserRole.PATIENT.getId())).thenReturn(false);
         when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         User createdUser = userService.createUser(request, "admin-id");
 
-        assertNotNull(createdUser.getPatientId());
         assertNull(createdUser.getPasswordHash());
-        assertEquals(true, createdUser.getPatientId().startsWith("PAT-"));
         verify(patientDataProtectionService).encryptPatientFields(createdUser);
     }
 
@@ -191,18 +187,19 @@ class UserServiceImplTest {
     @Test
     void findByPhoneNumber_rejectsUnknownPhoneLookup() {
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.empty());
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(Optional.empty());
 
-        assertThrows(UnauthorizedException.class, () -> userService.findByPhoneNumber("0363636363"));
+        assertThrows(UnauthorizedException.class,
+                () -> userService.findByPhoneNumberAndRole("0363636363", UserRole.DOCTOR));
     }
 
     @Test
     void findByPhoneNumber_returnsUserForNormalizedPhoneLookup() {
         User user = activeDoctor();
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
-        when(userRepository.findByPhoneLookup("phone-lookup")).thenReturn(Optional.of(user));
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(Optional.of(user));
 
-        assertEquals(user, userService.findByPhoneNumber("0363636363"));
+        assertEquals(user, userService.findByPhoneNumberAndRole("0363636363", UserRole.DOCTOR));
         verify(patientDataProtectionService).phoneLookup("+84363636363");
     }
 
@@ -214,6 +211,31 @@ class UserServiceImplTest {
 
         assertEquals(expectedUsers, userService.getAllUsers());
         verify(userRepository).findAll(expectedSort);
+    }
+
+    @Test
+    void searchUsers_findsAccountsByNormalizedPhoneAndRole() {
+        User doctor = activeDoctor();
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findAllByPhoneLookup("phone-lookup")).thenReturn(List.of(doctor));
+
+        List<User> result = userService.searchUsers("0363636363", null, UserRole.DOCTOR);
+
+        assertEquals(List.of(doctor), result);
+    }
+
+    @Test
+    void searchUsers_findsAccountsByCitizenIdentificationLookup() {
+        User doctor = activeDoctor();
+        doctor.setCitizenIdentificationLookup("citizen-lookup");
+        when(patientDataProtectionService.secureLookup("citizen-id:012345678901"))
+                .thenReturn("citizen-lookup");
+        when(userRepository.findAllByCitizenIdentificationLookup("citizen-lookup"))
+                .thenReturn(List.of(doctor));
+
+        List<User> result = userService.searchUsers(null, "012345678901", null);
+
+        assertEquals(List.of(doctor), result);
     }
 
     @Test
@@ -229,16 +251,68 @@ class UserServiceImplTest {
     }
 
     @Test
-    void deactivateUser_rejectsSelfDeactivation() {
-        assertThrows(BadRequestException.class, () -> userService.deactivateUser("user-id", "user-id"));
+    void updateUser_adminSetsNewPasswordAndRevokesExistingTokens() {
+        User user = activeDoctor();
+        user.setAccessTokenHash("access-hash");
+        user.setRefreshTokenHash("refresh-hash");
+        user.setRefreshTokenExpiresAt(Instant.now().plusSeconds(300));
+        UpdateUserRequest request = new UpdateUserRequest();
+        request.setPassword("AdminReset1!");
+        when(userRepository.findById("user-id")).thenReturn(Optional.of(user));
+        when(passwordEncoder.encode("AdminReset1!")).thenReturn("new-password-hash");
+        when(userRepository.save(user)).thenReturn(user);
+
+        User updated = userService.updateUser("user-id", request, "admin-id");
+
+        assertEquals("new-password-hash", updated.getPasswordHash());
+        assertNull(updated.getAccessTokenHash());
+        assertNull(updated.getRefreshTokenHash());
+        assertNull(updated.getRefreshTokenExpiresAt());
+        assertNotNull(updated.getPasswordChangedAt());
+        verify(userRepository).save(user);
     }
 
     @Test
-    void deactivateUser_inactivatesOtherUser() {
+    void updateUser_rejectsWeakAdminAssignedPassword() {
+        User user = activeDoctor();
+        UpdateUserRequest request = new UpdateUserRequest();
+        request.setPassword("weak");
+        when(userRepository.findById("user-id")).thenReturn(Optional.of(user));
+
+        assertThrows(BadRequestException.class,
+                () -> userService.updateUser("user-id", request, "admin-id"));
+
+        verify(passwordEncoder, never()).encode(any());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void updateUser_rejectsPasswordForPatientOnlyAccount() {
+        User patient = activeDoctor();
+        patient.setRole(UserRole.PATIENT);
+        patient.setPasswordHash(null);
+        UpdateUserRequest request = new UpdateUserRequest();
+        request.setPassword("AdminReset1!");
+        when(userRepository.findById("user-id")).thenReturn(Optional.of(patient));
+
+        assertThrows(BadRequestException.class,
+                () -> userService.updateUser("user-id", request, "admin-id"));
+
+        verify(passwordEncoder, never()).encode(any());
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
+    void toggleUserStatus_rejectsSelfChange() {
+        assertThrows(BadRequestException.class, () -> userService.toggleUserStatus("user-id", "user-id"));
+    }
+
+    @Test
+    void toggleUserStatus_inactivatesOtherUser() {
         User user = activeDoctor();
         when(userRepository.findById("user-id")).thenReturn(Optional.of(user));
 
-        userService.deactivateUser("user-id", "admin-id");
+        userService.toggleUserStatus("user-id", "admin-id");
 
         assertEquals(AccountStatus.INACTIVE, user.getStatus());
         verify(userRepository).save(user);
@@ -346,11 +420,11 @@ class UserServiceImplTest {
 
     private void stubPatientPhone() {
         when(patientDataProtectionService.phoneLookup("+84912345678")).thenReturn("phone-lookup");
-        when(userRepository.existsByPhoneLookup("phone-lookup")).thenReturn(false);
+        when(userRepository.existsByPhoneLookupAndRoleId("phone-lookup", UserRole.PATIENT.getId())).thenReturn(false);
     }
 
     private User activeDoctor() {
-        return User.builder().id("user-id").role(UserRole.DOCTOR).status(AccountStatus.ACTIVE)
+        return User.builder().id("user-id").roleId(UserRole.DOCTOR.name()).status(AccountStatus.ACTIVE)
                 .fullName("Dr Nguyen").phoneNumber("+84363636363").phoneLookup("phone-lookup")
                 .passwordHash("password-hash").certificate("Practice certificate").createdAt(Instant.now()).build();
     }

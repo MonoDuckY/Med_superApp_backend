@@ -1,6 +1,5 @@
 package com.yourproject.backend.repositories;
 
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -8,22 +7,30 @@ import java.util.List;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
 import com.yourproject.backend.models.DoctorWorkSlot;
-import com.yourproject.backend.models.WorkSlotApprovalStatus;
-import com.yourproject.backend.models.WorkSlotBookingStatus;
+import com.yourproject.backend.models.DoctorWorkSlotStatus;
 
 public interface DoctorWorkSlotRepository extends MongoRepository<DoctorWorkSlot, String> {
-    List<DoctorWorkSlot> findAllBySubmissionIdOrderByStartAtAsc(String submissionId);
+    List<DoctorWorkSlot> findAllBySubmissionIdOrderBySlotIdAsc(String submissionId);
 
-    List<DoctorWorkSlot> findAllBySubmissionIdAndDoctorIdOrderByStartAtAsc(String submissionId, String doctorId);
+    List<DoctorWorkSlot> findAllBySubmissionIdAndDoctorIdOrderBySlotIdAsc(String submissionId, String doctorId);
 
-    List<DoctorWorkSlot> findAllByDoctorIdAndWorkDateBetweenOrderByStartAtAsc(
+    List<DoctorWorkSlot> findAllByDoctorIdAndWorkDateBetweenOrderByWorkDateAscSlotIdAsc(
             String doctorId,
             LocalDate from,
             LocalDate to);
 
-    List<DoctorWorkSlot> findAllByApprovalStatusOrderBySubmittedAtAsc(WorkSlotApprovalStatus approvalStatus);
+    List<DoctorWorkSlot> findAllByWorkDateBetweenOrderByWorkDateAscSlotIdAsc(
+            LocalDate from,
+            LocalDate to);
 
-    List<DoctorWorkSlot> findAllByApprovalStatusOrderBySubmittedAtDesc(WorkSlotApprovalStatus approvalStatus);
+    List<DoctorWorkSlot> findAllByWorkDateBetweenAndStatusOrderByWorkDateAscSlotIdAsc(
+            LocalDate from,
+            LocalDate to,
+            DoctorWorkSlotStatus status);
+
+    List<DoctorWorkSlot> findAllByStatusOrderBySubmittedAtAsc(DoctorWorkSlotStatus status);
+
+    List<DoctorWorkSlot> findAllByStatusOrderBySubmittedAtDesc(DoctorWorkSlotStatus status);
 
     List<DoctorWorkSlot> findAllByOrderBySubmittedAtDesc();
 
@@ -31,9 +38,9 @@ public interface DoctorWorkSlotRepository extends MongoRepository<DoctorWorkSlot
             LocalDate workDate,
             Collection<String> slotIds);
 
-    List<DoctorWorkSlot> findAllByApprovalStatusAndBookingStatusAndStartAtBetweenOrderByStartAtAsc(
-            WorkSlotApprovalStatus approvalStatus,
-            WorkSlotBookingStatus bookingStatus,
-            Instant from,
-            Instant to);
+    List<DoctorWorkSlot> findAllByWorkDateAndSlotIdIn(LocalDate workDate, Collection<String> slotIds);
+
+    List<DoctorWorkSlot> findAllByStatusOrderByWorkDateAscSlotIdAsc(DoctorWorkSlotStatus status);
+
+    List<DoctorWorkSlot> findAllByDoctorIdOrderByWorkDateDescSlotIdAsc(String doctorId);
 }

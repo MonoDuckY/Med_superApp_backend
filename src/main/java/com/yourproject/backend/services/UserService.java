@@ -6,6 +6,7 @@ import com.yourproject.backend.dtos.requests.ChangePasswordRequest;
 import com.yourproject.backend.dtos.requests.CreateUserRequest;
 import com.yourproject.backend.dtos.requests.UpdateUserRequest;
 import com.yourproject.backend.models.User;
+import com.yourproject.backend.models.UserRole;
 
 public interface UserService {
     User createUser(CreateUserRequest request, String createdBy);
@@ -14,13 +15,15 @@ public interface UserService {
 
     User getActiveUserById(String userId);
 
-    User findByPhoneNumber(String phoneNumber);
+    User findByPhoneNumberAndRole(String phoneNumber, UserRole role);
 
     List<User> getAllUsers();
 
+    List<User> searchUsers(String phoneNumber, String citizenIdentificationCode, UserRole role);
+
     User updateUser(String userId, UpdateUserRequest request, String updatedBy);
 
-    void deactivateUser(String userId, String requestedBy);
+    User toggleUserStatus(String userId, String requestedBy);
 
     void changePassword(String userId, ChangePasswordRequest request);
 

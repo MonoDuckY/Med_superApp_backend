@@ -14,7 +14,7 @@ public class CreateUserRequest {
     @Size(max = 50, message = "Password must not exceed 50 characters.")
     private String password;
 
-    @NotNull(message = "Role is required.")
+    @NotNull(message = "Roles are required.")
     private UserRole role;
 
     @Size(max = 100, message = "Full name must not exceed 100 characters.")
@@ -40,4 +40,9 @@ public class CreateUserRequest {
 
     @Size(max = 255, message = "Certificate must not exceed 255 characters.")
     private String certificate;
+    private String medicalHistory;
+    private String currentSickness;
+    private Double height;
+    private Double weight;
+    private String bloodType;
 }

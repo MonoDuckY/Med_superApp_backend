@@ -2,7 +2,9 @@ package com.yourproject.backend.security;
 
 import java.io.IOException;
 import java.util.Date;
-import java.util.List;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.Base64;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -52,13 +54,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (user != null
                     && user.getStatus() == AccountStatus.ACTIVE
                     && user.getRole() != null
+                    && hashToken(token).equals(user.getAccessTokenHash())
                     && isIssuedAfterPasswordChange(claims, user)
                     && SecurityContextHolder.getContext().getAuthentication() == null) {
-                SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + user.getRole().name());
+                String tokenRole = claims.get("role", String.class);
+                if (tokenRole == null || !tokenRole.equals(user.getRole().name())) {
+                    SecurityContextHolder.clearContext();
+                    filterChain.doFilter(request, response);
+                    return;
+                }
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         user.getId(),
                         null,
-                        List.of(authority));
+                        java.util.List.of(new SimpleGrantedAuthority("ROLE_" + tokenRole)));
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
@@ -74,5 +82,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return issuedAt != null
                 && (user.getPasswordChangedAt() == null
                 || !issuedAt.toInstant().isBefore(user.getPasswordChangedAt()));
+    }
+
+    private String hashToken(String token) {
+        try {
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(
+                    MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 }

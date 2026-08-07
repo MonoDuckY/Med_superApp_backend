@@ -15,7 +15,7 @@ import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.utils.PhoneNumberNormalizer;
 
 @Component
-@Order(2)
+@Order(4)
 public class PatientDataMigration implements ApplicationRunner {
     private static final Logger LOGGER = LoggerFactory.getLogger(PatientDataMigration.class);
     private final UserRepository userRepository;
@@ -45,7 +45,6 @@ public class PatientDataMigration implements ApplicationRunner {
             user.setPhoneLookup(patientDataProtectionService.phoneLookup(PhoneNumberNormalizer.normalize(user.getPhoneNumber())));
         }
         if (user.getRole() == UserRole.PATIENT && user.getEncryptionVersion() == null) {
-            user.setPatientIdLookup(patientDataProtectionService.patientIdLookup(user.getPatientId()));
             patientDataProtectionService.encryptPatientFields(user);
         }
         userRepository.save(user);

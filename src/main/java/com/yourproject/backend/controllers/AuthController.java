@@ -14,9 +14,13 @@ import com.yourproject.backend.dtos.requests.LogoutRequest;
 import com.yourproject.backend.dtos.requests.RefreshTokenRequest;
 import com.yourproject.backend.dtos.requests.RequestPatientOtpRequest;
 import com.yourproject.backend.dtos.requests.VerifyPatientOtpRequest;
+import com.yourproject.backend.dtos.requests.ForgotPasswordRequest;
+import com.yourproject.backend.dtos.requests.ResetPasswordRequest;
+import com.yourproject.backend.dtos.requests.VerifyPasswordResetOtpRequest;
 import com.yourproject.backend.dtos.responses.ApiResponse;
 import com.yourproject.backend.dtos.responses.AuthResponse;
 import com.yourproject.backend.dtos.responses.UserResponse;
+import com.yourproject.backend.dtos.responses.PasswordResetTokenResponse;
 import com.yourproject.backend.services.AuthService;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.services.PatientDataProtectionService;
@@ -38,6 +42,26 @@ public class AuthController {
     }
     @PostMapping("/patient-otp/request") public ResponseEntity<ApiResponse<AuthResponse>> requestPatientOtp(@Valid @RequestBody RequestPatientOtpRequest request){AuthResponse response=authService.requestPatientOtp(request);return ResponseEntity.ok(ApiResponse.success(response==null?"OTP sent successfully.":"Trusted device authenticated successfully.",response));}
     @PostMapping("/patient-otp/verify") public ResponseEntity<ApiResponse<AuthResponse>> verifyPatientOtp(@Valid @RequestBody VerifyPatientOtpRequest request){return ResponseEntity.ok(ApiResponse.success("OTP verified successfully.",authService.verifyPatientOtp(request)));}
+
+    @PostMapping("/forgot-password/request")
+    public ResponseEntity<ApiResponse<Void>> requestPasswordReset(@Valid @RequestBody ForgotPasswordRequest request) {
+        authService.requestPasswordReset(request);
+        return ResponseEntity.ok(ApiResponse.success("If the account is eligible, a password reset OTP has been sent.", null));
+    }
+
+    @PostMapping("/forgot-password/verify")
+    public ResponseEntity<ApiResponse<PasswordResetTokenResponse>> verifyPasswordResetOtp(
+            @Valid @RequestBody VerifyPasswordResetOtpRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Password reset OTP verified successfully.",
+                authService.verifyPasswordResetOtp(request)));
+    }
+
+    @PostMapping("/forgot-password/reset")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(ApiResponse.success("Password reset successfully. Please sign in again.", null));
+    }
 
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<AuthResponse>> refresh(@Valid @RequestBody RefreshTokenRequest request) {

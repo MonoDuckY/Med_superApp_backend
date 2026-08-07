@@ -15,24 +15,24 @@ public class AvailableAppointmentSlotResponse {
     private String doctorName;
     private LocalDate workDate;
     private String slotId;
-    private String slotName;
     private String roomId;
-    private String roomCode;
     private Instant startAt;
     private Instant endAt;
 
-    public static AvailableAppointmentSlotResponse from(DoctorWorkSlot slot, String doctorName) {
+    public static AvailableAppointmentSlotResponse from(
+            DoctorWorkSlot slot,
+            String doctorName,
+            Instant startAt,
+            Instant endAt) {
         return AvailableAppointmentSlotResponse.builder()
                 .doctorWorkSlotId(slot.getId())
                 .doctorId(slot.getDoctorId())
                 .doctorName(doctorName)
                 .workDate(slot.getWorkDate())
                 .slotId(slot.getSlotId())
-                .slotName(slot.getSlotName())
                 .roomId(slot.getRoomId())
-                .roomCode(slot.getRoomCode())
-                .startAt(slot.getStartAt())
-                .endAt(slot.getEndAt())
+                .startAt(startAt)
+                .endAt(endAt)
                 .build();
     }
 }

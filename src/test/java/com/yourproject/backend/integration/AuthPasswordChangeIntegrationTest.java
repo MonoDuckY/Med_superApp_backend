@@ -36,15 +36,15 @@ class AuthPasswordChangeIntegrationTest extends MongoIntegrationTestBase {
         User updatedDoctor = userRepository.findById(doctor.getId()).orElseThrow();
         assertTrue(passwordEncoder.matches("NewPassword2!", updatedDoctor.getPasswordHash()));
         assertFalse(passwordEncoder.matches("OldPassword1!", updatedDoctor.getPasswordHash()));
-        assertTrue(refreshTokenRepository.findAll().stream().allMatch(token -> token.getRevokedAt() != null));
+        assertNull(updatedDoctor.getRefreshTokenHash());
 
         mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + firstLogin.accessToken()))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"OldPassword1!\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"OldPassword1!\"}"))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"NewPassword2!\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"NewPassword2!\"}"))
                 .andExpect(status().isOk());
     }
 
@@ -91,7 +91,8 @@ class AuthPasswordChangeIntegrationTest extends MongoIntegrationTestBase {
                 .andExpect(jsonPath("$.message").value("Current password is incorrect."));
 
         assertTrue(passwordEncoder.matches("OldPassword1!", userRepository.findById(doctor.getId()).orElseThrow().getPasswordHash()));
-        assertNull(refreshTokenRepository.findAll().get(0).getRevokedAt());
+        org.junit.jupiter.api.Assertions.assertNotNull(
+                userRepository.findById(doctor.getId()).orElseThrow().getRefreshTokenHash());
     }
 
     @Test
@@ -107,7 +108,8 @@ class AuthPasswordChangeIntegrationTest extends MongoIntegrationTestBase {
                 .andExpect(jsonPath("$.message").value("New password and confirmation do not match."));
 
         assertTrue(passwordEncoder.matches("OldPassword1!", userRepository.findById(doctor.getId()).orElseThrow().getPasswordHash()));
-        assertNull(refreshTokenRepository.findAll().get(0).getRevokedAt());
+        org.junit.jupiter.api.Assertions.assertNotNull(
+                userRepository.findById(doctor.getId()).orElseThrow().getRefreshTokenHash());
     }
 
     @Test
@@ -141,7 +143,8 @@ class AuthPasswordChangeIntegrationTest extends MongoIntegrationTestBase {
         }
 
         assertTrue(passwordEncoder.matches("OldPassword1!", userRepository.findById(doctor.getId()).orElseThrow().getPasswordHash()));
-        assertNull(refreshTokenRepository.findAll().get(0).getRevokedAt());
+        org.junit.jupiter.api.Assertions.assertNotNull(
+                userRepository.findById(doctor.getId()).orElseThrow().getRefreshTokenHash());
     }
 
     @Test
@@ -208,7 +211,7 @@ class AuthPasswordChangeIntegrationTest extends MongoIntegrationTestBase {
 
     private TokenPair login(String phoneNumber, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"" + phoneNumber + "\",\"password\":\"" + password + "\"}"))
+                        .content("{\"phoneNumber\":\"" + phoneNumber + "\",\"role\":\"DOCTOR\",\"password\":\"" + password + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn();
         return new TokenPair(

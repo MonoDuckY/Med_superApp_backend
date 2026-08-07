@@ -32,5 +32,12 @@ public class UserIndexMigration implements ApplicationRunner {
             indexOperations.dropIndex("username_1");
             LOGGER.info("Removed legacy username index from users collection.");
         }
+        indexOperations.getIndexInfo().stream()
+                .map(index -> index.getName())
+                .filter(name -> "phoneNumber_1".equals(name) || "phoneLookup_1".equals(name))
+                .forEach(name -> {
+                    indexOperations.dropIndex(name);
+                    LOGGER.info("Removed legacy globally unique user index {}.", name);
+                });
     }
 }

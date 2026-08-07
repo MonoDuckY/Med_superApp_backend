@@ -2,7 +2,6 @@ package com.yourproject.backend.services.impl;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Locale;
 
 import org.springframework.stereotype.Service;
 
@@ -29,7 +28,9 @@ public class SchedulingCatalogServiceImpl implements SchedulingCatalogService {
 
     @Override
     public List<WorkSlot> getActiveWorkSlots() {
-        return workSlotRepository.findAllByActiveTrueOrderByStartTimeAsc();
+        return workSlotRepository.findAllByOrderByStartTimeAsc().stream()
+                .sorted(java.util.Comparator.comparingInt(this::slotNumber))
+                .toList();
     }
 
     @Override
@@ -40,22 +41,31 @@ public class SchedulingCatalogServiceImpl implements SchedulingCatalogService {
     @Override
     public ClinicRoom createClinicRoom(String requestedBy, CreateClinicRoomRequest request) {
         User staff = userService.getActiveUserById(requestedBy);
-        if (staff.getRole() != UserRole.STAFF && staff.getRole() != UserRole.ADMIN) {
-            throw new ForbiddenException("Only staff or administrators can create clinic rooms.");
+        if (staff.getRole() != UserRole.STAFF) {
+            throw new ForbiddenException("Only staff can create clinic rooms.");
         }
 
-        String code = request.getCode().trim().toUpperCase(Locale.ROOT);
-        if (clinicRoomRepository.existsByCode(code)) {
-            throw new ConflictException("Clinic room code already exists.");
+        String id = request.getId().trim();
+        if (clinicRoomRepository.existsById(id)) {
+            throw new ConflictException("Clinic room ID already exists.");
         }
 
         Instant now = Instant.now();
         return clinicRoomRepository.save(ClinicRoom.builder()
-                .code(code)
+                .id(id)
                 .name(request.getName().trim())
+                .note(request.getNote() == null || request.getNote().isBlank() ? null : request.getNote().trim())
                 .active(true)
                 .createdAt(now)
                 .updatedAt(now)
                 .build());
+    }
+
+    private int slotNumber(WorkSlot slot) {
+        try {
+            return Integer.parseInt(slot.getName().substring("Slot".length()));
+        } catch (RuntimeException exception) {
+            return Integer.MAX_VALUE;
+        }
     }
 }

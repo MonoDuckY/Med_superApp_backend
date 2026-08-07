@@ -10,7 +10,6 @@ import lombok.Value;
 @Builder
 public class UserSummaryResponse {
     String id;
-    String patientId;
     String fullName;
     String phoneNumber;
     String certificate;
@@ -26,7 +25,6 @@ public class UserSummaryResponse {
                 : UserResponse.from(user, patientDataProtectionService);
         return UserSummaryResponse.builder()
                 .id(response.getId())
-                .patientId(response.getPatientId())
                 .fullName(response.getFullName())
                 .phoneNumber(response.getPhoneNumber())
                 .certificate(response.getCertificate())

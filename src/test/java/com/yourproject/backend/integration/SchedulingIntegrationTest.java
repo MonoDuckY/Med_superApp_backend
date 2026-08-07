@@ -57,7 +57,7 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
                 .andExpect(jsonPath("$.data.approvalStatus").value("APPROVED"));
 
         DoctorWorkSlot availableSlot = doctorWorkSlotRepository.findAll().stream()
-                .sorted(java.util.Comparator.comparing(DoctorWorkSlot::getStartAt))
+                .sorted(java.util.Comparator.comparing(DoctorWorkSlot::getSlotId))
                 .findFirst()
                 .orElseThrow();
         assertEquals(WorkSlotBookingStatus.AVAILABLE, availableSlot.getBookingStatus());
@@ -149,7 +149,7 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
         String submissionId = doctorWorkSlotRepository.findAll().get(0).getSubmissionId();
         approveSchedule(staff, submissionId);
         List<DoctorWorkSlot> slots = doctorWorkSlotRepository.findAll().stream()
-                .sorted(java.util.Comparator.comparing(DoctorWorkSlot::getStartAt))
+                .sorted(java.util.Comparator.comparing(DoctorWorkSlot::getSlotId))
                 .toList();
 
         book(firstPatient, slots.get(0).getId(), 201);
@@ -176,7 +176,6 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
                 .code(code)
                 .name(name)
                 .active(true)
-                .createdAt(now)
                 .updatedAt(now)
                 .build());
     }

@@ -7,6 +7,10 @@ import com.yourproject.backend.dtos.requests.RefreshTokenRequest;
 import com.yourproject.backend.dtos.responses.AuthResponse;
 import com.yourproject.backend.dtos.requests.RequestPatientOtpRequest;
 import com.yourproject.backend.dtos.requests.VerifyPatientOtpRequest;
+import com.yourproject.backend.dtos.requests.ForgotPasswordRequest;
+import com.yourproject.backend.dtos.requests.ResetPasswordRequest;
+import com.yourproject.backend.dtos.requests.VerifyPasswordResetOtpRequest;
+import com.yourproject.backend.dtos.responses.PasswordResetTokenResponse;
 
 public interface AuthService {
     AuthResponse login(LoginRequest request);
@@ -18,4 +22,10 @@ public interface AuthService {
     void changePassword(String userId, ChangePasswordRequest request);
     AuthResponse requestPatientOtp(RequestPatientOtpRequest request);
     AuthResponse verifyPatientOtp(VerifyPatientOtpRequest request);
+
+    void requestPasswordReset(ForgotPasswordRequest request);
+
+    PasswordResetTokenResponse verifyPasswordResetOtp(VerifyPasswordResetOtpRequest request);
+
+    void resetPassword(ResetPasswordRequest request);
 }

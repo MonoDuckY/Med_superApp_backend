@@ -29,12 +29,12 @@ class UserProfileIntegrationTest extends MongoIntegrationTestBase {
     @Test
     void authenticatedUserRetrievesOwnProfile() throws Exception {
         String normalizedPhone = "+84912345678";
-        userRepository.save(User.builder().fullName("Dr Profile").role(UserRole.DOCTOR).status(AccountStatus.ACTIVE)
+        userRepository.save(User.builder().fullName("Dr Profile").roleId(UserRole.DOCTOR.getId()).status(AccountStatus.ACTIVE)
                 .phoneNumber(normalizedPhone).phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
                 .passwordHash(passwordEncoder.encode("Password123!")).certificate("Practice certificate").build());
 
         MvcResult loginResult = mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"Password123!\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"Password123!\"}"))
                 .andExpect(status().isOk()).andReturn();
         String accessToken = JsonPath.read(loginResult.getResponse().getContentAsString(), "$.data.accessToken");
 

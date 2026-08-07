@@ -15,6 +15,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,11 +26,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.yourproject.backend.dtos.requests.ScheduleDecisionRequest;
 import com.yourproject.backend.dtos.requests.SubmitWorkScheduleRequest;
+import com.yourproject.backend.dtos.requests.BlockWorkSlotRequest;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ConflictException;
+import com.yourproject.backend.exceptions.ForbiddenException;
 import com.yourproject.backend.models.AccountStatus;
+import com.yourproject.backend.models.Appointment;
+import com.yourproject.backend.models.AppointmentStatus;
 import com.yourproject.backend.models.ClinicRoom;
 import com.yourproject.backend.models.DoctorWorkSlot;
+import com.yourproject.backend.models.DoctorWorkSlotStatus;
 import com.yourproject.backend.models.ScheduleDecision;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
@@ -41,6 +47,7 @@ import com.yourproject.backend.repositories.ClinicRoomRepository;
 import com.yourproject.backend.repositories.DoctorWorkSlotRepository;
 import com.yourproject.backend.repositories.WorkSlotRepository;
 import com.yourproject.backend.repositories.UserRepository;
+import com.yourproject.backend.repositories.AppointmentRepository;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.services.UserService;
 
@@ -64,6 +71,9 @@ class WorkScheduleServiceImplTest {
     @Mock
     private PatientDataProtectionService patientDataProtectionService;
 
+    @Mock
+    private AppointmentRepository appointmentRepository;
+
     @InjectMocks
     private WorkScheduleServiceImpl service;
 
@@ -74,8 +84,8 @@ class WorkScheduleServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        doctor = User.builder().id("doctor-1").role(UserRole.DOCTOR).status(AccountStatus.ACTIVE).build();
-        staff = User.builder().id("staff-1").role(UserRole.STAFF).status(AccountStatus.ACTIVE).build();
+        doctor = User.builder().id("doctor-1").roleId(UserRole.DOCTOR.name()).status(AccountStatus.ACTIVE).build();
+        staff = User.builder().id("staff-1").roleId(UserRole.STAFF.name()).status(AccountStatus.ACTIVE).build();
         room = ClinicRoom.builder().id("room-1").code("ROOM-101").active(true).build();
         morningSlots = new ArrayList<>();
         for (int index = 0; index < 8; index++) {
@@ -94,32 +104,53 @@ class WorkScheduleServiceImplTest {
     void submitMorningCreatesEightPendingSlots() {
         when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
         when(clinicRoomRepository.findById("room-1")).thenReturn(Optional.of(room));
-        when(workSlotRepository.findAllBySessionAndActiveTrueOrderByStartTimeAsc(WorkSession.MORNING))
-                .thenReturn(morningSlots);
-        when(doctorWorkSlotRepository.findAllByWorkDateAndSlotIdInAndConflictActiveTrue(any(), any()))
+        when(workSlotRepository.findAllByOrderByStartTimeAsc()).thenReturn(morningSlots);
+        when(doctorWorkSlotRepository.findAllByWorkDateAndSlotIdIn(any(), any()))
                 .thenReturn(List.of());
         when(doctorWorkSlotRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
 
         List<DoctorWorkSlot> result = service.submit("doctor-1", request(WorkSession.MORNING));
 
         assertEquals(8, result.size());
-        assertEquals(1, result.stream().map(DoctorWorkSlot::getSubmissionId).distinct().count());
-        assertEquals(8, result.stream().map(DoctorWorkSlot::getSlotName).distinct().count());
+        assertEquals(8, result.stream().map(DoctorWorkSlot::getSlotId).distinct().count());
         result.forEach(slot -> {
-            assertEquals(WorkSlotApprovalStatus.PENDING_APPROVAL, slot.getApprovalStatus());
-            assertEquals(WorkSlotBookingStatus.NOT_PUBLISHED, slot.getBookingStatus());
+            assertEquals(DoctorWorkSlotStatus.PENDING, slot.getStatus());
             assertEquals("doctor-1", slot.getDoctorId());
             assertEquals("room-1", slot.getRoomId());
         });
     }
 
     @Test
+    void submitNightCreatesThirtySlotsFromFivePmUntilEightAmNextDay() {
+        List<WorkSlot> nightSlots = new ArrayList<>();
+        for (int index = 0; index < 30; index++) {
+            LocalTime startTime = LocalTime.of(17, 0).plusMinutes(index * 30L);
+            nightSlots.add(WorkSlot.builder()
+                    .id("night-slot-" + (index + 1))
+                    .name("Slot" + (index + 17))
+                    .startTime(startTime)
+                    .endTime(startTime.plusMinutes(30))
+                    .build());
+        }
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+        when(clinicRoomRepository.findById("room-1")).thenReturn(Optional.of(room));
+        when(workSlotRepository.findAllByOrderByStartTimeAsc()).thenReturn(nightSlots);
+        when(doctorWorkSlotRepository.findAllByWorkDateAndSlotIdIn(any(), any())).thenReturn(List.of());
+        when(doctorWorkSlotRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<DoctorWorkSlot> result = service.submit("doctor-1", request(WorkSession.NIGHT));
+
+        assertEquals(30, result.size());
+        assertEquals("night-slot-1", result.get(0).getSlotId());
+        assertEquals("night-slot-30", result.get(29).getSlotId());
+    }
+
+    @Test
     void submitRejectsExistingDoctorOrRoomConflict() {
         when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
         when(clinicRoomRepository.findById("room-1")).thenReturn(Optional.of(room));
-        when(workSlotRepository.findAllBySessionAndActiveTrueOrderByStartTimeAsc(WorkSession.MORNING))
-                .thenReturn(morningSlots);
-        when(doctorWorkSlotRepository.findAllByWorkDateAndSlotIdInAndConflictActiveTrue(any(), any()))
+        when(workSlotRepository.findAllByOrderByStartTimeAsc()).thenReturn(morningSlots);
+        when(doctorWorkSlotRepository.findAllByWorkDateAndSlotIdIn(any(), any()))
                 .thenReturn(List.of(DoctorWorkSlot.builder()
                         .doctorId("another-doctor")
                         .roomId("room-1")
@@ -133,7 +164,7 @@ class WorkScheduleServiceImplTest {
     @Test
     void rejectingScheduleRequiresReason() {
         when(userService.getActiveUserById("staff-1")).thenReturn(staff);
-        when(doctorWorkSlotRepository.findAllBySubmissionIdOrderByStartAtAsc("submission-1"))
+        when(doctorWorkSlotRepository.findAllBySubmissionIdOrderBySlotIdAsc("submission-1"))
                 .thenReturn(List.of(pendingSlot()));
         ScheduleDecisionRequest request = new ScheduleDecisionRequest();
         request.setDecision(ScheduleDecision.REJECT);
@@ -147,7 +178,7 @@ class WorkScheduleServiceImplTest {
         DoctorWorkSlot second = pendingSlot();
         second.setId("work-slot-2");
         when(userService.getActiveUserById("staff-1")).thenReturn(staff);
-        when(doctorWorkSlotRepository.findAllBySubmissionIdOrderByStartAtAsc("submission-1"))
+        when(doctorWorkSlotRepository.findAllBySubmissionIdOrderBySlotIdAsc("submission-1"))
                 .thenReturn(List.of(first, second));
         when(doctorWorkSlotRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
         ScheduleDecisionRequest request = new ScheduleDecisionRequest();
@@ -157,7 +188,7 @@ class WorkScheduleServiceImplTest {
         List<DoctorWorkSlot> result = service.decide("staff-1", "submission-1", request);
 
         result.forEach(slot -> {
-            assertEquals(WorkSlotApprovalStatus.REJECTED, slot.getApprovalStatus());
+            assertEquals(DoctorWorkSlotStatus.REJECTED, slot.getStatus());
             assertFalse(slot.isConflictActive());
             assertEquals("Room maintenance", slot.getRejectionReason());
         });
@@ -166,12 +197,68 @@ class WorkScheduleServiceImplTest {
     @Test
     void getSchedulesFiltersByApprovalStatus() {
         when(userService.getActiveUserById("staff-1")).thenReturn(staff);
-        when(doctorWorkSlotRepository.findAllByApprovalStatusOrderBySubmittedAtDesc(
-                WorkSlotApprovalStatus.APPROVED)).thenReturn(List.of(pendingSlot()));
+        when(doctorWorkSlotRepository.findAllByStatusOrderBySubmittedAtDesc(
+                DoctorWorkSlotStatus.AVAILABLE)).thenReturn(List.of(pendingSlot()));
 
-        List<DoctorWorkSlot> result = service.getSchedules("staff-1", WorkSlotApprovalStatus.APPROVED);
+        List<DoctorWorkSlot> result = service.getSchedules("staff-1", DoctorWorkSlotStatus.AVAILABLE);
 
         assertEquals(1, result.size());
+    }
+
+    @Test
+    void doctorGetsAllDoctorSchedulesWithinDateRangeAndStatus() {
+        LocalDate from = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        LocalDate to = from.plusDays(7);
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+        when(doctorWorkSlotRepository.findAllByWorkDateBetweenAndStatusOrderByWorkDateAscSlotIdAsc(
+                from, to, DoctorWorkSlotStatus.AVAILABLE)).thenReturn(List.of(pendingSlot()));
+
+        List<DoctorWorkSlot> result = service.getAllDoctorSchedules(
+                "doctor-1", from, to, DoctorWorkSlotStatus.AVAILABLE);
+
+        assertEquals(1, result.size());
+    }
+
+    @Test
+    void getAllDoctorSchedulesRejectsInvalidDateRange() {
+        LocalDate from = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+
+        assertThrows(BadRequestException.class, () -> service.getAllDoctorSchedules(
+                "doctor-1", from, from.minusDays(1), null));
+    }
+
+    @Test
+    void nonDoctorCannotGetAllDoctorSchedules() {
+        when(userService.getActiveUserById("staff-1")).thenReturn(staff);
+
+        assertThrows(ForbiddenException.class, () -> service.getAllDoctorSchedules(
+                "staff-1", null, null, null));
+    }
+
+    @Test
+    void staffUserCanUseStaffScheduleOperations() {
+        User multiRoleUser = User.builder().id("staff-user")
+                .roleId(UserRole.STAFF.name())
+                .status(AccountStatus.ACTIVE).build();
+        when(userService.getActiveUserById("staff-user")).thenReturn(multiRoleUser);
+        when(doctorWorkSlotRepository.findAllByStatusOrderBySubmittedAtDesc(
+                DoctorWorkSlotStatus.AVAILABLE)).thenReturn(List.of());
+
+        List<DoctorWorkSlot> result = service.getSchedules(
+                "staff-user", DoctorWorkSlotStatus.AVAILABLE);
+
+        assertEquals(0, result.size());
+    }
+
+    @Test
+    void adminWithoutStaffRoleCannotUseStaffScheduleOperations() {
+        User admin = User.builder().id("admin-user")
+                .roleId(UserRole.ADMIN.name()).status(AccountStatus.ACTIVE).build();
+        when(userService.getActiveUserById("admin-user")).thenReturn(admin);
+
+        assertThrows(ForbiddenException.class,
+                () -> service.getSchedules("admin-user", DoctorWorkSlotStatus.AVAILABLE));
     }
 
     @Test
@@ -180,12 +267,20 @@ class WorkScheduleServiceImplTest {
         doctor.setPhoneNumber("+84911111111");
         doctor.setCertificate("Cardiology");
         when(userRepository.findAllById(any())).thenReturn(List.of(doctor));
+        when(workSlotRepository.findAllById(any())).thenReturn(List.of(WorkSlot.builder()
+                .id("slot-1")
+                .name("Slot1")
+                .startTime(LocalTime.of(8, 0))
+                .endTime(LocalTime.of(8, 30))
+                .build()));
 
         var response = service.toResponses(List.of(pendingSlot())).get(0);
 
         assertEquals("doctor-1", response.getDoctor().getId());
         assertEquals("Dr Nguyen Van A", response.getDoctor().getFullName());
         assertEquals("Cardiology", response.getDoctor().getCertificate());
+        assertEquals("Slot1", response.getSlots().get(0).getSlot().getName());
+        assertEquals(LocalTime.of(8, 0), response.getSlots().get(0).getSlot().getStartTime());
     }
 
     private SubmitWorkScheduleRequest request(WorkSession session) {
@@ -201,10 +296,59 @@ class WorkScheduleServiceImplTest {
                 .id("work-slot-1")
                 .submissionId("submission-1")
                 .doctorId("doctor-1")
-                .approvalStatus(WorkSlotApprovalStatus.PENDING_APPROVAL)
-                .bookingStatus(WorkSlotBookingStatus.NOT_PUBLISHED)
+                .workDate(LocalDate.now().plusDays(2))
+                .slotId("slot-1")
+                .status(DoctorWorkSlotStatus.PENDING)
                 .conflictActive(true)
-                .startAt(LocalDate.now().plusDays(2).atStartOfDay(ZoneId.systemDefault()).toInstant())
                 .build();
+    }
+
+    @Test
+    void modifyPendingSubmissionReplacesSlotsAndKeepsSubmissionId() {
+        DoctorWorkSlot pending = pendingSlot();
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+        when(doctorWorkSlotRepository.findAllBySubmissionIdAndDoctorIdOrderBySlotIdAsc(
+                "submission-1", "doctor-1")).thenReturn(List.of(pending));
+        when(clinicRoomRepository.findById("room-1")).thenReturn(Optional.of(room));
+        when(workSlotRepository.findAllByOrderByStartTimeAsc()).thenReturn(morningSlots);
+        when(doctorWorkSlotRepository.findAllByWorkDateAndSlotIdIn(any(), any()))
+                .thenReturn(List.of());
+        when(doctorWorkSlotRepository.saveAll(anyList()))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        List<DoctorWorkSlot> result = service.modifyPendingSubmission(
+                "doctor-1", "submission-1", request(WorkSession.MORNING));
+
+        assertEquals(8, result.size());
+        result.forEach(slot -> {
+            assertEquals("submission-1", slot.getSubmissionId());
+            assertEquals(DoctorWorkSlotStatus.PENDING, slot.getStatus());
+        });
+        verify(doctorWorkSlotRepository).deleteAll(List.of(pending));
+    }
+
+    @Test
+    void blockBookedSlotCancelsAffectedAppointment() {
+        DoctorWorkSlot booked = pendingSlot();
+        booked.setStatus(DoctorWorkSlotStatus.BOOKED);
+        Appointment appointment = Appointment.builder()
+                .id("appointment-1")
+                .doctorWorkSlotId(booked.getId())
+                .status(AppointmentStatus.CONFIRMED)
+                .build();
+        BlockWorkSlotRequest request = new BlockWorkSlotRequest();
+        request.setReason("Doctor unavailable");
+        when(userService.getActiveUserById("staff-1")).thenReturn(staff);
+        when(doctorWorkSlotRepository.findById(booked.getId())).thenReturn(Optional.of(booked));
+        when(appointmentRepository.findFirstByDoctorWorkSlotIdAndStatusIn(any(), any()))
+                .thenReturn(Optional.of(appointment));
+        when(doctorWorkSlotRepository.save(booked)).thenReturn(booked);
+
+        DoctorWorkSlot result = service.blockSlot("staff-1", booked.getId(), request);
+
+        assertEquals(DoctorWorkSlotStatus.CANCELLED, result.getStatus());
+        assertEquals(AppointmentStatus.CANCELLED, appointment.getStatus());
+        assertEquals("Doctor unavailable", appointment.getCancellationReason());
+        verify(appointmentRepository).save(appointment);
     }
 }

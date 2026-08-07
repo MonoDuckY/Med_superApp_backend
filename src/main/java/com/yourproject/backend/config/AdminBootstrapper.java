@@ -11,6 +11,8 @@ import org.springframework.stereotype.Component;
 
 import com.yourproject.backend.dtos.requests.CreateUserRequest;
 import com.yourproject.backend.models.UserRole;
+import com.yourproject.backend.models.AccountStatus;
+import com.yourproject.backend.models.User;
 import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.services.UserService;
@@ -47,8 +49,12 @@ public class AdminBootstrapper implements ApplicationRunner {
             throw new IllegalStateException("Both bootstrap admin phone number and password must be provided.");
         }
         String normalizedPhoneNumber = PhoneNumberNormalizer.normalize(phoneNumber);
-        if (userRepository.existsByPhoneLookup(patientDataProtectionService.phoneLookup(normalizedPhoneNumber))
-                || userRepository.findByPhoneNumber(normalizedPhoneNumber).isPresent()) {
+        java.util.Optional<User> existingAdmin = userRepository.findByPhoneLookupAndRoleId(
+                patientDataProtectionService.phoneLookup(normalizedPhoneNumber), UserRole.ADMIN.getId());
+        if (existingAdmin.isEmpty()) {
+            existingAdmin = userRepository.findByPhoneNumberAndRoleId(normalizedPhoneNumber, UserRole.ADMIN.getId());
+        }
+        if (existingAdmin.isPresent()) {
             LOGGER.info("Bootstrap administrator account already exists; creation skipped.");
         } else {
             CreateUserRequest request = new CreateUserRequest();

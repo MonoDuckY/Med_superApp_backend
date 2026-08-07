@@ -10,6 +10,9 @@ import lombok.Data;
 
 @Data
 public class UpdateUserRequest {
+    @Size(max = 50, message = "Password must not exceed 50 characters.")
+    private String password;
+
     private UserRole role;
     private AccountStatus status;
 
@@ -35,4 +38,9 @@ public class UpdateUserRequest {
 
     @Size(max = 255, message = "Certificate must not exceed 255 characters.")
     private String certificate;
+    private String medicalHistory;
+    private String currentSickness;
+    private Double height;
+    private Double weight;
+    private String bloodType;
 }

@@ -21,20 +21,21 @@ class AuthLoginIntegrationTest extends MongoIntegrationTestBase {
         saveActiveDoctor("+84912345678", "Password123!");
 
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"Password123!\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"Password123!\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
                 .andExpect(jsonPath("$.data.refreshToken").isNotEmpty());
 
-        assertEquals(1, refreshTokenRepository.count());
-        assertNotNull(userRepository.findAll().get(0).getLastLoginAt());
+        User storedUser = userRepository.findAll().get(0);
+        assertNotNull(storedUser.getRefreshTokenHash());
+        assertNotNull(storedUser.getLastLoginAt());
     }
 
     @Test
     void loginWithoutPhoneNumberReturnsValidationError() throws Exception {
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"password\":\"Password123!\"}"))
+                        .content("{\"role\":\"DOCTOR\",\"password\":\"Password123!\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("Phone number is required."))
@@ -42,9 +43,35 @@ class AuthLoginIntegrationTest extends MongoIntegrationTestBase {
     }
 
     @Test
+    void loginWithoutRoleReturnsValidationError() throws Exception {
+        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"Password123!\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Role is required."))
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void samePhoneCanLoginToDifferentAccountsSelectedByRole() throws Exception {
+        saveActiveDoctor("+84912345678", "Doctor123!");
+        saveActiveStaff("+84912345678", "Staff123!");
+
+        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"STAFF\",\"password\":\"Staff123!\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.user.role").value("STAFF"));
+
+        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"Doctor123!\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.user.role").value("DOCTOR"));
+    }
+
+    @Test
     void loginWithoutPasswordReturnsValidationError() throws Exception {
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("Password is required."))
@@ -56,12 +83,13 @@ class AuthLoginIntegrationTest extends MongoIntegrationTestBase {
         User doctor = saveActiveDoctor("+84912345678", "Password123!");
 
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"WrongPassword1!\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"WrongPassword1!\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("Invalid phone number or password."));
 
         assertEquals(1, userRepository.findById(doctor.getId()).orElseThrow().getFailedLoginAttempts());
-        assertEquals(0, refreshTokenRepository.count());
+        org.junit.jupiter.api.Assertions.assertNull(
+                userRepository.findById(doctor.getId()).orElseThrow().getRefreshTokenHash());
     }
 
     @Test
@@ -70,7 +98,7 @@ class AuthLoginIntegrationTest extends MongoIntegrationTestBase {
 
         for (int attempt = 0; attempt < 5; attempt++) {
             mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"phoneNumber\":\"0912345678\",\"password\":\"WrongPassword1!\"}"))
+                            .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"WrongPassword1!\"}"))
                     .andExpect(status().isUnauthorized());
         }
 
@@ -80,7 +108,7 @@ class AuthLoginIntegrationTest extends MongoIntegrationTestBase {
         assertTrue(lockedDoctor.getLockedUntil().isAfter(java.time.Instant.now()));
 
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"Password123!\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"Password123!\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("Account is temporarily locked. Please try again later."));
     }
@@ -92,7 +120,7 @@ class AuthLoginIntegrationTest extends MongoIntegrationTestBase {
         userRepository.save(doctor);
 
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"Password123!\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"Password123!\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.errorCode").value("UNAUTHORIZED"));
     }
@@ -102,7 +130,7 @@ class AuthLoginIntegrationTest extends MongoIntegrationTestBase {
         saveActivePatient("+84912345678");
 
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"Password123!\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"PATIENT\",\"password\":\"Password123!\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Patient accounts must sign in using SMS OTP."));
     }
@@ -112,22 +140,23 @@ class AuthLoginIntegrationTest extends MongoIntegrationTestBase {
         saveActiveDoctor("+84912345678", "Password123!");
 
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"WrongPassword1!\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"WrongPassword1!\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("Invalid phone number or password."));
 
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0987654321\",\"password\":\"Password123!\"}"))
+                        .content("{\"phoneNumber\":\"0987654321\",\"role\":\"DOCTOR\",\"password\":\"Password123!\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.message").value("Invalid phone number or password."));
 
-        assertEquals(0, refreshTokenRepository.count());
+        org.junit.jupiter.api.Assertions.assertNull(
+                userRepository.findAll().get(0).getRefreshTokenHash());
     }
 
     @Test
     void malformedPhoneNumberReturnsBadRequest() throws Exception {
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"12345\",\"password\":\"Password123!\"}"))
+                        .content("{\"phoneNumber\":\"12345\",\"role\":\"DOCTOR\",\"password\":\"Password123!\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("BAD_REQUEST"))
                 .andExpect(jsonPath("$.message").value("Phone number must be a valid Vietnamese number: 10 digits starting with 0 or international format +84."));
@@ -138,7 +167,7 @@ class AuthLoginIntegrationTest extends MongoIntegrationTestBase {
         saveActiveDoctor("+84912345678", "Password123!");
 
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912 345-678\",\"password\":\"Password123!\"}"))
+                        .content("{\"phoneNumber\":\"0912 345-678\",\"role\":\"DOCTOR\",\"password\":\"Password123!\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.user.phoneNumber").value("+84912345678"));
     }
@@ -151,7 +180,7 @@ class AuthLoginIntegrationTest extends MongoIntegrationTestBase {
         userRepository.save(doctor);
 
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"Password123!\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"Password123!\"}"))
                 .andExpect(status().isOk());
 
         User updatedDoctor = userRepository.findById(doctor.getId()).orElseThrow();
@@ -165,13 +194,13 @@ class AuthLoginIntegrationTest extends MongoIntegrationTestBase {
         String longPassword = "P".repeat(51);
 
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"" + longPhone + "\",\"password\":\"Password123!\"}"))
+                        .content("{\"phoneNumber\":\"" + longPhone + "\",\"role\":\"DOCTOR\",\"password\":\"Password123!\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.message").value("Phone number must not exceed 20 characters."));
 
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"" + longPassword + "\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"" + longPassword + "\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errorCode").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.message").value("Password must not exceed 50 characters."));

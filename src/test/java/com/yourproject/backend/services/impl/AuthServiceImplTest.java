@@ -35,12 +35,15 @@ import com.yourproject.backend.dtos.responses.AuthResponse;
 import com.yourproject.backend.exceptions.UnauthorizedException;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.models.AccountStatus;
-import com.yourproject.backend.models.RefreshToken;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
 import com.yourproject.backend.repositories.PatientOtpRepository;
-import com.yourproject.backend.repositories.RefreshTokenRepository;
-import com.yourproject.backend.repositories.TrustedDeviceRepository;
+import com.yourproject.backend.models.OtpPurpose;
+import com.yourproject.backend.models.PatientOtp;
+import com.yourproject.backend.dtos.requests.ForgotPasswordRequest;
+import com.yourproject.backend.dtos.requests.ResetPasswordRequest;
+import com.yourproject.backend.dtos.requests.VerifyPasswordResetOtpRequest;
+import com.yourproject.backend.dtos.responses.PasswordResetTokenResponse;
 import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.services.SmsGatewayService;
 import com.yourproject.backend.services.UserService;
@@ -51,9 +54,6 @@ import com.yourproject.backend.utils.JwtUtils;
 class AuthServiceImplTest {
     @Mock
     private UserService userService;
-
-    @Mock
-    private RefreshTokenRepository refreshTokenRepository;
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -73,9 +73,6 @@ class AuthServiceImplTest {
     @Mock
     private UserRepository userRepository;
 
-    @Mock
-    private TrustedDeviceRepository trustedDeviceRepository;
-
     @InjectMocks
     private AuthServiceImpl authService;
 
@@ -85,6 +82,7 @@ class AuthServiceImplTest {
         ReflectionTestUtils.setField(authService, "otpExpirationMinutes", 5L);
         ReflectionTestUtils.setField(authService, "otpResendCooldownSeconds", 60L);
         ReflectionTestUtils.setField(authService, "otpMaxAttempts", 5);
+        ReflectionTestUtils.setField(authService, "passwordResetTokenExpirationMinutes", 10L);
         ReflectionTestUtils.setField(authService, "maxFailedLoginAttempts", 5);
         ReflectionTestUtils.setField(authService, "lockoutMinutes", 15L);
     }
@@ -93,7 +91,7 @@ class AuthServiceImplTest {
     void login_issuesAccessAndRefreshTokensForActiveAccountWithCorrectPassword() {
         User user = activeDoctor();
         LoginRequest request = loginRequest();
-        when(userService.findByPhoneNumber("0363636363")).thenReturn(user);
+        when(userService.findByPhoneNumberAndRole("0363636363", UserRole.DOCTOR)).thenReturn(user);
         when(userService.getActiveUserById("user-id")).thenReturn(user);
         when(passwordEncoder.matches("Validpass1", "password-hash")).thenReturn(true);
         when(jwtUtils.generateAccessToken(user)).thenReturn("access-token");
@@ -105,25 +103,25 @@ class AuthServiceImplTest {
         assertNotNull(response.getRefreshToken());
         assertEquals("Bearer", response.getTokenType());
         verify(userService).recordSuccessfulLogin(user);
-        verify(refreshTokenRepository).save(any(RefreshToken.class));
+        verify(userRepository, times(2)).save(user);
     }
 
     @Test
     void login_rejectsIncorrectPassword() {
         User user = activeDoctor();
-        when(userService.findByPhoneNumber("0363636363")).thenReturn(user);
+        when(userService.findByPhoneNumberAndRole("0363636363", UserRole.DOCTOR)).thenReturn(user);
         when(userService.getActiveUserById("user-id")).thenReturn(user);
         when(passwordEncoder.matches("Validpass1", "password-hash")).thenReturn(false);
 
         assertThrows(UnauthorizedException.class, () -> authService.login(loginRequest()));
         verify(userService, never()).recordSuccessfulLogin(any(User.class));
-        verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+        verify(userRepository).save(user);
     }
 
     @Test
     void login_rejectsInactiveAccount() {
         User user = activeDoctor();
-        when(userService.findByPhoneNumber("0363636363")).thenReturn(user);
+        when(userService.findByPhoneNumberAndRole("0363636363", UserRole.DOCTOR)).thenReturn(user);
         when(userService.getActiveUserById("user-id"))
                 .thenThrow(new UnauthorizedException("This account is inactive."));
 
@@ -136,7 +134,7 @@ class AuthServiceImplTest {
         User patient = activeDoctor();
         patient.setRole(UserRole.PATIENT);
         patient.setPasswordHash(null);
-        when(userService.findByPhoneNumber("0363636363")).thenReturn(patient);
+        when(userService.findByPhoneNumberAndRole("0363636363", UserRole.DOCTOR)).thenReturn(patient);
         when(userService.getActiveUserById("user-id")).thenReturn(patient);
 
         assertThrows(BadRequestException.class, () -> authService.login(loginRequest()));
@@ -149,32 +147,32 @@ class AuthServiceImplTest {
         request.setPhoneNumber(null);
 
         assertThrows(BadRequestException.class, () -> authService.login(request));
-        verify(userService, never()).findByPhoneNumber(any());
+        verify(userService, never()).findByPhoneNumberAndRole(any(), any());
     }
 
     @Test
     void refresh_revokesOldTokenAndIssuesNewTokenPair() {
         User user = activeDoctor();
-        RefreshToken storedToken = activeRefreshToken("refresh-token", "user-id");
+        user.setRefreshTokenHash(hashToken("refresh-token"));
+        user.setRefreshTokenExpiresAt(Instant.now().plus(Duration.ofDays(1)));
         RefreshTokenRequest request = new RefreshTokenRequest();
         request.setRefreshToken("refresh-token");
-        when(refreshTokenRepository.findByTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(storedToken));
+        when(userRepository.findByRefreshTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(user));
         when(userService.getActiveUserById("user-id")).thenReturn(user);
         when(jwtUtils.generateAccessToken(user)).thenReturn("new-access-token");
         when(jwtUtils.getAccessTokenExpirationSeconds()).thenReturn(900L);
 
         assertEquals("new-access-token", authService.refresh(request).getAccessToken());
-        assertNotNull(storedToken.getRevokedAt());
-        verify(refreshTokenRepository, times(2)).save(any(RefreshToken.class));
+        verify(userRepository, times(1)).findByRefreshTokenHash(hashToken("refresh-token"));
     }
 
     @Test
     void refresh_rejectsRevokedToken() {
-        RefreshToken storedToken = activeRefreshToken("refresh-token", "user-id");
-        storedToken.setRevokedAt(Instant.now());
+        User user = activeDoctor();
+        user.setRefreshTokenExpiresAt(Instant.now().minusSeconds(1));
         RefreshTokenRequest request = new RefreshTokenRequest();
         request.setRefreshToken("refresh-token");
-        when(refreshTokenRepository.findByTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(storedToken));
+        when(userRepository.findByRefreshTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(user));
 
         assertThrows(UnauthorizedException.class, () -> authService.refresh(request));
         verify(userService, never()).getActiveUserById(any());
@@ -182,26 +180,28 @@ class AuthServiceImplTest {
 
     @Test
     void logout_rejectsTokenOwnedByAnotherUser() {
-        RefreshToken storedToken = activeRefreshToken("refresh-token", "other-user");
+        User user = activeDoctor();
+        user.setRefreshTokenHash(hashToken("another-token"));
         LogoutRequest request = new LogoutRequest();
         request.setRefreshToken("refresh-token");
-        when(refreshTokenRepository.findByTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(storedToken));
+        when(userService.getActiveUserById("user-id")).thenReturn(user);
 
         assertThrows(UnauthorizedException.class, () -> authService.logout("user-id", request));
-        verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+        verify(userRepository, never()).save(user);
     }
 
     @Test
     void logout_revokesRefreshTokenOwnedByCurrentUser() {
-        RefreshToken storedToken = activeRefreshToken("refresh-token", "user-id");
+        User user = activeDoctor();
+        user.setRefreshTokenHash(hashToken("refresh-token"));
         LogoutRequest request = new LogoutRequest();
         request.setRefreshToken("refresh-token");
-        when(refreshTokenRepository.findByTokenHash(hashToken("refresh-token"))).thenReturn(Optional.of(storedToken));
+        when(userService.getActiveUserById("user-id")).thenReturn(user);
 
         authService.logout("user-id", request);
 
-        assertNotNull(storedToken.getRevokedAt());
-        verify(refreshTokenRepository).save(storedToken);
+        assertEquals(null, user.getRefreshTokenHash());
+        verify(userRepository).save(user);
     }
 
     @Test
@@ -210,22 +210,215 @@ class AuthServiceImplTest {
         request.setCurrentPassword("Oldpass1");
         request.setNewPassword("Newpass1");
         request.setConfirmPassword("Newpass1");
-        RefreshToken firstToken = RefreshToken.builder().userId("user-id").build();
-        RefreshToken secondToken = RefreshToken.builder().userId("user-id").build();
-        when(refreshTokenRepository.findAllByUserIdAndRevokedAtIsNull("user-id"))
-                .thenReturn(List.of(firstToken, secondToken));
+        User user = activeDoctor();
+        user.setAccessTokenHash("access-hash");
+        user.setRefreshTokenHash("refresh-hash");
+        when(userService.getUserById("user-id")).thenReturn(user);
 
         authService.changePassword("user-id", request);
 
         verify(userService).changePassword("user-id", request);
-        assertNotNull(firstToken.getRevokedAt());
-        assertNotNull(secondToken.getRevokedAt());
-        verify(refreshTokenRepository, times(2)).save(any(RefreshToken.class));
+        assertEquals(null, user.getAccessTokenHash());
+        assertEquals(null, user.getRefreshTokenHash());
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void requestPasswordReset_createsOtpForEligibleAccount() {
+        User user = activeDoctor();
+        ForgotPasswordRequest request = new ForgotPasswordRequest();
+        request.setPhoneNumber("0363636363");
+        request.setRole(UserRole.DOCTOR);
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(Optional.of(user));
+        when(patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc("phone-lookup", OtpPurpose.PASSWORD_RESET))
+                .thenReturn(Optional.empty());
+        when(patientOtpRepository.findAllByPhoneLookupAndPurpose("phone-lookup", OtpPurpose.PASSWORD_RESET))
+                .thenReturn(List.of());
+        when(patientDataProtectionService.secureLookup(any())).thenReturn("otp-hash");
+        when(patientOtpRepository.save(any(PatientOtp.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        authService.requestPasswordReset(request);
+
+        verify(patientOtpRepository).save(any(PatientOtp.class));
+        verify(smsGatewayService).enqueue(eq("user-id"), eq("+84363636363"), any(), any());
+    }
+
+    @Test
+    void requestPasswordReset_doesNotRevealUnknownAccount() {
+        ForgotPasswordRequest request = new ForgotPasswordRequest();
+        request.setPhoneNumber("0363636363");
+        request.setRole(UserRole.DOCTOR);
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(Optional.empty());
+
+        authService.requestPasswordReset(request);
+
+        verify(patientOtpRepository, never()).save(any());
+        verify(smsGatewayService, never()).enqueue(any(), any(), any(), any());
+    }
+
+    @Test
+    void requestPasswordReset_allowsNonPatientAccountWithoutExistingPasswordHash() {
+        User user = activeDoctor();
+        user.setPasswordHash(null);
+        ForgotPasswordRequest request = new ForgotPasswordRequest();
+        request.setPhoneNumber("0363636363");
+        request.setRole(UserRole.DOCTOR);
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(Optional.of(user));
+        when(patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc("phone-lookup", OtpPurpose.PASSWORD_RESET))
+                .thenReturn(Optional.empty());
+        when(patientOtpRepository.findAllByPhoneLookupAndPurpose("phone-lookup", OtpPurpose.PASSWORD_RESET))
+                .thenReturn(List.of());
+        when(patientDataProtectionService.secureLookup(any())).thenReturn("otp-hash");
+        when(patientOtpRepository.save(any(PatientOtp.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        authService.requestPasswordReset(request);
+
+        verify(smsGatewayService).enqueue(eq("user-id"), eq("+84363636363"), any(), any());
+    }
+
+    @Test
+    void requestPasswordReset_ignoresPatientOnlyAccountWithoutPassword() {
+        User patient = activeDoctor();
+        patient.setRole(UserRole.PATIENT);
+        patient.setPasswordHash(null);
+        ForgotPasswordRequest request = new ForgotPasswordRequest();
+        request.setPhoneNumber("0363636363");
+        request.setRole(UserRole.PATIENT);
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.PATIENT.getId())).thenReturn(Optional.of(patient));
+
+        authService.requestPasswordReset(request);
+
+        verify(patientOtpRepository, never()).save(any());
+        verify(smsGatewayService, never()).enqueue(any(), any(), any(), any());
+    }
+
+    @Test
+    void verifyPasswordResetOtp_returnsOneTimeResetToken() {
+        User user = activeDoctor();
+        PatientOtp otp = PatientOtp.builder()
+                .userId("user-id")
+                .phoneLookup("phone-lookup")
+                .purpose(OtpPurpose.PASSWORD_RESET)
+                .codeHash("otp-hash")
+                .attempts(0)
+                .createdAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(300))
+                .build();
+        VerifyPasswordResetOtpRequest request = verifyPasswordResetOtpRequest();
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(Optional.of(user));
+        when(patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc("phone-lookup", OtpPurpose.PASSWORD_RESET))
+                .thenReturn(Optional.of(otp));
+        when(patientDataProtectionService.secureLookup("password-reset:user-id:123456")).thenReturn("otp-hash");
+
+        PasswordResetTokenResponse response = authService.verifyPasswordResetOtp(request);
+
+        assertNotNull(response.resetToken());
+        assertEquals(600L, response.expiresInSeconds());
+        assertNotNull(otp.getConsumedAt());
+        assertNotNull(otp.getVerifiedAt());
+        assertNotNull(otp.getResetTokenHash());
+        assertNotNull(otp.getResetTokenExpiresAt());
+        verify(patientOtpRepository).save(otp);
+    }
+
+    @Test
+    void verifyPasswordResetOtp_rejectsIncorrectOtpAndIncrementsAttempts() {
+        User user = activeDoctor();
+        PatientOtp otp = PatientOtp.builder()
+                .userId("user-id")
+                .phoneLookup("phone-lookup")
+                .purpose(OtpPurpose.PASSWORD_RESET)
+                .codeHash("correct-hash")
+                .attempts(0)
+                .createdAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(300))
+                .build();
+        when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
+        when(userRepository.findByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(Optional.of(user));
+        when(patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc("phone-lookup", OtpPurpose.PASSWORD_RESET))
+                .thenReturn(Optional.of(otp));
+        when(patientDataProtectionService.secureLookup("password-reset:user-id:123456")).thenReturn("wrong-hash");
+
+        assertThrows(UnauthorizedException.class, () -> authService.verifyPasswordResetOtp(verifyPasswordResetOtpRequest()));
+
+        assertEquals(1, otp.getAttempts());
+        verify(patientOtpRepository).save(otp);
+        verify(userRepository, never()).save(user);
+    }
+
+    @Test
+    void resetPassword_changesPasswordAndRevokesCurrentTokens() {
+        User user = activeDoctor();
+        user.setAccessTokenHash("access-hash");
+        user.setRefreshTokenHash("refresh-hash");
+        user.setRefreshTokenExpiresAt(Instant.now().plusSeconds(300));
+        PatientOtp otp = PatientOtp.builder()
+                .userId("user-id")
+                .purpose(OtpPurpose.PASSWORD_RESET)
+                .verifiedAt(Instant.now())
+                .resetTokenHash(hashToken("reset-token"))
+                .resetTokenExpiresAt(Instant.now().plusSeconds(300))
+                .build();
+        when(patientOtpRepository.findByResetTokenHashAndPurpose(hashToken("reset-token"), OtpPurpose.PASSWORD_RESET))
+                .thenReturn(Optional.of(otp));
+        when(userRepository.findById("user-id")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("NewPassword2!", "password-hash")).thenReturn(false);
+        when(passwordEncoder.encode("NewPassword2!")).thenReturn("new-password-hash");
+
+        authService.resetPassword(resetPasswordRequest());
+
+        assertEquals("new-password-hash", user.getPasswordHash());
+        assertEquals(null, user.getAccessTokenHash());
+        assertEquals(null, user.getRefreshTokenHash());
+        assertNotNull(otp.getResetTokenUsedAt());
+        assertEquals(null, otp.getResetTokenHash());
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void resetPassword_rejectsAlreadyUsedResetToken() {
+        PatientOtp otp = PatientOtp.builder()
+                .userId("user-id")
+                .purpose(OtpPurpose.PASSWORD_RESET)
+                .verifiedAt(Instant.now())
+                .resetTokenExpiresAt(Instant.now().plusSeconds(300))
+                .resetTokenUsedAt(Instant.now())
+                .build();
+        when(patientOtpRepository.findByResetTokenHashAndPurpose(hashToken("reset-token"), OtpPurpose.PASSWORD_RESET))
+                .thenReturn(Optional.of(otp));
+
+        assertThrows(UnauthorizedException.class, () -> authService.resetPassword(resetPasswordRequest()));
+
+        verify(userRepository, never()).save(any());
+    }
+
+    private ResetPasswordRequest resetPasswordRequest() {
+        ResetPasswordRequest request = new ResetPasswordRequest();
+        request.setResetToken("reset-token");
+        request.setNewPassword("NewPassword2!");
+        request.setConfirmPassword("NewPassword2!");
+        return request;
+    }
+
+    private VerifyPasswordResetOtpRequest verifyPasswordResetOtpRequest() {
+        VerifyPasswordResetOtpRequest request = new VerifyPasswordResetOtpRequest();
+        request.setPhoneNumber("0363636363");
+        request.setRole(UserRole.DOCTOR);
+        request.setCode("123456");
+        return request;
     }
 
     private LoginRequest loginRequest() {
         LoginRequest request = new LoginRequest();
         request.setPhoneNumber("0363636363");
+        request.setRole(UserRole.DOCTOR);
         request.setPassword("Validpass1");
         request.setDeviceId("device-id");
         return request;
@@ -237,15 +430,10 @@ class AuthServiceImplTest {
                 .phoneNumber("+84363636363")
                 .passwordHash("password-hash")
                 .fullName("Dr Nguyen")
-                .role(UserRole.DOCTOR)
+                .roleId(UserRole.DOCTOR.name())
                 .status(AccountStatus.ACTIVE)
                 .createdAt(Instant.now())
                 .build();
-    }
-
-    private RefreshToken activeRefreshToken(String token, String userId) {
-        return RefreshToken.builder().tokenHash(hashToken(token)).userId(userId).deviceId("device-id")
-                .createdAt(Instant.now()).expiresAt(Instant.now().plus(Duration.ofDays(1))).build();
     }
 
     private String hashToken(String token) {

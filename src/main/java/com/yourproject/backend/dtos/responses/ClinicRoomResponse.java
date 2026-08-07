@@ -9,16 +9,16 @@ import lombok.Data;
 @Builder
 public class ClinicRoomResponse {
     private String id;
-    private String code;
     private String name;
     private boolean active;
+    private String note;
 
     public static ClinicRoomResponse from(ClinicRoom room) {
         return ClinicRoomResponse.builder()
                 .id(room.getId())
-                .code(room.getCode())
                 .name(room.getName())
                 .active(room.isActive())
+                .note(room.getNote())
                 .build();
     }
 }

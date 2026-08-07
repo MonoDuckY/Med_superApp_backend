@@ -18,25 +18,29 @@ import com.yourproject.backend.dtos.requests.LogoutRequest;
 import com.yourproject.backend.dtos.requests.RefreshTokenRequest;
 import com.yourproject.backend.dtos.requests.RequestPatientOtpRequest;
 import com.yourproject.backend.dtos.requests.VerifyPatientOtpRequest;
+import com.yourproject.backend.dtos.requests.ForgotPasswordRequest;
+import com.yourproject.backend.dtos.requests.ResetPasswordRequest;
+import com.yourproject.backend.dtos.requests.VerifyPasswordResetOtpRequest;
 import com.yourproject.backend.dtos.responses.AuthResponse;
+import com.yourproject.backend.dtos.responses.PasswordResetTokenResponse;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ResourceNotFoundException;
 import com.yourproject.backend.dtos.responses.UserResponse;
 import com.yourproject.backend.exceptions.UnauthorizedException;
-import com.yourproject.backend.models.RefreshToken;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
-import com.yourproject.backend.repositories.RefreshTokenRepository;
 import com.yourproject.backend.repositories.PatientOtpRepository;
 import com.yourproject.backend.models.PatientOtp;
+import com.yourproject.backend.models.OtpPurpose;
+import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.services.SmsGatewayService;
 import com.yourproject.backend.services.AuthService;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.utils.JwtUtils;
 import com.yourproject.backend.repositories.UserRepository;
-import com.yourproject.backend.repositories.TrustedDeviceRepository;
-import com.yourproject.backend.models.TrustedDevice;
+import com.yourproject.backend.utils.PasswordPolicy;
+import com.yourproject.backend.utils.PhoneNumberNormalizer;
 
 import lombok.RequiredArgsConstructor;
 
@@ -46,36 +50,34 @@ public class AuthServiceImpl implements AuthService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserService userService;
-    private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
     private final PatientDataProtectionService patientDataProtectionService;
     private final PatientOtpRepository patientOtpRepository;
     private final SmsGatewayService smsGatewayService;
     private final UserRepository userRepository;
-    private final TrustedDeviceRepository trustedDeviceRepository;
 
     @Value("${app.jwt.refresh-token-expiration-days}")
     private long refreshTokenExpirationDays;
     @Value("${app.otp.expiration-minutes}") private long otpExpirationMinutes;
     @Value("${app.otp.resend-cooldown-seconds}") private long otpResendCooldownSeconds;
     @Value("${app.otp.max-attempts}") private int otpMaxAttempts;
+    @Value("${app.password-reset.token-expiration-minutes}") private long passwordResetTokenExpirationMinutes;
     @Value("${app.auth.max-failed-login-attempts}") private int maxFailedLoginAttempts;
     @Value("${app.auth.lockout-minutes}") private long lockoutMinutes;
 
     @Override
     public AuthResponse requestPatientOtp(RequestPatientOtpRequest request) {
-        User user=userService.findByPhoneNumber(request.getPhoneNumber()); user=userService.getActiveUserById(user.getId());
-        if(user.getRole()!=UserRole.PATIENT) throw new BadRequestException("Only patient accounts can use SMS OTP.");
+        User user=userService.findByPhoneNumberAndRole(request.getPhoneNumber(), UserRole.PATIENT); user=userService.getActiveUserById(user.getId());
         if (isTrustedDevice(user, request.getDeviceId())) { userService.recordSuccessfulLogin(user); return issueTokens(user, request.getDeviceId()); }
         String phoneLookup=patientDataProtectionService.phoneLookup(com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()));
-        patientOtpRepository.findTopByPhoneLookupOrderByCreatedAtDesc(phoneLookup).ifPresent(previous->{if(previous.getCreatedAt().plusSeconds(otpResendCooldownSeconds).isAfter(Instant.now())) throw new BadRequestException("Please wait before requesting another OTP.");});
-        patientOtpRepository.findAllByPhoneLookupAndConsumedAtIsNull(phoneLookup).forEach(previous -> { previous.setConsumedAt(Instant.now()); patientOtpRepository.save(previous); });
+        patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc(phoneLookup, OtpPurpose.PATIENT_LOGIN).ifPresent(previous->{if(previous.getCreatedAt().plusSeconds(otpResendCooldownSeconds).isAfter(Instant.now())) throw new BadRequestException("Please wait before requesting another OTP.");});
+        patientOtpRepository.findAllByPhoneLookupAndPurposeAndConsumedAtIsNull(phoneLookup, OtpPurpose.PATIENT_LOGIN).forEach(previous -> { previous.setConsumedAt(Instant.now()); patientOtpRepository.save(previous); });
         String code=String.format("%06d",SECURE_RANDOM.nextInt(1_000_000)); Instant expires=Instant.now().plus(Duration.ofMinutes(otpExpirationMinutes));
         System.out.println("\n=======================================================");
         System.out.println("MÃ OTP CỦA BẠN LÀ: " + code);
         System.out.println("=======================================================\n");
-        PatientOtp otp = patientOtpRepository.save(PatientOtp.builder().userId(user.getId()).phoneLookup(phoneLookup).codeHash(patientDataProtectionService.secureLookup("otp:"+user.getId()+":"+code)).attempts(0).createdAt(Instant.now()).expiresAt(expires).build());
+        PatientOtp otp = patientOtpRepository.save(PatientOtp.builder().userId(user.getId()).phoneLookup(phoneLookup).purpose(OtpPurpose.PATIENT_LOGIN).codeHash(patientDataProtectionService.secureLookup("otp:"+user.getId()+":"+code)).attempts(0).createdAt(Instant.now()).expiresAt(expires).build());
         try {
             smsGatewayService.enqueue(user.getId(),com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()),"[Hospital Management System] Ma OTP testing cua ban la "+code+". Khong chia se ma nay.",expires);
         } catch (RuntimeException exception) {
@@ -87,19 +89,148 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse verifyPatientOtp(VerifyPatientOtpRequest request) {
-        User user=userService.findByPhoneNumber(request.getPhoneNumber()); user=userService.getActiveUserById(user.getId());
-        if(user.getRole()!=UserRole.PATIENT) throw new BadRequestException("Only patient accounts can use SMS OTP.");
+        User user=userService.findByPhoneNumberAndRole(request.getPhoneNumber(), UserRole.PATIENT); user=userService.getActiveUserById(user.getId());
         String lookup=patientDataProtectionService.phoneLookup(com.yourproject.backend.utils.PhoneNumberNormalizer.normalize(request.getPhoneNumber()));
-        PatientOtp otp=patientOtpRepository.findTopByPhoneLookupOrderByCreatedAtDesc(lookup).orElseThrow(()->new UnauthorizedException("OTP is invalid or expired."));
+        PatientOtp otp=patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc(lookup, OtpPurpose.PATIENT_LOGIN).orElseThrow(()->new UnauthorizedException("OTP is invalid or expired."));
         if(otp.getConsumedAt()!=null||otp.getExpiresAt().isBefore(Instant.now())||otp.getAttempts()>=otpMaxAttempts) throw new UnauthorizedException("OTP is invalid or expired.");
         if(!patientDataProtectionService.secureLookup("otp:"+user.getId()+":"+request.getCode()).equals(otp.getCodeHash())) { otp.setAttempts(otp.getAttempts()+1);patientOtpRepository.save(otp);throw new UnauthorizedException("OTP is invalid or expired."); }
         otp.setConsumedAt(Instant.now());patientOtpRepository.save(otp);trustDevice(user,request.getDeviceId());userService.recordSuccessfulLogin(user);return issueTokens(user,request.getDeviceId());
     }
 
     @Override
+    public void requestPasswordReset(ForgotPasswordRequest request) {
+        String normalizedPhone = PhoneNumberNormalizer.normalize(request.getPhoneNumber());
+        String phoneLookup = patientDataProtectionService.phoneLookup(normalizedPhone);
+        User user = userRepository.findByPhoneLookupAndRoleId(phoneLookup, request.getRole().getId()).orElse(null);
+        if (!isPasswordResetEligible(user)) {
+            return;
+        }
+
+        patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc(phoneLookup, OtpPurpose.PASSWORD_RESET)
+                .ifPresent(previous -> {
+                    if (previous.getCreatedAt().plusSeconds(otpResendCooldownSeconds).isAfter(Instant.now())) {
+                        throw new BadRequestException("Please wait before requesting another OTP.");
+                    }
+                });
+        Instant invalidatedAt = Instant.now();
+        patientOtpRepository.findAllByPhoneLookupAndPurpose(phoneLookup, OtpPurpose.PASSWORD_RESET).forEach(previous -> {
+            if (previous.getConsumedAt() == null) {
+                previous.setConsumedAt(invalidatedAt);
+            }
+            if (previous.getResetTokenHash() != null && previous.getResetTokenUsedAt() == null) {
+                previous.setResetTokenHash(null);
+                previous.setResetTokenUsedAt(invalidatedAt);
+            }
+            patientOtpRepository.save(previous);
+        });
+
+        String code = String.format("%06d", SECURE_RANDOM.nextInt(1_000_000));
+        Instant expiresAt = Instant.now().plus(Duration.ofMinutes(otpExpirationMinutes));
+        System.out.println("\n=======================================================");
+        System.out.println("PASSWORD RESET OTP: " + code);
+        System.out.println("=======================================================\n");
+        PatientOtp otp = patientOtpRepository.save(PatientOtp.builder()
+                .userId(user.getId())
+                .phoneLookup(phoneLookup)
+                .purpose(OtpPurpose.PASSWORD_RESET)
+                .codeHash(patientDataProtectionService.secureLookup("password-reset:" + user.getId() + ":" + code))
+                .attempts(0)
+                .createdAt(Instant.now())
+                .expiresAt(expiresAt)
+                .build());
+        try {
+            smsGatewayService.enqueue(user.getId(), normalizedPhone,
+                    "[Hospital Management System] Ma OTP dat lai mat khau cua ban la " + code
+                            + ". Khong chia se ma nay.",
+                    expiresAt);
+        } catch (RuntimeException exception) {
+            patientOtpRepository.deleteById(otp.getId());
+            throw new BadRequestException("Password reset OTP could not be delivered. Please try again.");
+        }
+    }
+
+    @Override
+    public PasswordResetTokenResponse verifyPasswordResetOtp(VerifyPasswordResetOtpRequest request) {
+        String normalizedPhone = PhoneNumberNormalizer.normalize(request.getPhoneNumber());
+        String phoneLookup = patientDataProtectionService.phoneLookup(normalizedPhone);
+        User user = userRepository.findByPhoneLookupAndRoleId(phoneLookup, request.getRole().getId())
+                .filter(this::isPasswordResetEligible)
+                .orElseThrow(() -> new UnauthorizedException("Password reset OTP is invalid or expired."));
+        PatientOtp otp = patientOtpRepository.findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc(phoneLookup, OtpPurpose.PASSWORD_RESET)
+                .orElseThrow(() -> new UnauthorizedException("Password reset OTP is invalid or expired."));
+        if (otp.getConsumedAt() != null
+                || otp.getExpiresAt().isBefore(Instant.now())
+                || otp.getAttempts() >= otpMaxAttempts
+                || !user.getId().equals(otp.getUserId())) {
+            throw new UnauthorizedException("Password reset OTP is invalid or expired.");
+        }
+        String expectedHash = patientDataProtectionService.secureLookup(
+                "password-reset:" + user.getId() + ":" + request.getCode());
+        if (!MessageDigest.isEqual(
+                expectedHash.getBytes(StandardCharsets.UTF_8),
+                otp.getCodeHash().getBytes(StandardCharsets.UTF_8))) {
+            otp.setAttempts(otp.getAttempts() + 1);
+            patientOtpRepository.save(otp);
+            throw new UnauthorizedException("Password reset OTP is invalid or expired.");
+        }
+
+        Instant now = Instant.now();
+        Instant resetTokenExpiresAt = now.plus(Duration.ofMinutes(passwordResetTokenExpirationMinutes));
+        byte[] tokenBytes = new byte[32];
+        SECURE_RANDOM.nextBytes(tokenBytes);
+        String resetToken = Base64.getUrlEncoder().withoutPadding().encodeToString(tokenBytes);
+        otp.setConsumedAt(now);
+        otp.setVerifiedAt(now);
+        otp.setResetTokenHash(hashToken(resetToken));
+        otp.setResetTokenExpiresAt(resetTokenExpiresAt);
+        otp.setResetTokenUsedAt(null);
+        otp.setExpiresAt(resetTokenExpiresAt);
+        patientOtpRepository.save(otp);
+        return new PasswordResetTokenResponse(resetToken, Duration.between(now, resetTokenExpiresAt).toSeconds());
+    }
+
+    @Override
+    public void resetPassword(ResetPasswordRequest request) {
+        String resetTokenHash = hashToken(request.getResetToken());
+        PatientOtp otp = patientOtpRepository.findByResetTokenHashAndPurpose(resetTokenHash, OtpPurpose.PASSWORD_RESET)
+                .orElseThrow(() -> new UnauthorizedException("Password reset token is invalid or expired."));
+        Instant now = Instant.now();
+        if (otp.getVerifiedAt() == null
+                || otp.getResetTokenExpiresAt() == null
+                || !otp.getResetTokenExpiresAt().isAfter(now)
+                || otp.getResetTokenUsedAt() != null) {
+            throw new UnauthorizedException("Password reset token is invalid or expired.");
+        }
+        User user = userRepository.findById(otp.getUserId())
+                .filter(this::isPasswordResetEligible)
+                .orElseThrow(() -> new UnauthorizedException("Password reset token is invalid or expired."));
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            throw new BadRequestException("New password and confirmation do not match.");
+        }
+        PasswordPolicy.validate(request.getNewPassword());
+        if (user.getPasswordHash() != null
+                && passwordEncoder.matches(request.getNewPassword(), user.getPasswordHash())) {
+            throw new BadRequestException("New password must be different from the current password.");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        user.setPasswordChangedAt(now);
+        user.setUpdatedAt(now);
+        user.setAccessTokenHash(null);
+        user.setRefreshTokenHash(null);
+        user.setRefreshTokenExpiresAt(null);
+        user.setFailedLoginAttempts(0);
+        user.setLockedUntil(null);
+        userRepository.save(user);
+        otp.setResetTokenUsedAt(now);
+        otp.setResetTokenHash(null);
+        patientOtpRepository.save(otp);
+    }
+
+    @Override
     public AuthResponse login(LoginRequest request) {
         validateLoginRequest(request);
-        User user = userService.findByPhoneNumber(request.getPhoneNumber());
+        User user = userService.findByPhoneNumberAndRole(request.getPhoneNumber(), request.getRole());
         user = userService.getActiveUserById(user.getId());
         if (user.getRole() == UserRole.PATIENT) {
             throw new BadRequestException("Patient accounts must sign in using SMS OTP.");
@@ -118,69 +249,58 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public AuthResponse refresh(RefreshTokenRequest request) {
-        RefreshToken storedToken = refreshTokenRepository.findByTokenHash(hashToken(request.getRefreshToken()))
+        User user = userRepository.findByRefreshTokenHash(hashToken(request.getRefreshToken()))
                 .orElseThrow(() -> new UnauthorizedException("Refresh token is invalid."));
-
-        if (storedToken.getRevokedAt() != null || storedToken.getExpiresAt().isBefore(Instant.now())) {
+        if (user.getRefreshTokenExpiresAt() == null || !user.getRefreshTokenExpiresAt().isAfter(Instant.now())) {
             throw new UnauthorizedException("Refresh token is expired or revoked.");
         }
-
-        User user;
-        try {
-            user = userService.getActiveUserById(storedToken.getUserId());
-        } catch (ResourceNotFoundException exception) {
-            throw new UnauthorizedException("Refresh token is invalid.");
-        }
-        storedToken.setRevokedAt(Instant.now());
-        refreshTokenRepository.save(storedToken);
-        return issueTokens(user, storedToken.getDeviceId());
+        user = userService.getActiveUserById(user.getId());
+        return issueTokens(user, user.getDeviceId());
     }
 
     @Override
     public void logout(String userId, LogoutRequest request) {
-        RefreshToken storedToken = refreshTokenRepository.findByTokenHash(hashToken(request.getRefreshToken()))
-                .orElseThrow(() -> new UnauthorizedException("Refresh token is invalid."));
-        if (!storedToken.getUserId().equals(userId)) {
+        User user = userService.getActiveUserById(userId);
+        if (!hashToken(request.getRefreshToken()).equals(user.getRefreshTokenHash())) {
             throw new UnauthorizedException("Refresh token does not belong to the current user.");
         }
-
-        storedToken.setRevokedAt(Instant.now());
-        refreshTokenRepository.save(storedToken);
+        user.setAccessTokenHash(null);
+        user.setRefreshTokenHash(null);
+        user.setRefreshTokenExpiresAt(null);
+        userRepository.save(user);
     }
 
     @Override
     public void changePassword(String userId, ChangePasswordRequest request) {
         userService.changePassword(userId, request);
-        refreshTokenRepository.findAllByUserIdAndRevokedAtIsNull(userId).forEach(token -> {
-            token.setRevokedAt(Instant.now());
-            refreshTokenRepository.save(token);
-        });
+        User user = userService.getUserById(userId);
+        user.setAccessTokenHash(null);
+        user.setRefreshTokenHash(null);
+        user.setRefreshTokenExpiresAt(null);
+        userRepository.save(user);
     }
 
     private AuthResponse issueTokens(User user, String deviceId) {
+        String accessToken = jwtUtils.generateAccessToken(user);
+        String refreshToken = createRefreshToken();
+        user.setAccessTokenHash(hashToken(accessToken));
+        user.setRefreshTokenHash(hashToken(refreshToken));
+        user.setRefreshTokenExpiresAt(Instant.now().plus(Duration.ofDays(refreshTokenExpirationDays)));
+        user.setDeviceId(deviceId == null || deviceId.isBlank() ? null : deviceId.trim());
+        userRepository.save(user);
         return AuthResponse.builder()
-                .accessToken(jwtUtils.generateAccessToken(user))
-                .refreshToken(createRefreshToken(user.getId(), deviceId))
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
                 .tokenType("Bearer")
                 .expiresInSeconds(jwtUtils.getAccessTokenExpirationSeconds())
                 .user(UserResponse.from(user, patientDataProtectionService))
                 .build();
     }
 
-    private String createRefreshToken(String userId, String deviceId) {
+    private String createRefreshToken() {
         byte[] randomBytes = new byte[48];
         SECURE_RANDOM.nextBytes(randomBytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
-        Instant now = Instant.now();
-
-        RefreshToken refreshToken = RefreshToken.builder()
-                .tokenHash(hashToken(token))
-                .userId(userId)
-                .deviceId(deviceId == null || deviceId.isBlank() ? null : deviceId.trim())
-                .createdAt(now)
-                .expiresAt(now.plus(Duration.ofDays(refreshTokenExpirationDays)))
-                .build();
-        refreshTokenRepository.save(refreshToken);
         return token;
     }
 
@@ -197,10 +317,18 @@ public class AuthServiceImpl implements AuthService {
         if (request == null || request.getPhoneNumber() == null || request.getPhoneNumber().isBlank()) {
             throw new BadRequestException("Phone number is required.");
         }
+        if (request.getRole() == null) {
+            throw new BadRequestException("Role is required.");
+        }
         if (request.getPassword() == null || request.getPassword().isBlank()) {
             throw new BadRequestException("Password is required.");
         }
     }
-    private boolean isTrustedDevice(User user,String deviceId){return deviceId!=null&&!deviceId.isBlank()&&trustedDeviceRepository.findByUserIdAndDeviceIdAndRevokedAtIsNull(user.getId(),deviceId.trim()).isPresent();}
-    private void trustDevice(User user,String deviceId){if(deviceId==null||deviceId.isBlank())return;trustedDeviceRepository.findByUserIdAndDeviceIdAndRevokedAtIsNull(user.getId(),deviceId.trim()).orElseGet(()->trustedDeviceRepository.save(TrustedDevice.builder().userId(user.getId()).deviceId(deviceId.trim()).verifiedAt(Instant.now()).build()));}
+    private boolean isPasswordResetEligible(User user) {
+        return user != null
+                && user.getStatus() == AccountStatus.ACTIVE
+                && user.getRole() != UserRole.PATIENT;
+    }
+    private boolean isTrustedDevice(User user,String deviceId){return deviceId!=null&&!deviceId.isBlank()&&deviceId.trim().equals(user.getDeviceId());}
+    private void trustDevice(User user,String deviceId){if(deviceId==null||deviceId.isBlank())return;user.setDeviceId(deviceId.trim());userRepository.save(user);}
 }

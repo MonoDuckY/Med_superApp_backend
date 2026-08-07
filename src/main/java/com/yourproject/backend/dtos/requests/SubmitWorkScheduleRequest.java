@@ -14,7 +14,7 @@ public class SubmitWorkScheduleRequest {
     @NotNull(message = "Work date is required.")
     private LocalDate workDate;
 
-    @NotNull(message = "Work session is required.")
+    @NotNull(message = "Session is required.")
     private WorkSession session;
 
     @NotBlank(message = "Clinic room ID is required.")

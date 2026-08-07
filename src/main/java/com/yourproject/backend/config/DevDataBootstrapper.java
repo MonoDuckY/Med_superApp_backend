@@ -21,7 +21,7 @@ import lombok.RequiredArgsConstructor;
 
 @Component
 @Profile("dev")
-@Order(4)
+@Order(5)
 @RequiredArgsConstructor
 public class DevDataBootstrapper implements ApplicationRunner {
     private static final Logger LOGGER = LoggerFactory.getLogger(DevDataBootstrapper.class);
@@ -35,7 +35,8 @@ public class DevDataBootstrapper implements ApplicationRunner {
         // Tạo sẵn một patient để test OTP
         String testPatientPhone = "0869465858";
         String normalizedTestPhone = PhoneNumberNormalizer.normalize(testPatientPhone);
-        if (!userRepository.existsByPhoneLookup(patientDataProtectionService.phoneLookup(normalizedTestPhone))) {
+        if (!userRepository.existsByPhoneLookupAndRoleId(
+                patientDataProtectionService.phoneLookup(normalizedTestPhone), UserRole.PATIENT.getId())) {
             CreateUserRequest patientReq = new CreateUserRequest();
             patientReq.setPhoneNumber(testPatientPhone);
             patientReq.setPassword("Password123!");
