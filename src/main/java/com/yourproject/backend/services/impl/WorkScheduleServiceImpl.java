@@ -276,7 +276,8 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             throw new IllegalArgumentException("A work schedule submission must contain at least one slot.");
         }
         User doctor = userRepository.findById(slots.get(0).getDoctorId()).orElse(null);
-        return WorkScheduleSubmissionResponse.from(slots, doctor, patientDataProtectionService);
+        Map<String, WorkSlot> definitions = loadSlotDefinitions(slots);
+        return WorkScheduleSubmissionResponse.from(slots, doctor, patientDataProtectionService, definitions);
     }
 
     @Override
@@ -284,7 +285,21 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         List<String> doctorIds = slots.stream().map(DoctorWorkSlot::getDoctorId).distinct().toList();
         Map<String, User> doctors = userRepository.findAllById(doctorIds).stream()
                 .collect(Collectors.toMap(User::getId, doctor -> doctor));
-        return WorkScheduleSubmissionResponse.group(slots, doctors, patientDataProtectionService);
+        return WorkScheduleSubmissionResponse.group(
+                slots,
+                doctors,
+                patientDataProtectionService,
+                loadSlotDefinitions(slots));
+    }
+
+    private Map<String, WorkSlot> loadSlotDefinitions(List<DoctorWorkSlot> slots) {
+        return workSlotRepository.findAllById(slots.stream()
+                        .map(DoctorWorkSlot::getSlotId)
+                        .filter(id -> id != null && !id.isBlank())
+                        .distinct()
+                        .toList())
+                .stream()
+                .collect(Collectors.toMap(WorkSlot::getId, definition -> definition));
     }
 
     private List<WorkSlot> getSlots(WorkSession session) {

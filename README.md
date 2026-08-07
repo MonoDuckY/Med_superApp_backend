@@ -119,6 +119,8 @@ Khuyến nghị lưu token:
 | `POST` | `/api/auth/forgot-password/reset` | Public | Đặt mật khẩu mới bằng reset token. |
 | `GET` | `/api/auth/me` | Authenticated | Lấy profile account đang đăng nhập. |
 | `GET` | `/api/staff/patients/search?name={name}&n={count}` | `STAFF` | Tìm tối đa `n` bệnh nhân có tên khớp gần nhất. |
+| `GET` | `/api/patient/doctors` | `PATIENT` | Lấy danh sách Doctor active. |
+| `GET` | `/api/staff/doctors` | `STAFF` | Lấy danh sách Doctor active cho Staff. |
 | `GET` | `/api/doctor/appointments` | `DOCTOR` | Lấy các appointment thuộc Doctor hiện tại. |
 | `GET` | `/api/doctor/appointments/{appointmentId}` | `DOCTOR` | Lấy hồ sơ khám, MedicalRecord và prescriptions. |
 | `PATCH` | `/api/doctor/appointments/{appointmentId}/start` | `DOCTOR` | Chuyển appointment sang `IN_PROGRESS`. |

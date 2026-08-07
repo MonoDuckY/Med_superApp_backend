@@ -42,3 +42,5 @@
 `DoctorWorkSlotStatus`: `PENDING → REJECTED` hoặc `PENDING → AVAILABLE → SCHEDULING → BOOKED → IN_PROGRESS → CLOSED`. Slot có thể chuyển sang `CANCELLED` theo luồng block/cancel.
 
 Mỗi submission có `submissionId` dùng nhóm nhiều DoctorWorkSlot. Không được tạo work slot trùng tổ hợp ngày, slot và room.
+
+Mỗi phần tử trong `slots` của response lịch làm việc chứa cả `slotId` và object `slot` gồm `id`, `name`, `startTime`, `endTime` được lookup từ collection `work_slots`.

@@ -6,6 +6,7 @@ All notable backend changes are documented in this file. This project follows a 
 
 ### Added
 
+- Staff doctor directory endpoint at `GET /api/staff/doctors`.
 - Doctor night work session with 30-minute slots from 17:00 through 08:00 the following day.
 - Role catalog collection seeded with stable IDs: `1=ADMIN`, `2=DOCTOR`, `3=STAFF`, `4=RESEARCHER`, `5=PATIENT`.
 - Feature specifications under `docs/specs` for API conventions, authentication, user management, scheduling, appointments, clinical medication, SMS gateway, data protection and MongoDB schema.
@@ -15,6 +16,7 @@ All notable backend changes are documented in this file. This project follows a 
 
 ### Changed
 
+- Doctor work-schedule responses now include the resolved WorkSlot object for every `slotId`.
 - Doctor directory and Staff patient search now query the fixed numeric role IDs instead of legacy role names.
 - Startup migration converts legacy User `roleId` names to the fixed numeric IDs.
 - Updated work-slot and integration fixtures to match the 46-slot catalog and numeric role IDs.

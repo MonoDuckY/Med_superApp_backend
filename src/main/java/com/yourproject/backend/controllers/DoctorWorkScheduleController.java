@@ -56,14 +56,14 @@ public class DoctorWorkScheduleController {
         List<DoctorWorkSlot> slots = workScheduleService.getDoctorSchedules(authentication.getName(), from, to);
         return ResponseEntity.ok(ApiResponse.success(
                 "Doctor work schedules retrieved successfully.",
-                WorkScheduleSubmissionResponse.group(slots)));
+                workScheduleService.toResponses(slots)));
     }
 
     @PostMapping
     public ResponseEntity<ApiResponse<WorkScheduleSubmissionResponse>> submit(
             Authentication authentication,
             @Valid @RequestBody SubmitWorkScheduleRequest request) {
-        WorkScheduleSubmissionResponse response = WorkScheduleSubmissionResponse.from(
+        WorkScheduleSubmissionResponse response = workScheduleService.toResponse(
                 workScheduleService.submit(authentication.getName(), request));
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Work schedule submitted for staff approval.", response));

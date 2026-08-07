@@ -113,8 +113,9 @@ public class StaffSchedulingController {
             Authentication authentication,
             @PathVariable String doctorWorkSlotId,
             @Valid @RequestBody BlockWorkSlotRequest request) {
-        DoctorWorkSlotResponse response = DoctorWorkSlotResponse.from(
-                workScheduleService.blockSlot(authentication.getName(), doctorWorkSlotId, request));
+        DoctorWorkSlot blockedSlot = workScheduleService.blockSlot(
+                authentication.getName(), doctorWorkSlotId, request);
+        DoctorWorkSlotResponse response = workScheduleService.toResponse(List.of(blockedSlot)).getSlots().get(0);
         return ResponseEntity.ok(ApiResponse.success("Doctor work slot blocked successfully.", response));
     }
 

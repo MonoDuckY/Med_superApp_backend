@@ -236,12 +236,20 @@ class WorkScheduleServiceImplTest {
         doctor.setPhoneNumber("+84911111111");
         doctor.setCertificate("Cardiology");
         when(userRepository.findAllById(any())).thenReturn(List.of(doctor));
+        when(workSlotRepository.findAllById(any())).thenReturn(List.of(WorkSlot.builder()
+                .id("slot-1")
+                .name("Slot1")
+                .startTime(LocalTime.of(8, 0))
+                .endTime(LocalTime.of(8, 30))
+                .build()));
 
         var response = service.toResponses(List.of(pendingSlot())).get(0);
 
         assertEquals("doctor-1", response.getDoctor().getId());
         assertEquals("Dr Nguyen Van A", response.getDoctor().getFullName());
         assertEquals("Cardiology", response.getDoctor().getCertificate());
+        assertEquals("Slot1", response.getSlots().get(0).getSlot().getName());
+        assertEquals(LocalTime.of(8, 0), response.getSlots().get(0).getSlot().getStartTime());
     }
 
     private SubmitWorkScheduleRequest request(WorkSession session) {
