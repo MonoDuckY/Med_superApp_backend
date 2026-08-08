@@ -2,6 +2,8 @@
 
 ## Current collections
 
+Các collection dưới đây mặc định nằm trong database nghiệp vụ `med_super_app`, ngoại trừ `audit_logs.audit_logs`.
+
 | Collection | Mục đích/liên kết logic |
 | --- | --- |
 | `roles` | Danh mục role với ID cố định: `1=ADMIN`, `2=DOCTOR`, `3=STAFF`, `4=RESEARCHER`, `5=PATIENT`; `roleName` unique |
@@ -16,6 +18,10 @@
 | `medical_records` | Hồ sơ lâm sàng và diagnosis, unique theo appointmentId |
 | `prescriptions` | Đơn thuốc theo medicalRecordId |
 | `medicine_schedules` | Lịch thuốc theo prescriptionId |
+| `meals` | Meal plan theo userId; prescriptionId nullable đối với plan Patient tự tạo |
+| `dishes` | Món ăn thuộc Meal thông qua mealId |
+| `workouts` | Workout plan theo userId; prescriptionId nullable đối với plan Patient tự tạo |
+| `audit_logs.audit_logs` | Audit của request ghi; lưu tại database riêng `audit_logs` và nhận diện backend instance |
 
 ## MongoDB relationships
 
@@ -30,4 +36,7 @@ Quan hệ là manual reference bằng string/ObjectId; MongoDB không áp dụng
 - Prescription có index `medicalRecordId`.
 - PatientOtp có index user, phone lookup, purpose và TTL expiration.
 - MedicineSchedule chống trùng prescription/medicine/dosage/scheduledAt.
+- Meal chống trùng `(userId, mealName, scheduledAt)`.
+- Dish có index `mealId`; service xóa Dish trước khi thay thế Meal trong Prescription.
+- Workout chống trùng `(userId, workoutName, scheduledAt)`.
 - Appointment và DoctorWorkSlot dùng optimistic locking/version ở các luồng cạnh tranh.

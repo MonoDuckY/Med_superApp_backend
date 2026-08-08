@@ -6,6 +6,10 @@ All notable backend changes are documented in this file. This project follows a 
 
 ### Added
 
+- Request-level database audit logs stored in `audit_logs.audit_logs` with automatic persistent backend instance identity, hostname and IP.
+- Dish collection and nested Dish payloads/responses for every Meal plan.
+- Doctor-created Meal and Workout plans attached to prescriptions, plus Patient-created independent plans.
+- Patient Meal/Workout list, create, reschedule and complete endpoints.
 - Doctor Patient directory and cross-doctor Patient medical-history endpoints.
 - HMAC-backed citizen-identification lookup and startup backfill for existing users.
 - Doctor-wide work-schedule search endpoint at `GET /api/doctor/work-schedules/all`.

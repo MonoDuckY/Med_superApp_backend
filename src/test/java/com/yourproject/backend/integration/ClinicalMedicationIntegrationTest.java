@@ -81,11 +81,15 @@ class ClinicalMedicationIntegrationTest extends MongoIntegrationTestBase {
                                   "medicineSchedules":[
                                     {"medicineName":"Cough medicine","dosage":"30ml","scheduledAt":"%s","note":"After meal"},
                                     {"medicineName":"Cough medicine","dosage":"30ml","scheduledAt":"%s","note":"After meal"}
-                                  ]
+                                  ],
+                                  "meals":[{"mealName":"Healthy breakfast","scheduledAt":"%s","note":"Low salt","dishes":[{"dishName":"Oatmeal","quantity":200,"unit":"g","totalCalories":300,"totalProtein":10,"totalCarbohydrates":50,"totalFat":6}]}],
+                                  "workouts":[{"workoutName":"Walking","content":"Walk for 20 minutes","scheduledAt":"%s"}]
                                 }
-                                """.formatted(firstTime, secondTime)))
+                                """.formatted(firstTime, secondTime, firstTime, secondTime)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.medicineSchedules.length()").value(2))
+                .andExpect(jsonPath("$.data.meals[0].prescriptionId").isNotEmpty())
+                .andExpect(jsonPath("$.data.workouts[0].prescriptionId").isNotEmpty())
                 .andReturn();
         String scheduleId = JsonPath.read(
                 prescriptionResult.getResponse().getContentAsString(),
@@ -202,6 +206,48 @@ class ClinicalMedicationIntegrationTest extends MongoIntegrationTestBase {
                 .andExpect(jsonPath("$.data[*].medicalRecord.diagnosis")
                         .value(org.hamcrest.Matchers.containsInAnyOrder(
                                 "Historical diagnosis", "Diagnosis by another doctor")));
+    }
+
+    @Test
+    void patientCreatesAndCompletesIndependentMealAndWorkoutPlans() throws Exception {
+        User patient = saveActivePatient("+84922222222");
+        String patientToken = patientAccessToken(patient, "123456");
+        LocalDate planDay = LocalDate.now(VIETNAM_ZONE).plusDays(1);
+        Instant mealTime = planDay.atTime(8, 0).atZone(VIETNAM_ZONE).toInstant();
+        Instant workoutTime = planDay.atTime(17, 0).atZone(VIETNAM_ZONE).toInstant();
+
+        MvcResult mealResult = mockMvc.perform(post("/api/patient/meal-plans")
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"mealName\":\"Patient meal\",\"scheduledAt\":\"" + mealTime
+                                + "\",\"dishes\":[{\"dishName\":\"Rice\",\"quantity\":1,\"unit\":\"bowl\",\"totalCalories\":250}]}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.prescriptionId").doesNotExist())
+                .andExpect(jsonPath("$.data.status").value("NOT_YET"))
+                .andExpect(jsonPath("$.data.dishes[0].dishName").value("Rice"))
+                .andReturn();
+        String mealId = JsonPath.read(mealResult.getResponse().getContentAsString(), "$.data.id");
+
+        MvcResult workoutResult = mockMvc.perform(post("/api/patient/workout-plans")
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"workoutName\":\"Patient workout\",\"content\":\"Stretch\",\"scheduledAt\":\""
+                                + workoutTime + "\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.prescriptionId").doesNotExist())
+                .andReturn();
+        String workoutId = JsonPath.read(workoutResult.getResponse().getContentAsString(), "$.data.id");
+
+        mockMvc.perform(get("/api/patient/meal-plans").header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1));
+        mockMvc.perform(get("/api/patient/workout-plans").header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1));
+        mockMvc.perform(patch("/api/patient/meal-plans/{id}/complete", mealId)
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("COMPLETED"));
+        mockMvc.perform(patch("/api/patient/workout-plans/{id}/complete", workoutId)
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("COMPLETED"));
     }
 
     private Appointment saveConfirmedAppointment(User doctor, User patient) {
