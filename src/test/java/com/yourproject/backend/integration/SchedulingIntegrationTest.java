@@ -23,6 +23,7 @@ import com.yourproject.backend.models.ClinicRoom;
 import com.yourproject.backend.models.DoctorWorkSlot;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.WorkSlotApprovalStatus;
+import com.yourproject.backend.models.DoctorWorkSlotStatus;
 import com.yourproject.backend.models.WorkSlotBookingStatus;
 
 class SchedulingIntegrationTest extends MongoIntegrationTestBase {
@@ -42,7 +43,7 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
                         .content(scheduleRequest(workDate, "MORNING", room.getId())))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.approvalStatus").value("PENDING_APPROVAL"))
+                .andExpect(jsonPath("$.data.status").value("PENDING"))
                 .andExpect(jsonPath("$.data.slots.length()").value(8));
 
         List<DoctorWorkSlot> submittedSlots = doctorWorkSlotRepository.findAll();
@@ -54,13 +55,13 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"decision\":\"APPROVE\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.approvalStatus").value("APPROVED"));
+                .andExpect(jsonPath("$.data.status").value("AVAILABLE"));
 
         DoctorWorkSlot availableSlot = doctorWorkSlotRepository.findAll().stream()
                 .sorted(java.util.Comparator.comparing(DoctorWorkSlot::getSlotId))
                 .findFirst()
                 .orElseThrow();
-        assertEquals(WorkSlotBookingStatus.AVAILABLE, availableSlot.getBookingStatus());
+        assertEquals("AVAILABLE", availableSlot.getStatus().name());
 
         mockMvc.perform(get("/api/patient/appointments/available-slots")
                         .header("Authorization", bearer(patient))
@@ -76,8 +77,8 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
                 .andExpect(jsonPath("$.data.status").value("PENDING_STAFF_CONFIRMATION"));
 
         Appointment appointment = appointmentRepository.findAll().get(0);
-        assertEquals(WorkSlotBookingStatus.PENDING_CONFIRMATION,
-                doctorWorkSlotRepository.findById(availableSlot.getId()).orElseThrow().getBookingStatus());
+        assertEquals("SCHEDULING",
+                doctorWorkSlotRepository.findById(availableSlot.getId()).orElseThrow().getStatus().name());
 
         mockMvc.perform(patch("/api/staff/scheduling/appointments/{appointmentId}/decision", appointment.getId())
                         .header("Authorization", bearer(staff))
@@ -88,8 +89,8 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
 
         Appointment confirmed = appointmentRepository.findById(appointment.getId()).orElseThrow();
         assertEquals(AppointmentStatus.CONFIRMED, confirmed.getStatus());
-        assertEquals(WorkSlotBookingStatus.BOOKED,
-                doctorWorkSlotRepository.findById(availableSlot.getId()).orElseThrow().getBookingStatus());
+        assertEquals("BOOKED",
+                doctorWorkSlotRepository.findById(availableSlot.getId()).orElseThrow().getStatus().name());
 
         mockMvc.perform(get("/api/patient/appointments/available-slots")
                         .header("Authorization", bearer(patient))
@@ -129,7 +130,7 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"decision\":\"REJECT\",\"rejectionReason\":\"Doctor reassigned\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.approvalStatus").value("REJECTED"));
+                .andExpect(jsonPath("$.data.status").value("REJECTED"));
 
         assertTrue(doctorWorkSlotRepository.findAll().stream().noneMatch(DoctorWorkSlot::isConflictActive));
         submitSchedule(secondDoctor, workDate, "AFTERNOON", room.getId(), 201);
@@ -165,8 +166,8 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
                 .andExpect(jsonPath("$.data.status").value("REJECTED"));
 
         assertFalse(appointmentRepository.findById(appointment.getId()).orElseThrow().isActive());
-        assertEquals(WorkSlotBookingStatus.AVAILABLE,
-                doctorWorkSlotRepository.findById(slots.get(0).getId()).orElseThrow().getBookingStatus());
+        assertEquals(DoctorWorkSlotStatus.AVAILABLE,
+                doctorWorkSlotRepository.findById(slots.get(0).getId()).orElseThrow().getStatus());
         book(secondPatient, slots.get(0).getId(), 201);
     }
 
@@ -181,7 +182,16 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
     }
 
     private String bearer(User user) {
-        return "Bearer " + jwtUtils.generateAccessToken(user);
+        String token = jwtUtils.generateAccessToken(user);
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hashBytes = digest.digest(token.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            user.setAccessTokenHash(java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(hashBytes));
+            userRepository.save(user);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        return "Bearer " + token;
     }
 
     private String scheduleRequest(LocalDate workDate, String session, String roomId) {

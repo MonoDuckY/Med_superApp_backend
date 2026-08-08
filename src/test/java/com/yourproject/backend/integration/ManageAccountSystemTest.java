@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import com.jayway.jsonpath.JsonPath;
 import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.User;
+import com.yourproject.backend.models.UserRole;
 
 /**
  * System Tests — BF-01 Manage account (TC-SYS-BF01-001 to TC-SYS-BF01-006)
@@ -58,8 +59,9 @@ class ManageAccountSystemTest extends MongoIntegrationTestBase {
         // When — admin sends correct credentials
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"Password123!\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"Password123!\",\"role\":\"ADMIN\"}"))
                 // Then — login is accepted and JWT pair is returned
+                .andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("Login successful."))
@@ -116,7 +118,7 @@ class ManageAccountSystemTest extends MongoIntegrationTestBase {
 
         // And — the account is persisted in the database
         String phoneLookup = patientDataProtectionService.phoneLookup("+84911111111");
-        assertTrue(userRepository.existsByPhoneLookup(phoneLookup),
+        assertTrue(userRepository.existsByPhoneLookupAndRoleId(phoneLookup, UserRole.STAFF.getId()),
                 "user_01 should exist in the database after creation");
     }
 
@@ -166,6 +168,7 @@ class ManageAccountSystemTest extends MongoIntegrationTestBase {
                                 }
                                 """))
                 // Then — response reflects the updated values
+                .andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("User account updated successfully."))
@@ -217,12 +220,13 @@ class ManageAccountSystemTest extends MongoIntegrationTestBase {
         String userId = JsonPath.read(createResult.getResponse().getContentAsString(), "$.data.id");
 
         // When — admin deactivates user_01
-        mockMvc.perform(delete("/api/admin/users/" + userId)
+        mockMvc.perform(patch("/api/admin/users/" + userId + "/status")
                         .header("Authorization", "Bearer " + adminToken))
                 // Then — response confirms deactivation
+                .andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("User account deactivated successfully."))
+                .andExpect(jsonPath("$.message").value("User account status changed successfully."))
                 .andExpect(jsonPath("$.errorCode").doesNotExist());
 
         // And — user_01 status is INACTIVE in the database
@@ -278,10 +282,11 @@ class ManageAccountSystemTest extends MongoIntegrationTestBase {
                                 }
                                 """))
                 // Then — conflict is returned because the phone number already exists
+                .andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.errorCode").value("CONFLICT"))
-                .andExpect(jsonPath("$.message").value("Phone number already exists."));
+                .andExpect(jsonPath("$.message").value("An account with this phone number and role already exists."));
     }
 
     // -------------------------------------------------------------------------
@@ -319,14 +324,15 @@ class ManageAccountSystemTest extends MongoIntegrationTestBase {
 
         String userId = JsonPath.read(createResult.getResponse().getContentAsString(), "$.data.id");
 
-        mockMvc.perform(delete("/api/admin/users/" + userId)
+        mockMvc.perform(patch("/api/admin/users/" + userId + "/status")
                         .header("Authorization", "Bearer " + adminToken))
+                .andDo(org.springframework.test.web.servlet.result.MockMvcResultHandlers.print())
                 .andExpect(status().isOk());
 
         // When — user_03 (now INACTIVE) attempts to log in
         mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0911111113\",\"password\":\"Password123!\"}"))
+                        .content("{\"phoneNumber\":\"0911111113\",\"password\":\"Password123!\",\"role\":\"STAFF\"}"))
                 // Then — login is rejected with 401 UNAUTHORIZED
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
@@ -343,7 +349,7 @@ class ManageAccountSystemTest extends MongoIntegrationTestBase {
         MvcResult result = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"phoneNumber\":\"" + phoneNumber
-                                + "\",\"password\":\"" + password + "\"}"))
+                                + "\",\"password\":\"" + password + "\",\"role\":\"ADMIN\"}"))
                 .andExpect(status().isOk())
                 .andReturn();
         return JsonPath.read(result.getResponse().getContentAsString(), "$.data.accessToken");

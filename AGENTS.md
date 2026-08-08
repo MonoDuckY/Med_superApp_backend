@@ -77,6 +77,99 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 3. Use `get_affected_flows_tool` to understand impact.
 4. Use `query_graph_tool` pattern="tests_for" to check coverage.
 
-### write test
+---
 
-- Use test design folder
+# QUY CHUẨN VIẾT TEST (BACKEND)
+
+## Nguyên tắc bắt buộc
+1. **Mọi test class mới PHẢI có Test Design trước** — thêm sheet tương ứng vào file Excel trong thư mục `test design/` trước khi viết code.
+2. **Tên phương thức test** phải khớp với cột `Notes` (tên method) trong Excel (ví dụ: `login_issuesAccessAndRefreshTokensForActiveAccountWithCorrectPassword()`).
+3. **Test ID** phải được ghi vào comment của test method để đảm bảo traceability (ví dụ: `// TC-UNIT-AuthServiceImpl-001`).
+4. **File Excel design** nằm tại: `test design/Report 5.1_UnitTests_L1_BE.xlsx` (Unit) và `test design/Report 5.2_IntegrationTests_L2_BE.xlsx` (Integration).
+
+## Cấu trúc thư mục test
+```
+src/test/java/com/yourproject/backend/
+├── config/          # Unit test cho @Configuration classes
+├── integration/     # Integration test (yêu cầu MongoDB container)
+├── seeder/          # Test cho data seeder
+├── services/        # Unit test cho service layer
+│   └── impl/
+└── utils/           # Unit test cho utility classes
+```
+Tất cả integration test phải **extends `MongoIntegrationTestBase`**.
+
+## Quy chuẩn định dạng file Excel (BẮT BUỘC)
+
+Khi tạo sheet mới trong file Excel test design, **bắt buộc phải thêm Data Validation (dropdown list)** vào các cột sau. Giá trị phải khớp chính xác (có thể dùng script Python + openpyxl):
+
+### File L1 — `Report 5.1_UnitTests_L1_BE.xlsx`
+| Cột | Tên cột | Giá trị dropdown hợp lệ |
+|---|---|---|
+| **E** | Test Type | `Functional`, `Boundary & Negative`, `Input Validation`, `Security (GBR)` |
+| **F** | Coverage Technique | `Equivalence Partitioning (EP)`, `Boundary Value Analysis (BVA)`, `Decision Table Testing`, `State Transition Testing`, `Use Case Testing`, `Error Guessing`, `Branch / Condition Coverage` |
+| **K** | Priority | `Critical`, `High`, `Medium`, `Low` |
+| **L** | Status | `Not Run`, `Pass`, `Fail`, `Blocked`, `Skip` |
+
+### File L2 — `Report 5.2_IntegrationTests_L2_BE.xlsx`
+| Cột | Tên cột | Giá trị dropdown hợp lệ |
+|---|---|---|
+| **E** | Test Type | `Integration/API`, `UI Testing`, `Input Validation`, `Security`, `Functional` |
+| **F** | Coverage Technique | *(same as L1)* |
+| **H** | Validation Direction | `N/A`, `Client-visible (UI)`, `Server-side (bypass UI)`, `Both` |
+| **L** | Priority | `Critical`, `High`, `Medium`, `Low` |
+| **M** | Status | `Not Run`, `Pass`, `Fail`, `Blocked`, `Skip` |
+
+> **Lưu ý:** Cột `Validation Direction` chỉ điền giá trị khác `N/A` khi `Test Type = Input Validation`.
+
+---
+
+## Trạng thái Coverage hiện tại (cập nhật: 2026-08-08)
+
+### ✅ Đã có cả Test Design VÀ Test Code
+| Test Class | File Excel (Sheet) | # TCs |
+|---|---|---|
+| `AuthServiceImplTest` | 5.1 – ` AuthServiceImpl` | 10 |
+| `UserServiceImplTest` | 5.1 – `UserServiceImpl` | 26 |
+| `PhoneNumberNormalizerTest` | 5.1 – `PhoneNumberNormalizer` | 4 |
+| `PasswordPolicyTest` | 5.1 – `PasswordPolicy` | 7 |
+| `SecurityConfigTest` | 5.1 – `SecurityConfig` | 2 |
+| `PatientDataProtectionServiceTest` | 5.1 – `PatientDataProtectionService` | 8 |
+| `AuthLoginIntegrationTest` | 5.2 – `AuthController` | 10+ |
+| `PatientOtpIntegrationTest` | 5.2 – `AuthController` | 20+ |
+| `AuthTokenLifecycleIntegrationTest` | 5.2 – `AuthController` | 12+ |
+| `AuthPasswordChangeIntegrationTest` | 5.2 – `AuthController` | 10+ |
+| `AuthJwtSecurityIntegrationTest` | 5.2 – `AuthSecurity` | 10+ |
+| `UserProfileIntegrationTest` | 5.2 – `AuthController` | 3 |
+| `AppointmentServiceImplTest` | 5.1 – `AppointmentServiceImpl` | 18 |
+| `DoctorDirectoryServiceImplTest` | 5.1 – `DoctorDirectoryServiceImpl` | 1 |
+| `StaffPatientSearchServiceImplTest` | 5.1 – `StaffPatientSearchServiceImpl` | 5 |
+| `WorkScheduleServiceImplTest` | 5.1 – `WorkScheduleServiceImpl` | 14 |
+| `MedicineScheduleStatusJobTest` | 5.1 – `MedicineScheduleStatusJob` | 2 |
+| `WorkSlotBootstrapperTest` | 5.1 – `WorkSlotBootstrapper` | 1 |
+| `DataSeederTest` | 5.1 – `DataSeeder` | 1 |
+| `AuthForgotPasswordIntegrationTest` | 5.2 – `AuthForgotPassword` | 3 |
+| `ClinicalMedicationIntegrationTest` | 5.2 – `ClinicalMedication` | 2 |
+| `ManageAccountSystemTest` | 5.2 – `ManageAccount` | 6 |
+| `SchedulingIntegrationTest` | 5.2 – `Scheduling` | 4 |
+| `StaffPatientSearchIntegrationTest` | 5.2 – `StaffPatientSearch` | 2 |
+
+### ⚠️ Có Test Code nhưng CHƯA CÓ trong Test Design
+> ✅ **Không còn class nào trong trạng thái này** — tất cả đã được bổ sung design vào Excel ngày 2026-08-08.
+
+### 🔴 Chưa có cả Test Design lẫn Test Code (ưu tiên viết tiếp)
+**P0 – Core feature, viết ngay:**
+- `ClinicalMedicationServiceImpl`, `DiagnosticServiceImpl`, `SchedulingCatalogServiceImpl`
+- `DiagnosticController`, `PatientAppointmentController`
+
+**P1 – Quan trọng về bảo mật:**
+- `JwtUtils`, `JwtAuthenticationFilter`, `GlobalExceptionHandler`
+
+**P2 – Các Controllers còn lại:**
+- `AdminUserController`, `AdminSmsGatewayController`, `DoctorExaminationController`
+- `DoctorWorkScheduleController`, `PatientDoctorController`, `PatientMedicineScheduleController`
+- `StaffDoctorController`, `StaffPatientController`, `StaffSchedulingController`, `SmsGatewayController`
+
+**P3 – Utils & Config:**
+- `WorkSlotTimeUtils`, `GlobalExceptionHandler`
+- Các `*Migration.java` (đánh giá lại sự cần thiết)
