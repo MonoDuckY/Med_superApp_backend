@@ -1,6 +1,8 @@
 package com.yourproject.backend.services.impl;
 
 import java.time.Instant;
+import java.time.ZoneId;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -11,16 +13,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.yourproject.backend.dtos.requests.MedicineScheduleRequest;
+import com.yourproject.backend.dtos.requests.MealRequest;
 import com.yourproject.backend.dtos.requests.UpdateClinicalInformationRequest;
 import com.yourproject.backend.dtos.requests.UpdateDiagnosisRequest;
 import com.yourproject.backend.dtos.requests.UpdateMedicineScheduleTimeRequest;
 import com.yourproject.backend.dtos.requests.UpsertPrescriptionRequest;
+import com.yourproject.backend.dtos.requests.WorkoutRequest;
 import com.yourproject.backend.dtos.responses.AppointmentResponse;
 import com.yourproject.backend.dtos.responses.DoctorExaminationResponse;
 import com.yourproject.backend.dtos.responses.MedicineScheduleResponse;
 import com.yourproject.backend.dtos.responses.MedicalRecordResponse;
 import com.yourproject.backend.dtos.responses.PrescriptionResponse;
 import com.yourproject.backend.dtos.responses.UserResponse;
+import com.yourproject.backend.dtos.responses.UserSummaryResponse;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ConflictException;
 import com.yourproject.backend.exceptions.ForbiddenException;
@@ -31,16 +36,23 @@ import com.yourproject.backend.models.DoctorWorkSlot;
 import com.yourproject.backend.models.DoctorWorkSlotStatus;
 import com.yourproject.backend.models.MedicineSchedule;
 import com.yourproject.backend.models.MedicineScheduleStatus;
+import com.yourproject.backend.models.Meal;
+import com.yourproject.backend.models.Dish;
 import com.yourproject.backend.models.MedicalRecord;
+import com.yourproject.backend.models.PlanScheduleStatus;
 import com.yourproject.backend.models.Prescription;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
+import com.yourproject.backend.models.Workout;
 import com.yourproject.backend.repositories.AppointmentRepository;
 import com.yourproject.backend.repositories.DoctorWorkSlotRepository;
 import com.yourproject.backend.repositories.MedicineScheduleRepository;
+import com.yourproject.backend.repositories.MealRepository;
+import com.yourproject.backend.repositories.DishRepository;
 import com.yourproject.backend.repositories.MedicalRecordRepository;
 import com.yourproject.backend.repositories.PrescriptionRepository;
 import com.yourproject.backend.repositories.UserRepository;
+import com.yourproject.backend.repositories.WorkoutRepository;
 import com.yourproject.backend.services.AppointmentService;
 import com.yourproject.backend.services.ClinicalMedicationService;
 import com.yourproject.backend.services.PatientDataProtectionService;
@@ -51,10 +63,14 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class ClinicalMedicationServiceImpl implements ClinicalMedicationService {
+    private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
     private final AppointmentRepository appointmentRepository;
     private final DoctorWorkSlotRepository doctorWorkSlotRepository;
     private final PrescriptionRepository prescriptionRepository;
     private final MedicineScheduleRepository medicineScheduleRepository;
+    private final MealRepository mealRepository;
+    private final DishRepository dishRepository;
+    private final WorkoutRepository workoutRepository;
     private final MedicalRecordRepository medicalRecordRepository;
     private final UserRepository userRepository;
     private final UserService userService;
@@ -78,6 +94,28 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
     public DoctorExaminationResponse getDoctorExamination(String doctorId, String appointmentId) {
         Appointment appointment = requireDoctorAppointment(doctorId, appointmentId);
         return toExaminationResponse(appointment);
+    }
+
+    @Override
+    public List<UserSummaryResponse> getDoctorPatients(String doctorId) {
+        requireDoctor(doctorId);
+        LinkedHashMap<String, UserSummaryResponse> patients = new LinkedHashMap<>();
+        for (Appointment appointment : findDoctorAppointments(doctorId)) {
+            User patient = requirePatientForAppointment(appointment);
+            patients.putIfAbsent(
+                    patient.getId(),
+                    UserSummaryResponse.from(patient, patientDataProtectionService));
+        }
+        return List.copyOf(patients.values());
+    }
+
+    @Override
+    public List<DoctorExaminationResponse> getPatientMedicalRecordHistory(String doctorId, String patientId) {
+        requireDoctor(doctorId);
+        requirePatient(patientId);
+        return appointmentRepository.findAllForPatient(patientId).stream()
+                .map(this::toExaminationResponse)
+                .toList();
     }
 
     @Override
@@ -143,15 +181,21 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
     @Transactional
     public PrescriptionResponse createPrescription(
             String doctorId, String appointmentId, UpsertPrescriptionRequest request) {
-        requireMutableExamination(doctorId, appointmentId);
+        Appointment appointment = requireMutableExamination(doctorId, appointmentId);
+        String patientId = resolvePatientId(appointment);
         MedicalRecord medicalRecord = medicalRecordRepository.save(getOrCreateMedicalRecord(appointmentId));
         validateSchedules(request.getMedicineSchedules());
+        validateMeals(request.getMeals());
+        validateWorkouts(request.getWorkouts());
         Prescription prescription = prescriptionRepository.save(Prescription.builder()
                 .medicalRecordId(medicalRecord.getId())
                 .content(trimToNull(request.getContent()))
                 .build());
         List<MedicineSchedule> schedules = saveSchedules(prescription.getId(), request.getMedicineSchedules());
-        return PrescriptionResponse.from(prescription, schedules);
+        List<Meal> meals = saveMeals(patientId, prescription.getId(), request.getMeals());
+        List<Dish> dishes = findDishes(meals);
+        List<Workout> workouts = saveWorkouts(patientId, prescription.getId(), request.getWorkouts());
+        return PrescriptionResponse.from(prescription, schedules, meals, dishes, workouts);
     }
 
     @Override
@@ -161,7 +205,8 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
             String appointmentId,
             String prescriptionId,
             UpsertPrescriptionRequest request) {
-        requireMutableExamination(doctorId, appointmentId);
+        Appointment appointment = requireMutableExamination(doctorId, appointmentId);
+        String patientId = resolvePatientId(appointment);
         Prescription prescription = prescriptionRepository.findById(prescriptionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Prescription was not found."));
         MedicalRecord medicalRecord = medicalRecordRepository.findByAppointmentId(appointmentId)
@@ -170,11 +215,20 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
             throw new ForbiddenException("Prescription does not belong to this appointment.");
         }
         validateSchedules(request.getMedicineSchedules());
+        validateMeals(request.getMeals());
+        validateWorkouts(request.getWorkouts());
         prescription.setContent(trimToNull(request.getContent()));
         prescriptionRepository.save(prescription);
         medicineScheduleRepository.deleteAllByPrescriptionId(prescriptionId);
+        List<Meal> previousMeals = mealRepository.findAllByPrescriptionIdInOrderByScheduledAtAsc(List.of(prescriptionId));
+        dishRepository.deleteAllByMealIdIn(previousMeals.stream().map(Meal::getId).toList());
+        mealRepository.deleteAllByPrescriptionId(prescriptionId);
+        workoutRepository.deleteAllByPrescriptionId(prescriptionId);
         List<MedicineSchedule> schedules = saveSchedules(prescriptionId, request.getMedicineSchedules());
-        return PrescriptionResponse.from(prescription, schedules);
+        List<Meal> meals = saveMeals(patientId, prescriptionId, request.getMeals());
+        List<Dish> dishes = findDishes(meals);
+        List<Workout> workouts = saveWorkouts(patientId, prescriptionId, request.getWorkouts());
+        return PrescriptionResponse.from(prescription, schedules, meals, dishes, workouts);
     }
 
     @Override
@@ -230,6 +284,10 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
         if (!request.getScheduledAt().isAfter(Instant.now())) {
             throw new BadRequestException("Medicine schedule time must be in the future.");
         }
+        if (!schedule.getScheduledAt().atZone(VIETNAM_ZONE).toLocalDate()
+                .equals(request.getScheduledAt().atZone(VIETNAM_ZONE).toLocalDate())) {
+            throw new BadRequestException("Medicine schedule time must remain on the same calendar day.");
+        }
         if (medicineScheduleRepository.existsByPrescriptionIdAndMedicineNameAndDosageAndScheduledAt(
                 schedule.getPrescriptionId(), schedule.getMedicineName(), schedule.getDosage(), request.getScheduledAt())) {
             throw new ConflictException("The same medicine schedule already exists at the selected time.");
@@ -257,6 +315,13 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
         var schedulesByPrescription = medicineScheduleRepository
                 .findAllByPrescriptionIdInOrderByScheduledAtAsc(prescriptions.stream().map(Prescription::getId).toList())
                 .stream().collect(Collectors.groupingBy(MedicineSchedule::getPrescriptionId));
+        List<String> prescriptionIds = prescriptions.stream().map(Prescription::getId).toList();
+        var mealsByPrescription = mealRepository.findAllByPrescriptionIdInOrderByScheduledAtAsc(prescriptionIds)
+                .stream().collect(Collectors.groupingBy(Meal::getPrescriptionId));
+        List<Dish> allDishes = dishRepository.findAllByMealIdIn(mealsByPrescription.values().stream()
+                .flatMap(List::stream).map(Meal::getId).toList());
+        var workoutsByPrescription = workoutRepository.findAllByPrescriptionIdInOrderByScheduledAtAsc(prescriptionIds)
+                .stream().collect(Collectors.groupingBy(Workout::getPrescriptionId));
         return DoctorExaminationResponse.builder()
                 .appointment(appointmentService.toResponse(appointment))
                 .patient(UserResponse.from(patient, patientDataProtectionService))
@@ -264,7 +329,10 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
                 .prescriptions(prescriptions.stream()
                         .map(prescription -> PrescriptionResponse.from(
                                 prescription,
-                                schedulesByPrescription.getOrDefault(prescription.getId(), List.of())))
+                                schedulesByPrescription.getOrDefault(prescription.getId(), List.of()),
+                                mealsByPrescription.getOrDefault(prescription.getId(), List.of()),
+                                allDishes,
+                                workoutsByPrescription.getOrDefault(prescription.getId(), List.of())))
                         .toList())
                 .build();
     }
@@ -295,11 +363,23 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
     }
 
     private User requirePatientForAppointment(Appointment appointment) {
-        String patientId = trimToNull(appointment.getPatientId()) != null
-                ? appointment.getPatientId()
-                : appointment.getPatientUserId();
+        String patientId = resolvePatientId(appointment);
         if (patientId == null) throw new ResourceNotFoundException("Appointment patient was not found.");
         return userService.getActiveUserById(patientId);
+    }
+
+    private List<Appointment> findDoctorAppointments(String doctorId) {
+        List<String> workSlotIds = doctorWorkSlotRepository.findAllByDoctorIdOrderByWorkDateDescSlotIdAsc(doctorId)
+                .stream().map(DoctorWorkSlot::getId).toList();
+        return workSlotIds.isEmpty()
+                ? List.of()
+                : appointmentRepository.findAllByDoctorWorkSlotIdInOrderByRequestedAtDesc(workSlotIds);
+    }
+
+    private String resolvePatientId(Appointment appointment) {
+        return trimToNull(appointment.getPatientId()) != null
+                ? appointment.getPatientId()
+                : appointment.getPatientUserId();
     }
 
     private MedicineSchedule requirePatientSchedule(String patientId, String scheduleId) {
@@ -337,6 +417,39 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
                 .toList());
     }
 
+    private List<Meal> saveMeals(String patientId, String prescriptionId, List<MealRequest> requests) {
+        if (requests == null || requests.isEmpty()) return List.of();
+        List<Meal> meals = mealRepository.saveAll(requests.stream().map(request -> Meal.builder()
+                .userId(patientId).prescriptionId(prescriptionId).mealName(request.getMealName().trim())
+                .scheduledAt(request.getScheduledAt()).status(PlanScheduleStatus.NOT_YET)
+                .note(trimToNull(request.getNote())).build()).toList());
+        for (int index = 0; index < meals.size(); index++) {
+            saveDishes(meals.get(index).getId(), requests.get(index).getDishes());
+        }
+        return meals;
+    }
+
+    private void saveDishes(String mealId, List<com.yourproject.backend.dtos.requests.DishRequest> requests) {
+        dishRepository.saveAll(requests.stream().map(request -> Dish.builder().mealId(mealId)
+                .dishName(request.getDishName().trim()).quantity(request.getQuantity())
+                .unit(trimToNull(request.getUnit())).totalCalories(request.getTotalCalories())
+                .totalProtein(request.getTotalProtein()).totalCarbohydrates(request.getTotalCarbohydrates())
+                .totalFat(request.getTotalFat()).build()).toList());
+    }
+
+    private List<Dish> findDishes(List<Meal> meals) {
+        if (meals.isEmpty()) return List.of();
+        return dishRepository.findAllByMealIdIn(meals.stream().map(Meal::getId).toList());
+    }
+
+    private List<Workout> saveWorkouts(String patientId, String prescriptionId, List<WorkoutRequest> requests) {
+        if (requests == null || requests.isEmpty()) return List.of();
+        return workoutRepository.saveAll(requests.stream().map(request -> Workout.builder()
+                .userId(patientId).prescriptionId(prescriptionId).workoutName(request.getWorkoutName().trim())
+                .content(trimToNull(request.getContent())).scheduledAt(request.getScheduledAt())
+                .status(PlanScheduleStatus.NOT_YET).note(trimToNull(request.getNote())).build()).toList());
+    }
+
     private void validateSchedules(List<MedicineScheduleRequest> requests) {
         Set<String> uniqueSchedules = new HashSet<>();
         for (MedicineScheduleRequest request : requests) {
@@ -349,6 +462,32 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
             if (!uniqueSchedules.add(key)) {
                 throw new ConflictException("Duplicate medicine schedules are not allowed at the same time.");
             }
+        }
+    }
+
+    private void validateMeals(List<MealRequest> requests) {
+        if (requests == null) return;
+        Set<String> unique = new HashSet<>();
+        for (MealRequest request : requests) {
+            validateFuturePlanTime(request.getScheduledAt());
+            String key = request.getMealName().trim().toLowerCase() + "|" + request.getScheduledAt();
+            if (!unique.add(key)) throw new ConflictException("Duplicate meals are not allowed at the same time.");
+        }
+    }
+
+    private void validateWorkouts(List<WorkoutRequest> requests) {
+        if (requests == null) return;
+        Set<String> unique = new HashSet<>();
+        for (WorkoutRequest request : requests) {
+            validateFuturePlanTime(request.getScheduledAt());
+            String key = request.getWorkoutName().trim().toLowerCase() + "|" + request.getScheduledAt();
+            if (!unique.add(key)) throw new ConflictException("Duplicate workouts are not allowed at the same time.");
+        }
+    }
+
+    private void validateFuturePlanTime(Instant scheduledAt) {
+        if (!scheduledAt.isAfter(Instant.now())) {
+            throw new BadRequestException("Care plan time must be in the future.");
         }
     }
 

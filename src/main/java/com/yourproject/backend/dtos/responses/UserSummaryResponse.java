@@ -12,7 +12,7 @@ public class UserSummaryResponse {
     String id;
     String fullName;
     String phoneNumber;
-    String certificate;
+    boolean hasCertificate;
 
     public static UserSummaryResponse from(
             User user,
@@ -27,7 +27,7 @@ public class UserSummaryResponse {
                 .id(response.getId())
                 .fullName(response.getFullName())
                 .phoneNumber(response.getPhoneNumber())
-                .certificate(response.getCertificate())
+                .hasCertificate(response.isHasCertificate())
                 .build();
     }
 }

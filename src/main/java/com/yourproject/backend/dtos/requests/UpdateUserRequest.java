@@ -36,8 +36,6 @@ public class UpdateUserRequest {
     @Size(max = 50, message = "Health insurance code must not exceed 50 characters.")
     private String healthInsuranceCode;
 
-    @Size(max = 255, message = "Certificate must not exceed 255 characters.")
-    private String certificate;
     private String medicalHistory;
     private String currentSickness;
     private Double height;

@@ -27,6 +27,9 @@ import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.repositories.MedicalRecordRepository;
 import com.yourproject.backend.repositories.PrescriptionRepository;
 import com.yourproject.backend.repositories.MedicineScheduleRepository;
+import com.yourproject.backend.repositories.MealRepository;
+import com.yourproject.backend.repositories.WorkoutRepository;
+import com.yourproject.backend.repositories.DishRepository;
 import com.yourproject.backend.services.FcmGatewayService;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.utils.JwtUtils;
@@ -53,6 +56,15 @@ public abstract class MongoIntegrationTestBase {
 
     @Autowired
     protected MedicineScheduleRepository medicineScheduleRepository;
+
+    @Autowired
+    protected MealRepository mealRepository;
+
+    @Autowired
+    protected WorkoutRepository workoutRepository;
+
+    @Autowired
+    protected DishRepository dishRepository;
 
     @Autowired
     protected PasswordEncoder passwordEncoder;
@@ -111,6 +123,9 @@ public abstract class MongoIntegrationTestBase {
     @BeforeEach
     void clearDatabase() {
         appointmentRepository.deleteAll();
+        dishRepository.deleteAll();
+        workoutRepository.deleteAll();
+        mealRepository.deleteAll();
         medicineScheduleRepository.deleteAll();
         prescriptionRepository.deleteAll();
         medicalRecordRepository.deleteAll();
@@ -131,7 +146,7 @@ public abstract class MongoIntegrationTestBase {
                 .phoneNumber(normalizedPhone)
                 .phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
                 .passwordHash(passwordEncoder.encode(password))
-                .certificate("Practice certificate")
+                .certificateObjectKey("doctor-certificates/doctor/certificate.jpg")
                 .createdAt(now)
                 .updatedAt(now)
                 .passwordChangedAt(now.minusSeconds(10))

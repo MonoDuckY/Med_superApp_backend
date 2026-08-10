@@ -78,15 +78,17 @@ class UserServiceImplTest {
     }
 
     @Test
-    void createUser_rejectsDoctorWithoutPracticeCertificate() {
+    void createUser_allowsDoctorBeforeCertificateUpload() {
         CreateUserRequest request = doctorRequest();
-        request.setCertificate(null);
         when(patientDataProtectionService.phoneLookup("+84363636363")).thenReturn("phone-lookup");
         when(userRepository.existsByPhoneLookupAndRoleId("phone-lookup", UserRole.DOCTOR.getId())).thenReturn(false);
         when(passwordEncoder.encode("Newabc123!")).thenReturn("bcrypt-hash");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertThrows(BadRequestException.class, () -> userService.createUser(request, "admin-id"));
-        verify(userRepository, never()).save(any(User.class));
+        User created = userService.createUser(request, "admin-id");
+
+        assertNull(created.getCertificateObjectKey());
+        verify(userRepository).save(any(User.class));
     }
 
     @Test
@@ -403,7 +405,6 @@ class UserServiceImplTest {
         request.setRole(UserRole.DOCTOR);
         request.setFullName("Dr Nguyen");
         request.setPhoneNumber("0363636363");
-        request.setCertificate("Practice certificate");
         return request;
     }
 
@@ -426,7 +427,8 @@ class UserServiceImplTest {
     private User activeDoctor() {
         return User.builder().id("user-id").roleId(UserRole.DOCTOR.name()).status(AccountStatus.ACTIVE)
                 .fullName("Dr Nguyen").phoneNumber("+84363636363").phoneLookup("phone-lookup")
-                .passwordHash("password-hash").certificate("Practice certificate").createdAt(Instant.now()).build();
+                .passwordHash("password-hash").certificateObjectKey("doctor-certificates/user-id/certificate.jpg")
+                .createdAt(Instant.now()).build();
     }
 
     private ChangePasswordRequest changePasswordRequest(String currentPassword) {

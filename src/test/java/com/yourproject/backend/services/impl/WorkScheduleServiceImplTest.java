@@ -265,7 +265,7 @@ class WorkScheduleServiceImplTest {
     void toResponsesIncludesDoctorDetails() {
         doctor.setFullName("Dr Nguyen Van A");
         doctor.setPhoneNumber("+84911111111");
-        doctor.setCertificate("Cardiology");
+        doctor.setCertificateObjectKey("doctor-certificates/doctor-id/certificate.jpg");
         when(userRepository.findAllById(any())).thenReturn(List.of(doctor));
         when(workSlotRepository.findAllById(any())).thenReturn(List.of(WorkSlot.builder()
                 .id("slot-1")
@@ -278,7 +278,7 @@ class WorkScheduleServiceImplTest {
 
         assertEquals("doctor-1", response.getDoctor().getId());
         assertEquals("Dr Nguyen Van A", response.getDoctor().getFullName());
-        assertEquals("Cardiology", response.getDoctor().getCertificate());
+        assertEquals(true, response.getDoctor().isHasCertificate());
         assertEquals("Slot1", response.getSlots().get(0).getSlot().getName());
         assertEquals(LocalTime.of(8, 0), response.getSlots().get(0).getSlot().getStartTime());
     }

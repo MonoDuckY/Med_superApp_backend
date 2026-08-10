@@ -15,4 +15,10 @@ public class UpsertPrescriptionRequest {
     @NotEmpty(message = "At least one medicine schedule is required.")
     @Valid
     private List<MedicineScheduleRequest> medicineSchedules;
+
+    @Valid
+    private List<MealRequest> meals;
+
+    @Valid
+    private List<WorkoutRequest> workouts;
 }

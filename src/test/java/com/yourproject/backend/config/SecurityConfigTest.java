@@ -9,7 +9,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 class SecurityConfigTest {
     @Test
     void passwordEncoder_usesBcryptCostFactorTwelve() {
-        SecurityConfig securityConfig = new SecurityConfig(null, null, null);
+        SecurityConfig securityConfig = new SecurityConfig(null, null, null, null);
         PasswordEncoder passwordEncoder = securityConfig.passwordEncoder();
 
         String passwordHash = passwordEncoder.encode("Validpass1");
@@ -20,7 +20,7 @@ class SecurityConfigTest {
 
     @Test
     void passwordEncoder_rejectsAnIncorrectPassword() {
-        PasswordEncoder passwordEncoder = new SecurityConfig(null, null, null).passwordEncoder();
+        PasswordEncoder passwordEncoder = new SecurityConfig(null, null, null, null).passwordEncoder();
         String passwordHash = passwordEncoder.encode("Validpass1");
 
         assertFalse(passwordEncoder.matches("Wrongpass1", passwordHash));

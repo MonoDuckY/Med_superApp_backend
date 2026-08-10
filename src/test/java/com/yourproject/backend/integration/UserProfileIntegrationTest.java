@@ -31,7 +31,8 @@ class UserProfileIntegrationTest extends MongoIntegrationTestBase {
         String normalizedPhone = "+84912345678";
         userRepository.save(User.builder().fullName("Dr Profile").roleId(UserRole.DOCTOR.getId()).status(AccountStatus.ACTIVE)
                 .phoneNumber(normalizedPhone).phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
-                .passwordHash(passwordEncoder.encode("Password123!")).certificate("Practice certificate").build());
+                .passwordHash(passwordEncoder.encode("Password123!"))
+                .certificateObjectKey("doctor-certificates/doctor-profile/certificate.jpg").build());
 
         MvcResult loginResult = mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"Password123!\"}"))
