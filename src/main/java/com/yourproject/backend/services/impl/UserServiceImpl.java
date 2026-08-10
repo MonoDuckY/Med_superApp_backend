@@ -64,7 +64,6 @@ public class UserServiceImpl implements UserService {
                 .citizenIdentificationCode(trimToNull(request.getCitizenIdentificationCode()))
                 .citizenIdentificationLookup(citizenLookup(request.getCitizenIdentificationCode()))
                 .healthInsuranceCode(trimToNull(request.getHealthInsuranceCode()))
-                .certificate(trimToNull(request.getCertificate()))
                 .createdAt(now)
                 .updatedAt(now)
                 .passwordChangedAt(now)
@@ -192,10 +191,6 @@ public class UserServiceImpl implements UserService {
         if (request.getHealthInsuranceCode() != null) {
             user.setHealthInsuranceCode(trimToNull(request.getHealthInsuranceCode()));
         }
-        if (request.getCertificate() != null) {
-            user.setCertificate(trimToNull(request.getCertificate()));
-        }
-
         user.setUpdatedAt(Instant.now());
         validateAccountProfile(user);
         if (user.getRole() == UserRole.PATIENT) {
@@ -268,9 +263,6 @@ public class UserServiceImpl implements UserService {
             throw new BadRequestException("Date of birth cannot be in the future.");
         }
 
-        if (user.getRole() == UserRole.DOCTOR && isBlank(user.getCertificate())) {
-            throw new BadRequestException("Doctor accounts require a practice certificate.");
-        }
         if (user.getRole() != UserRole.PATIENT) {
             return;
         }

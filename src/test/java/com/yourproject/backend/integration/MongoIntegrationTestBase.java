@@ -146,7 +146,7 @@ public abstract class MongoIntegrationTestBase {
                 .phoneNumber(normalizedPhone)
                 .phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
                 .passwordHash(passwordEncoder.encode(password))
-                .certificate("Practice certificate")
+                .certificateObjectKey("doctor-certificates/doctor/certificate.jpg")
                 .createdAt(now)
                 .updatedAt(now)
                 .passwordChangedAt(now.minusSeconds(10))

@@ -37,7 +37,7 @@ public class User {
     private String address;
     private String citizenIdentificationCode;
     private String healthInsuranceCode;
-    private String certificate;
+    private String certificateObjectKey;
     private String medicalHistory;
     private String currentSickness;
     private Double height;

@@ -7,7 +7,7 @@ Các collection dưới đây mặc định nằm trong database nghiệp vụ `
 | Collection | Mục đích/liên kết logic |
 | --- | --- |
 | `roles` | Danh mục role với ID cố định: `1=ADMIN`, `2=DOCTOR`, `3=STAFF`, `4=RESEARCHER`, `5=PATIENT`; `roleName` unique |
-| `users` | Account, profile, một `roleId`, token hash, trusted device và patient encrypted fields |
+| `users` | Account, profile, một `roleId`, token hash, trusted device, patient encrypted fields và `certificateObjectKey` của Doctor |
 | `patient_otps` | Patient login OTP và password-reset OTP/token theo `purpose` |
 | `sms_gateway_devices` | Android gateway registration/FCM token |
 | `sms_gateway_jobs` | Trạng thái lệnh gửi SMS |
@@ -31,6 +31,7 @@ Quan hệ là manual reference bằng string/ObjectId; MongoDB không áp dụng
 
 - User có unique compound index `(phoneLookup, roleId)`, cho phép cùng phone ở các role khác nhau.
 - User có index `citizenIdentificationLookup` để query CCCD đã mã hóa.
+- `users.certificateObjectKey` chỉ lưu S3 object key; không lưu file, public URL hoặc presigned URL trong MongoDB.
 - Role có unique index trên `roleName`.
 - MedicalRecord có unique index `appointmentId`.
 - Prescription có index `medicalRecordId`.

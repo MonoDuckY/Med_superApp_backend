@@ -138,6 +138,9 @@ Khuyến nghị lưu token:
 | `GET` | `/api/admin/users/{userId}` | `ADMIN` | Lấy chi tiết một account. |
 | `PATCH` | `/api/admin/users/{userId}` | `ADMIN` | Cập nhật các field được gửi lên. |
 | `DELETE` | `/api/admin/users/{userId}` | `ADMIN` | Khóa account, không xóa cứng dữ liệu. |
+| `POST` | `/api/admin/users/{userId}/certificate` | `ADMIN` | Upload/replace certificate JPEG, PNG hoặc WEBP bằng multipart field `file`. |
+| `GET` | `/api/admin/users/{userId}/certificate` | `ADMIN` | Tạo private S3 presigned URL để xem certificate. |
+| `DELETE` | `/api/admin/users/{userId}/certificate` | `ADMIN` | Xóa certificate khỏi S3 và User. |
 
 ---
 
@@ -342,7 +345,7 @@ Ví dụ tạo Doctor:
   "role": "DOCTOR",
   "fullName": "Dr Nguyen",
   "phoneNumber": "0912345678",
-  "certificate": "Medical practice certificate"
+  "certificateObjectKey": "doctor-certificates/<doctorId>/<uuid>.jpg"
 }
 ```
 
@@ -371,7 +374,7 @@ Quy tắc quan trọng:
 - Ngày sinh, nếu được gửi, không được ở tương lai.
 - Account mới mặc định có `status: "ACTIVE"`.
 
-Các field profile có thể gửi khi tạo hoặc cập nhật account: `fullName`, `gender`, `dateOfBirth`, `address`, `citizenIdentificationCode`, `healthInsuranceCode`, `certificate`. Chỉ `phoneNumber`, `password` và `role` bắt buộc khi tạo mọi account; riêng `PATIENT` có thêm các field bắt buộc nêu trên.
+Các field profile có thể gửi khi tạo hoặc cập nhật account: `fullName`, `gender`, `dateOfBirth`, `address`, `citizenIdentificationCode`, `healthInsuranceCode`. Certificate của Doctor không nhận trong JSON create/update; Admin upload ảnh qua endpoint multipart riêng. Chỉ `phoneNumber`, `password` và `role` bắt buộc khi tạo mọi account; riêng `PATIENT` có thêm các field bắt buộc nêu trên.
 
 > **Chuyển từ phiên bản username cũ:** khi backend khởi động, nó tự gỡ index MongoDB `username_1` cũ để account mới không còn bị ràng buộc bởi username. Dữ liệu account cũ không có `phoneNumber` vẫn tồn tại, nhưng không thể đăng nhập cho đến khi được cập nhật một số điện thoại hợp lệ. Tạo bootstrap Admin bằng `BOOTSTRAP_ADMIN_PHONE_NUMBER` nếu cần một Admin mới.
 
@@ -456,7 +459,7 @@ Response `200` chỉ đặt `status` thành `DISABLED`; không hard-delete docum
 | `address` | string/null | Địa chỉ. |
 | `citizenIdentificationCode` | string/null | Mã định danh công dân. |
 | `healthInsuranceCode` | string/null | Mã bảo hiểm y tế. |
-| `certificate` | string/null | Chứng chỉ chuyên môn. |
+| `hasCertificate` | boolean | Doctor đã có ảnh chứng chỉ trên private S3 hay chưa. |
 | `createdAt` | ISO-8601 UTC | Thời điểm tạo. |
 | `updatedAt` | ISO-8601 UTC | Thời điểm cập nhật cuối. |
 | `lastLoginAt` | ISO-8601 UTC/null | Lần đăng nhập thành công gần nhất. |
@@ -510,7 +513,13 @@ JWT_SECRET=<chuoi-duoc-tao-o-buoc-10.2>
 BOOTSTRAP_ADMIN_PHONE_NUMBER=0912345678
 BOOTSTRAP_ADMIN_PASSWORD=<mat-khau-admin-bootstrap>
 BOOTSTRAP_ADMIN_FULL_NAME=System Administrator
+AWS_REGION=ap-southeast-1
+AWS_S3_BUCKET_NAME=hms-private-files
+AWS_S3_CERTIFICATE_PREFIX=doctor-certificates
+AWS_S3_PRESIGNED_URL_MINUTES=10
 ```
+
+Trên EC2, AWS SDK tự dùng IAM instance role `BackendEc2Role`; không thêm access key/secret key vào file môi trường. Khi chạy local, developer phải có AWS credentials hợp lệ trong AWS CLI/default credential chain mới gọi được S3.
 
 Nếu password của Database User có ký tự như `@`, `:`, `/`, `?`, `#` hoặc `&`, phải URL-encode password trước khi đặt vào `MONGODB_URI`.
 

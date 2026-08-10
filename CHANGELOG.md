@@ -49,3 +49,9 @@ All notable backend changes are documented in this file. This project follows a 
 ## Documentation update rule
 
 Every pull request that changes public APIs, validation, permissions, status transitions, persistence or security must also update the relevant file in `docs/specs` and add an entry under `Unreleased`.
+# 2026-08-10
+
+- Added private Amazon S3 storage for Doctor certificate images.
+- Added Admin upload, presigned-view, and delete certificate APIs.
+- Replaced free-text `users.certificate` with private `users.certificateObjectKey`.
+- Restricted certificate presence, object key and presigned URLs to Admin certificate APIs; Patient/Staff Doctor lists do not expose certificate data.

@@ -13,7 +13,7 @@
 | --- | --- | --- |
 | `GET` | `/api/doctor/appointments` | Lấy appointment của Doctor, tùy chọn status |
 | `GET` | `/api/doctor/appointments/{id}` | Lấy examination detail |
-| `GET` | `/api/doctor/appointments/patients` | Lấy danh sách Patient duy nhất từng có appointment với Doctor đang đăng nhập; trả `id`, `fullName`, `phoneNumber`, `certificate` |
+| `GET` | `/api/doctor/appointments/patients` | Lấy danh sách Patient duy nhất từng có appointment với Doctor đang đăng nhập; trả `id`, `fullName`, `phoneNumber` |
 | `GET` | `/api/doctor/appointments/patients/{patientId}/medical-records` | Lấy toàn bộ appointment của Patient cùng MedicalRecord, Prescription và MedicineSchedule; không giới hạn theo Doctor phụ trách |
 | `PATCH` | `/api/doctor/appointments/{id}/start` | `CONFIRMED → IN_PROGRESS` |
 | `PATCH` | `/api/doctor/appointments/{id}/clinical-information` | Cập nhật sức khỏe lâu dài trong User và MedicalRecord theo appointment |

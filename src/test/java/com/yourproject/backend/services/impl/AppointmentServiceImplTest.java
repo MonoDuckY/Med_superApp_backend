@@ -221,7 +221,7 @@ class AppointmentServiceImplTest {
     void toResponsesLooksUpDoctorAndPatientDetails() {
         doctor.setFullName("Dr Nguyen Van A");
         doctor.setPhoneNumber("+84911111111");
-        doctor.setCertificate("Internal Medicine");
+        doctor.setCertificateObjectKey("doctor-certificates/doctor-id/certificate.jpg");
         patient.setFullName("Tran Thi B");
         patient.setPhoneNumber("+84922222222");
         Appointment appointment = pendingAppointment();
@@ -231,7 +231,7 @@ class AppointmentServiceImplTest {
         var response = service.toResponses(List.of(appointment)).get(0);
 
         assertEquals("Dr Nguyen Van A", response.getDoctor().getFullName());
-        assertEquals("Internal Medicine", response.getDoctor().getCertificate());
+        assertEquals(true, response.getDoctor().isHasCertificate());
         assertEquals("Tran Thi B", response.getPatient().getFullName());
         assertEquals("patient-user-1", response.getPatient().getId());
     }
