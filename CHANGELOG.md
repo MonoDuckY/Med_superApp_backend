@@ -52,6 +52,6 @@ Every pull request that changes public APIs, validation, permissions, status tra
 # 2026-08-10
 
 - Added private Amazon S3 storage for Doctor certificate images.
-- Added Admin upload, presigned-view, and delete certificate APIs.
+- Merged Doctor certificate upload/replacement into Admin user POST/PATCH multipart APIs and removed standalone certificate endpoints.
 - Replaced free-text `users.certificate` with private `users.certificateObjectKey`.
 - Restricted certificate presence, object key and presigned URLs to Admin certificate APIs; Patient/Staff Doctor lists do not expose certificate data.

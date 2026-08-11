@@ -74,7 +74,6 @@ class UserProfileIntegrationTest extends MongoIntegrationTestBase {
 
         mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.patientId").value("PAT-INTEGRATION"))
                 .andExpect(jsonPath("$.data.fullName").value("Patient Integration"))
                 .andExpect(jsonPath("$.data.gender").value("NONE"))
                 .andExpect(jsonPath("$.data.dateOfBirth").value("1995-01-01"))

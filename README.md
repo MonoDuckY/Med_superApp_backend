@@ -133,14 +133,11 @@ Khuyến nghị lưu token:
 | `GET` | `/api/patient/medicine-schedules` | `PATIENT` | Lấy lịch uống thuốc của Patient. |
 | `PATCH` | `/api/patient/medicine-schedules/{scheduleId}/time` | `PATIENT` | Đổi thời gian của schedule `NOT_YET`. |
 | `PATCH` | `/api/patient/medicine-schedules/{scheduleId}/take` | `PATIENT` | Đánh dấu schedule là `TAKEN`. |
-| `POST` | `/api/admin/users` | `ADMIN` | Tạo account. |
+| `POST` | `/api/admin/users` | `ADMIN` | Tạo account bằng multipart parts `user` và `certificate`; Doctor bắt buộc có ảnh. |
 | `GET` | `/api/admin/users` | `ADMIN` | Lấy hoặc lọc account theo phone, CCCD và role. |
 | `GET` | `/api/admin/users/{userId}` | `ADMIN` | Lấy chi tiết một account. |
-| `PATCH` | `/api/admin/users/{userId}` | `ADMIN` | Cập nhật các field được gửi lên. |
+| `PATCH` | `/api/admin/users/{userId}` | `ADMIN` | Cập nhật bằng multipart parts `user` và `certificate`; ảnh chỉ dành cho Doctor. |
 | `DELETE` | `/api/admin/users/{userId}` | `ADMIN` | Khóa account, không xóa cứng dữ liệu. |
-| `POST` | `/api/admin/users/{userId}/certificate` | `ADMIN` | Upload/replace certificate JPEG, PNG hoặc WEBP bằng multipart field `file`. |
-| `GET` | `/api/admin/users/{userId}/certificate` | `ADMIN` | Tạo private S3 presigned URL để xem certificate. |
-| `DELETE` | `/api/admin/users/{userId}/certificate` | `ADMIN` | Xóa certificate khỏi S3 và User. |
 
 ---
 

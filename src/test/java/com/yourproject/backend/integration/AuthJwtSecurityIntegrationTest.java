@@ -16,6 +16,7 @@ import org.springframework.test.web.servlet.MvcResult;
 import com.jayway.jsonpath.JsonPath;
 import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.User;
+import com.yourproject.backend.models.UserRole;
 
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -41,7 +42,7 @@ class AuthJwtSecurityIntegrationTest extends MongoIntegrationTestBase {
     @Test
     void tokenCannotAuthenticateUserAfterAccountBecomesInactive() throws Exception {
         User doctor = saveActiveDoctor("+84912345678", "Password123!");
-        String accessToken = loginAndGetAccessToken("0912345678", "Password123!");
+        String accessToken = loginAndGetAccessToken("0912345678", UserRole.DOCTOR, "Password123!");
         doctor.setStatus(AccountStatus.INACTIVE);
         userRepository.save(doctor);
 
@@ -53,7 +54,7 @@ class AuthJwtSecurityIntegrationTest extends MongoIntegrationTestBase {
     @Test
     void doctorCannotAccessAdminOnlyUserApi() throws Exception {
         saveActiveDoctor("+84912345678", "Password123!");
-        String accessToken = loginAndGetAccessToken("0912345678", "Password123!");
+        String accessToken = loginAndGetAccessToken("0912345678", UserRole.DOCTOR, "Password123!");
 
         mockMvc.perform(get("/api/admin/users").header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isForbidden())
@@ -104,7 +105,7 @@ class AuthJwtSecurityIntegrationTest extends MongoIntegrationTestBase {
     @Test
     void nonBearerAuthorizationSchemeIsRejected() throws Exception {
         saveActiveDoctor("+84912345678", "Password123!");
-        String accessToken = loginAndGetAccessToken("0912345678", "Password123!");
+        String accessToken = loginAndGetAccessToken("0912345678", UserRole.DOCTOR, "Password123!");
 
         mockMvc.perform(get("/api/auth/me").header("Authorization", "Token " + accessToken))
                 .andExpect(status().isUnauthorized())
@@ -114,7 +115,7 @@ class AuthJwtSecurityIntegrationTest extends MongoIntegrationTestBase {
     @Test
     void adminCanAccessAdminOnlyUserApi() throws Exception {
         saveActiveAdmin("+84912345678", "Password123!");
-        String accessToken = loginAndGetAccessToken("0912345678", "Password123!");
+        String accessToken = loginAndGetAccessToken("0912345678", UserRole.ADMIN, "Password123!");
 
         mockMvc.perform(get("/api/admin/users").header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
@@ -124,7 +125,7 @@ class AuthJwtSecurityIntegrationTest extends MongoIntegrationTestBase {
     @Test
     void tokenCannotAuthenticateDeletedUser() throws Exception {
         User doctor = saveActiveDoctor("+84912345678", "Password123!");
-        String accessToken = loginAndGetAccessToken("0912345678", "Password123!");
+        String accessToken = loginAndGetAccessToken("0912345678", UserRole.DOCTOR, "Password123!");
         userRepository.deleteById(doctor.getId());
 
         assertUnauthorized(accessToken);
@@ -154,9 +155,10 @@ class AuthJwtSecurityIntegrationTest extends MongoIntegrationTestBase {
                 .compact();
     }
 
-    private String loginAndGetAccessToken(String phoneNumber, String password) throws Exception {
+    private String loginAndGetAccessToken(String phoneNumber, UserRole role, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"" + phoneNumber + "\",\"role\":\"DOCTOR\",\"password\":\"" + password + "\"}"))
+                        .content("{\"phoneNumber\":\"" + phoneNumber + "\",\"role\":\"" + role
+                                + "\",\"password\":\"" + password + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn();
         return JsonPath.read(result.getResponse().getContentAsString(), "$.data.accessToken");

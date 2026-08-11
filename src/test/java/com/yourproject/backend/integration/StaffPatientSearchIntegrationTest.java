@@ -21,7 +21,7 @@ class StaffPatientSearchIntegrationTest extends MongoIntegrationTestBase {
         saveNamedPatient("Nguyễn Văn Anh", "+84922222222");
         saveNamedPatient("Trần Minh Đức", "+84933333333");
         saveActiveStaff("+84944444444", "StaffPassword1!");
-        String token = loginAccessToken("0944444444", "StaffPassword1!");
+        String token = loginAccessToken("0944444444", UserRole.STAFF, "StaffPassword1!");
 
         mockMvc.perform(get("/api/staff/patients/search")
                         .header("Authorization", "Bearer " + token)
@@ -36,7 +36,7 @@ class StaffPatientSearchIntegrationTest extends MongoIntegrationTestBase {
     @Test
     void nonStaffCannotSearchPatients() throws Exception {
         saveActiveAdmin("+84944444444", "AdminPassword1!");
-        String token = loginAccessToken("0944444444", "AdminPassword1!");
+        String token = loginAccessToken("0944444444", UserRole.ADMIN, "AdminPassword1!");
 
         mockMvc.perform(get("/api/staff/patients/search")
                         .header("Authorization", "Bearer " + token)
@@ -62,11 +62,12 @@ class StaffPatientSearchIntegrationTest extends MongoIntegrationTestBase {
         return userRepository.save(patient);
     }
 
-    private String loginAccessToken(String phoneNumber, String password) throws Exception {
+    private String loginAccessToken(String phoneNumber, UserRole role, String password) throws Exception {
         String body = mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                         .post("/api/auth/login")
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"" + phoneNumber + "\",\"role\":\"STAFF\",\"password\":\"" + password + "\"}"))
+                        .content("{\"phoneNumber\":\"" + phoneNumber + "\",\"role\":\"" + role
+                                + "\",\"password\":\"" + password + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return com.jayway.jsonpath.JsonPath.read(body, "$.data.accessToken");
