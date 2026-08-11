@@ -59,7 +59,7 @@ public class PatientCarePlanServiceImpl implements PatientCarePlanService {
     @Override
     public MealResponse createMeal(String patientId, MealRequest request) {
         requirePatient(patientId);
-        validateFuture(request.getScheduledAt());
+        validatePatientCreatedPlanTime(request.getScheduledAt());
         String name = request.getMealName().trim();
         if (mealRepository.existsByUserIdAndMealNameAndScheduledAt(patientId, name, request.getScheduledAt())) {
             throw new ConflictException("The same meal already exists at the selected time.");
@@ -102,7 +102,7 @@ public class PatientCarePlanServiceImpl implements PatientCarePlanService {
     @Override
     public WorkoutResponse createWorkout(String patientId, WorkoutRequest request) {
         requirePatient(patientId);
-        validateFuture(request.getScheduledAt());
+        validatePatientCreatedPlanTime(request.getScheduledAt());
         String name = request.getWorkoutName().trim();
         if (workoutRepository.existsByUserIdAndWorkoutNameAndScheduledAt(patientId, name, request.getScheduledAt())) {
             throw new ConflictException("The same workout already exists at the selected time.");
@@ -188,6 +188,14 @@ public class PatientCarePlanServiceImpl implements PatientCarePlanService {
 
     private void validateFuture(Instant time) {
         if (!time.isAfter(Instant.now())) throw new BadRequestException("Plan time must be in the future.");
+    }
+
+    private void validatePatientCreatedPlanTime(Instant time) {
+        validateFuture(time);
+        if (!time.atZone(VIETNAM_ZONE).toLocalDate()
+                .equals(Instant.now().atZone(VIETNAM_ZONE).toLocalDate())) {
+            throw new BadRequestException("Patient-created care plan time must be within the current Vietnam calendar day.");
+        }
     }
 
     private String trimToNull(String value) {

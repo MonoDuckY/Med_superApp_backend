@@ -212,9 +212,8 @@ class ClinicalMedicationIntegrationTest extends MongoIntegrationTestBase {
     void patientCreatesAndCompletesIndependentMealAndWorkoutPlans() throws Exception {
         User patient = saveActivePatient("+84922222222");
         String patientToken = patientAccessToken(patient, "123456");
-        LocalDate planDay = LocalDate.now(VIETNAM_ZONE).plusDays(1);
-        Instant mealTime = planDay.atTime(8, 0).atZone(VIETNAM_ZONE).toInstant();
-        Instant workoutTime = planDay.atTime(17, 0).atZone(VIETNAM_ZONE).toInstant();
+        Instant mealTime = Instant.now().plusSeconds(30);
+        Instant workoutTime = Instant.now().plusSeconds(60);
 
         MvcResult mealResult = mockMvc.perform(post("/api/patient/meal-plans")
                         .header("Authorization", "Bearer " + patientToken)
@@ -248,6 +247,72 @@ class ClinicalMedicationIntegrationTest extends MongoIntegrationTestBase {
         mockMvc.perform(patch("/api/patient/workout-plans/{id}/complete", workoutId)
                         .header("Authorization", "Bearer " + patientToken))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("COMPLETED"));
+    }
+
+    @Test
+    void appointmentHasOnePrescriptionAndDoctorUpdatesItWithoutPrescriptionId() throws Exception {
+        User doctor = saveActiveDoctor("+84911111111", "DoctorPassword1!");
+        User patient = saveActivePatient("+84922222222");
+        Appointment appointment = saveConfirmedAppointment(doctor, patient);
+        String doctorToken = loginAccessToken("0911111111", "DoctorPassword1!");
+        mockMvc.perform(patch("/api/doctor/appointments/{id}/start", appointment.getId())
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
+        Instant scheduledAt = Instant.now().plusSeconds(3600);
+        String createBody = "{\"content\":\"Initial prescription\",\"medicineSchedules\":["
+                + "{\"medicineName\":\"Medicine A\",\"dosage\":\"1 tablet\",\"scheduledAt\":\""
+                + scheduledAt + "\"}]}";
+
+        MvcResult created = mockMvc.perform(post("/api/doctor/appointments/{id}/prescriptions", appointment.getId())
+                        .header("Authorization", "Bearer " + doctorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String prescriptionId = JsonPath.read(created.getResponse().getContentAsString(), "$.data.id");
+
+        mockMvc.perform(post("/api/doctor/appointments/{id}/prescriptions", appointment.getId())
+                        .header("Authorization", "Bearer " + doctorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(createBody))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("This appointment already has a prescription."));
+
+        mockMvc.perform(patch("/api/doctor/appointments/{id}/prescription", appointment.getId())
+                        .header("Authorization", "Bearer " + doctorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"content\":\"Updated prescription\",\"medicineSchedules\":["
+                                + "{\"medicineName\":\"Medicine B\",\"dosage\":\"2 tablets\",\"scheduledAt\":\""
+                                + scheduledAt.plusSeconds(60) + "\"}]}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(prescriptionId))
+                .andExpect(jsonPath("$.data.content").value("Updated prescription"))
+                .andExpect(jsonPath("$.data.medicineSchedules[0].medicineName").value("Medicine B"));
+    }
+
+    @Test
+    void patientCannotCreateMealOrWorkoutOutsideCurrentVietnamDay() throws Exception {
+        User patient = saveActivePatient("+84922222222");
+        String patientToken = patientAccessToken(patient, "123456");
+        Instant tomorrow = LocalDate.now(VIETNAM_ZONE).plusDays(1)
+                .atTime(12, 0).atZone(VIETNAM_ZONE).toInstant();
+
+        mockMvc.perform(post("/api/patient/meal-plans")
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"mealName\":\"Tomorrow meal\",\"scheduledAt\":\"" + tomorrow
+                                + "\",\"dishes\":[{\"dishName\":\"Rice\",\"quantity\":1,\"unit\":\"bowl\"}]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Patient-created care plan time must be within the current Vietnam calendar day."));
+
+        mockMvc.perform(post("/api/patient/workout-plans")
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"workoutName\":\"Tomorrow workout\",\"scheduledAt\":\"" + tomorrow + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Patient-created care plan time must be within the current Vietnam calendar day."));
     }
 
     private Appointment saveConfirmedAppointment(User doctor, User patient) {

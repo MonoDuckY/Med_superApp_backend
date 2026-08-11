@@ -128,7 +128,7 @@ Khuyến nghị lưu token:
 | `PATCH` | `/api/doctor/appointments/{appointmentId}/clinical-information` | `DOCTOR` | Cập nhật sức khỏe tổng quát và MedicalRecord. |
 | `PATCH` | `/api/doctor/appointments/{appointmentId}/diagnosis` | `DOCTOR` | Cập nhật diagnosis trong MedicalRecord. |
 | `POST` | `/api/doctor/appointments/{appointmentId}/prescriptions` | `DOCTOR` | Tạo prescription cùng medicine schedules. |
-| `PATCH` | `/api/doctor/appointments/{appointmentId}/prescriptions/{prescriptionId}` | `DOCTOR` | Cập nhật prescription và thay thế schedules. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/prescription` | `DOCTOR` | Cập nhật prescription duy nhất của appointment và thay thế schedules; không cần prescription ID. |
 | `PATCH` | `/api/doctor/appointments/{appointmentId}/complete` | `DOCTOR` | Hoàn thành examination. |
 | `GET` | `/api/patient/medicine-schedules` | `PATIENT` | Lấy lịch uống thuốc của Patient. |
 | `PATCH` | `/api/patient/medicine-schedules/{scheduleId}/time` | `PATIENT` | Đổi thời gian của schedule `NOT_YET`. |

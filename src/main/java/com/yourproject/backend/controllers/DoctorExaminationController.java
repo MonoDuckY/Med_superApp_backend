@@ -109,16 +109,15 @@ public class DoctorExaminationController {
                 clinicalMedicationService.createPrescription(authentication.getName(), appointmentId, request)));
     }
 
-    @PatchMapping("/{appointmentId}/prescriptions/{prescriptionId}")
+    @PatchMapping("/{appointmentId}/prescription")
     public ResponseEntity<ApiResponse<PrescriptionResponse>> updatePrescription(
             Authentication authentication,
             @PathVariable String appointmentId,
-            @PathVariable String prescriptionId,
             @Valid @RequestBody UpsertPrescriptionRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
                 "Prescription updated successfully.",
                 clinicalMedicationService.updatePrescription(
-                        authentication.getName(), appointmentId, prescriptionId, request)));
+                        authentication.getName(), appointmentId, request)));
     }
 
     @PatchMapping("/{appointmentId}/complete")

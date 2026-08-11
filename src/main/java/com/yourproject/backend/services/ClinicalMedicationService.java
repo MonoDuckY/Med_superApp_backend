@@ -26,7 +26,7 @@ public interface ClinicalMedicationService {
     PrescriptionResponse createPrescription(
             String doctorId, String appointmentId, UpsertPrescriptionRequest request);
     PrescriptionResponse updatePrescription(
-            String doctorId, String appointmentId, String prescriptionId, UpsertPrescriptionRequest request);
+            String doctorId, String appointmentId, UpsertPrescriptionRequest request);
     DoctorExaminationResponse completeExamination(String doctorId, String appointmentId);
     List<MedicineScheduleResponse> getPatientMedicineSchedules(String patientId);
     MedicineScheduleResponse updatePatientScheduleTime(

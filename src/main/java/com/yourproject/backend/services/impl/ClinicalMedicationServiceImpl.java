@@ -184,6 +184,9 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
         Appointment appointment = requireMutableExamination(doctorId, appointmentId);
         String patientId = resolvePatientId(appointment);
         MedicalRecord medicalRecord = medicalRecordRepository.save(getOrCreateMedicalRecord(appointmentId));
+        if (prescriptionRepository.existsByMedicalRecordId(medicalRecord.getId())) {
+            throw new ConflictException("This appointment already has a prescription.");
+        }
         validateSchedules(request.getMedicineSchedules());
         validateMeals(request.getMeals());
         validateWorkouts(request.getWorkouts());
@@ -203,17 +206,14 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
     public PrescriptionResponse updatePrescription(
             String doctorId,
             String appointmentId,
-            String prescriptionId,
             UpsertPrescriptionRequest request) {
         Appointment appointment = requireMutableExamination(doctorId, appointmentId);
         String patientId = resolvePatientId(appointment);
-        Prescription prescription = prescriptionRepository.findById(prescriptionId)
-                .orElseThrow(() -> new ResourceNotFoundException("Prescription was not found."));
         MedicalRecord medicalRecord = medicalRecordRepository.findByAppointmentId(appointmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Medical record was not found."));
-        if (!medicalRecord.getId().equals(prescription.getMedicalRecordId())) {
-            throw new ForbiddenException("Prescription does not belong to this appointment.");
-        }
+        Prescription prescription = prescriptionRepository.findByMedicalRecordId(medicalRecord.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Prescription was not found."));
+        String prescriptionId = prescription.getId();
         validateSchedules(request.getMedicineSchedules());
         validateMeals(request.getMeals());
         validateWorkouts(request.getWorkouts());

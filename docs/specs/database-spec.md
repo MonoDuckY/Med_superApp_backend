@@ -34,7 +34,7 @@ Quan hệ là manual reference bằng string/ObjectId; MongoDB không áp dụng
 - `users.certificateObjectKey` chỉ lưu S3 object key; không lưu file, public URL hoặc presigned URL trong MongoDB.
 - Role có unique index trên `roleName`.
 - MedicalRecord có unique index `appointmentId`.
-- Prescription có index `medicalRecordId`.
+- Prescription có unique index `medicalRecordId`, bảo đảm một Appointment/MedicalRecord chỉ có một Prescription.
 - PatientOtp có index user, phone lookup, purpose và TTL expiration.
 - MedicineSchedule chống trùng prescription/medicine/dosage/scheduledAt.
 - Meal chống trùng `(userId, mealName, scheduledAt)`.

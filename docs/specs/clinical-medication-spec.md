@@ -19,7 +19,7 @@
 | `PATCH` | `/api/doctor/appointments/{id}/clinical-information` | Cập nhật sức khỏe lâu dài trong User và MedicalRecord theo appointment |
 | `PATCH` | `/api/doctor/appointments/{id}/diagnosis` | Cập nhật diagnosis trong MedicalRecord |
 | `POST` | `/api/doctor/appointments/{id}/prescriptions` | Tạo prescription và medicine schedules |
-| `PATCH` | `/api/doctor/appointments/{id}/prescriptions/{prescriptionId}` | Thay content và schedules |
+| `PATCH` | `/api/doctor/appointments/{id}/prescription` | Thay content và schedules của prescription duy nhất; không nhận prescription ID |
 | `PATCH` | `/api/doctor/appointments/{id}/complete` | Hoàn tất examination |
 
 ## Current storage
@@ -27,7 +27,7 @@
 - Sức khỏe tổng quát lâu dài: `users`.
 - Hồ sơ từng lần khám: `medical_records`, unique theo `appointmentId`.
 - MedicalRecord chứa `diagnosis`, `note`, `bloodPressure`, `heartRate`, `breathingRate`, `bodyTemperature`, `bloodLipids`.
-- Prescription: `prescriptions.medicalRecordId`.
+- Mỗi Appointment chỉ có tối đa một Prescription; `prescriptions.medicalRecordId` là duy nhất.
 - Medicine schedule: `medicine_schedules.prescriptionId`.
 - Meal plan: `meals.userId`; `prescriptionId` bắt buộc khi Doctor tạo trong Prescription và `null` khi Patient tự tạo.
 - Mỗi Meal phải có ít nhất một Dish. Dish lưu riêng trong `dishes` và tham chiếu `mealId`; response Meal trả `dishes` dạng danh sách lồng.
@@ -52,11 +52,11 @@ Job định kỳ chuyển `NOT_YET → MISSED` sau 60 phút kể từ `scheduled
 | Method | Endpoint | Chức năng |
 | --- | --- | --- |
 | `GET` | `/api/patient/meal-plans` | Lấy toàn bộ Meal do Doctor hoặc Patient tạo |
-| `POST` | `/api/patient/meal-plans` | Patient tự tạo Meal với `prescriptionId=null` |
+| `POST` | `/api/patient/meal-plans` | Patient tự tạo Meal với `prescriptionId=null`; thời gian phải ở tương lai và thuộc ngày hiện tại UTC+7 |
 | `PATCH` | `/api/patient/meal-plans/{id}/time` | Đổi thời gian Meal `NOT_YET`, phải tương lai và cùng ngày UTC+7 |
 | `PATCH` | `/api/patient/meal-plans/{id}/complete` | Chuyển Meal `NOT_YET → COMPLETED` |
 | `GET` | `/api/patient/workout-plans` | Lấy toàn bộ Workout do Doctor hoặc Patient tạo |
-| `POST` | `/api/patient/workout-plans` | Patient tự tạo Workout với `prescriptionId=null` |
+| `POST` | `/api/patient/workout-plans` | Patient tự tạo Workout với `prescriptionId=null`; thời gian phải ở tương lai và thuộc ngày hiện tại UTC+7 |
 | `PATCH` | `/api/patient/workout-plans/{id}/time` | Đổi thời gian Workout `NOT_YET`, phải tương lai và cùng ngày UTC+7 |
 | `PATCH` | `/api/patient/workout-plans/{id}/complete` | Chuyển Workout `NOT_YET → COMPLETED` |
 
