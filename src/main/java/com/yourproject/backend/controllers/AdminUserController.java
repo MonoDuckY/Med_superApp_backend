@@ -67,13 +67,13 @@ public class AdminUserController {
             @RequestParam(required = false) String citizenIdentificationCode,
             @RequestParam(required = false) UserRole role) {
         List<UserResponse> users = userService.searchUsers(phoneNumber, citizenIdentificationCode, role).stream()
-                .map(user -> UserResponse.from(user, patientDataProtectionService)).toList();
+                .map(this::adminResponse).toList();
         return ResponseEntity.ok(ApiResponse.success("User accounts retrieved successfully.", users));
     }
 
     @GetMapping("/{userId}")
     public ResponseEntity<ApiResponse<UserResponse>> getUser(@PathVariable String userId) {
-        UserResponse user = UserResponse.from(userService.getUserById(userId), patientDataProtectionService);
+        UserResponse user = adminResponse(userService.getUserById(userId));
         return ResponseEntity.ok(ApiResponse.success("User account retrieved successfully.", user));
     }
 
