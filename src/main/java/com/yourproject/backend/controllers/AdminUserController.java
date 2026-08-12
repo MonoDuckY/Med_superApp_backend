@@ -17,6 +17,10 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.http.MediaType;
 import org.springframework.web.multipart.MultipartFile;
 
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Encoding;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
+
 import com.yourproject.backend.dtos.requests.CreateUserRequest;
 import com.yourproject.backend.dtos.requests.UpdateUserRequest;
 import com.yourproject.backend.dtos.responses.ApiResponse;
@@ -42,6 +46,12 @@ public class AdminUserController {
     private final AdminUserManagementService adminUserManagementService;
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequestBody(content = @Content(
+            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            encoding = {
+                    @Encoding(name = "user", contentType = MediaType.APPLICATION_JSON_VALUE),
+                    @Encoding(name = "certificate", contentType = "image/png, image/jpeg, image/webp")
+            }))
     public ResponseEntity<ApiResponse<UserResponse>> createUser(
             Authentication authentication,
             @Valid @RequestPart("user") CreateUserRequest request,
@@ -68,6 +78,12 @@ public class AdminUserController {
     }
 
     @PatchMapping(value = "/{userId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequestBody(content = @Content(
+            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            encoding = {
+                    @Encoding(name = "user", contentType = MediaType.APPLICATION_JSON_VALUE),
+                    @Encoding(name = "certificate", contentType = "image/png, image/jpeg, image/webp")
+            }))
     public ResponseEntity<ApiResponse<UserResponse>> updateUser(
             Authentication authentication,
             @PathVariable String userId,
