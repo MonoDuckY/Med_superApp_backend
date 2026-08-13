@@ -18,6 +18,7 @@ import java.security.MessageDigest;
 import java.util.Base64;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 
 import com.yourproject.backend.models.Appointment;
@@ -26,9 +27,46 @@ import com.yourproject.backend.models.ClinicRoom;
 import com.yourproject.backend.models.DoctorWorkSlot;
 import com.yourproject.backend.models.DoctorWorkSlotStatus;
 import com.yourproject.backend.models.User;
+import com.yourproject.backend.services.WorkScheduleExpirationJob;
 
 class SchedulingIntegrationTest extends MongoIntegrationTestBase {
     private static final ZoneId HOSPITAL_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+
+    @Autowired
+    private WorkScheduleExpirationJob workScheduleExpirationJob;
+
+    @Test
+    void doctorMustSubmitWorkScheduleAtLeastOneDayInAdvance() throws Exception {
+        User doctor = saveActiveDoctor("+84911111111", "Password123!");
+        ClinicRoom room = saveRoom("ROOM-101", "Clinic Room 101");
+
+        submitSchedule(doctor, LocalDate.now(HOSPITAL_ZONE), "MORNING", room.getId(), 400);
+
+        assertEquals(0, doctorWorkSlotRepository.count());
+    }
+
+    @Test
+    void expirationJobRejectsPendingScheduleWhenWorkDateHasArrived() {
+        LocalDate today = LocalDate.now(HOSPITAL_ZONE);
+        DoctorWorkSlot pending = doctorWorkSlotRepository.save(DoctorWorkSlot.builder()
+                .submissionId("expired-submission")
+                .doctorId("doctor-1")
+                .workDate(today)
+                .slotId("slot-1")
+                .roomId("room-1")
+                .status(DoctorWorkSlotStatus.PENDING)
+                .submittedAt(Instant.now().minusSeconds(3600))
+                .updatedAt(Instant.now().minusSeconds(3600))
+                .build());
+
+        workScheduleExpirationJob.rejectExpiredPendingSchedules();
+
+        DoctorWorkSlot rejected = doctorWorkSlotRepository.findById(pending.getId()).orElseThrow();
+        assertEquals(DoctorWorkSlotStatus.REJECTED, rejected.getStatus());
+        assertEquals(
+                WorkScheduleExpirationJob.AUTOMATIC_REJECTION_REASON,
+                rejected.getRejectionReason());
+    }
 
     @Test
     void completeDoctorStaffPatientStaffSchedulingFlow() throws Exception {

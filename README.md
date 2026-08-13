@@ -119,6 +119,7 @@ Khuyến nghị lưu token:
 | `POST` | `/api/auth/forgot-password/reset` | Public | Đặt mật khẩu mới bằng reset token. |
 | `GET` | `/api/auth/me` | Authenticated | Lấy profile account đang đăng nhập. |
 | `GET` | `/api/staff/patients/search?name={name}&phoneNumber={phone}&citizenIdentificationCode={cccd}&n={count}` | `STAFF` | Tìm Patient bằng tên, số điện thoại hoặc CCCD. |
+| `POST` | `/api/staff/patients` | `STAFF` | Tạo account Patient active; request JSON không có `role` hoặc `password`, backend tự gán `PATIENT`. |
 | `GET` | `/api/patient/doctors` | `PATIENT` | Lấy danh sách Doctor active. |
 | `GET` | `/api/staff/doctors` | `STAFF` | Lấy danh sách Doctor active cho Staff. |
 | `GET` | `/api/doctor/appointments` | `DOCTOR` | Lấy các appointment thuộc Doctor hiện tại. |

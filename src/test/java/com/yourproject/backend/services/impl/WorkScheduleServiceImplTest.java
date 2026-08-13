@@ -121,6 +121,18 @@ class WorkScheduleServiceImplTest {
     }
 
     @Test
+    void submitRejectsWorkDateThatIsNotAtLeastOneDayInAdvance() {
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+        SubmitWorkScheduleRequest request = request(WorkSession.MORNING);
+        request.setWorkDate(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+
+        assertThrows(BadRequestException.class, () -> service.submit("doctor-1", request));
+
+        verify(clinicRoomRepository, never()).findById(any());
+        verify(doctorWorkSlotRepository, never()).saveAll(anyList());
+    }
+
+    @Test
     void submitNightCreatesThirtySlotsFromFivePmUntilEightAmNextDay() {
         List<WorkSlot> nightSlots = new ArrayList<>();
         for (int index = 0; index < 30; index++) {
@@ -325,6 +337,19 @@ class WorkScheduleServiceImplTest {
             assertEquals(DoctorWorkSlotStatus.PENDING, slot.getStatus());
         });
         verify(doctorWorkSlotRepository).deleteAll(List.of(pending));
+    }
+
+    @Test
+    void modifyPendingSubmissionRejectsWorkDateThatIsNotAtLeastOneDayInAdvance() {
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+        SubmitWorkScheduleRequest request = request(WorkSession.MORNING);
+        request.setWorkDate(LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh")));
+
+        assertThrows(BadRequestException.class, () -> service.modifyPendingSubmission(
+                "doctor-1", "submission-1", request));
+
+        verify(doctorWorkSlotRepository, never())
+                .findAllBySubmissionIdAndDoctorIdOrderBySlotIdAsc(any(), any());
     }
 
     @Test

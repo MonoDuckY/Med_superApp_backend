@@ -1,5 +1,12 @@
 # User Management Specification
 
+## Staff Patient account creation
+
+- `POST /api/staff/patients` requires `STAFF` and accepts a JSON `StaffCreatePatientRequest`.
+- The request does not contain `role` or `password`; backend always assigns `PATIENT` and stores no password.
+- The new account is active and stores the authenticated Staff user ID in `createdBy`.
+- The endpoint does not accept a certificate or multipart request.
+
 ## Authorization
 
 Toàn bộ `/api/admin/users/**` yêu cầu `ADMIN`.

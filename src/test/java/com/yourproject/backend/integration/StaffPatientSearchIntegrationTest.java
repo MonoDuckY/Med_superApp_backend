@@ -1,6 +1,8 @@
 package com.yourproject.backend.integration;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -9,12 +11,50 @@ import java.time.LocalDate;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 
 import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;
 
 class StaffPatientSearchIntegrationTest extends MongoIntegrationTestBase {
+    @Test
+    void staffCreatesPatientAccount() throws Exception {
+        User staff = saveActiveStaff("+84944444444", "StaffPassword1!");
+        String token = loginAccessToken("0944444444", UserRole.STAFF, "StaffPassword1!");
+
+        mockMvc.perform(post("/api/staff/patients")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(patientRequest("Nguyen Van Patient", "0911111111")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.role").value("PATIENT"))
+                .andExpect(jsonPath("$.data.phoneNumber").value("+84911111111"))
+                .andExpect(jsonPath("$.data.fullName").value("Nguyen Van Patient"));
+
+        User created = userRepository.findAll().stream()
+                .filter(user -> user.getRole() == UserRole.PATIENT)
+                .findFirst()
+                .orElseThrow();
+        assertEquals(staff.getId(), created.getCreatedBy());
+        assertEquals(null, created.getPasswordHash());
+    }
+
+    @Test
+    void adminCannotUseStaffPatientCreationEndpoint() throws Exception {
+        saveActiveAdmin("+84944444444", "AdminPassword1!");
+        String token = loginAccessToken("0944444444", UserRole.ADMIN, "AdminPassword1!");
+
+        mockMvc.perform(post("/api/staff/patients")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(patientRequest("Patient Attempt", "0911111111")))
+                .andExpect(status().isForbidden());
+
+        assertEquals(1, userRepository.count());
+    }
+
     @Test
     void staffSearchesActivePatientsByClosestName() throws Exception {
         saveNamedPatient("Nguyễn Văn An", "+84911111111");
@@ -71,5 +111,11 @@ class StaffPatientSearchIntegrationTest extends MongoIntegrationTestBase {
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         return com.jayway.jsonpath.JsonPath.read(body, "$.data.accessToken");
+    }
+
+    private String patientRequest(String fullName, String phoneNumber) {
+        return "{\"fullName\":\"" + fullName
+                + "\",\"gender\":\"NONE\",\"dateOfBirth\":\"1995-01-01\",\"phoneNumber\":\""
+                + phoneNumber + "\",\"address\":\"Test address\"}";
     }
 }

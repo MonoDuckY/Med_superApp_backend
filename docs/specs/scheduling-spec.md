@@ -1,5 +1,13 @@
 # Doctor Work Scheduling Specification
 
+## Registration deadline and automatic rejection
+
+- A Doctor must submit a work schedule at least one calendar day before `workDate`, based on `Asia/Ho_Chi_Minh` time.
+- The same minimum-one-day rule applies when a Doctor modifies a `PENDING` submission.
+- A scheduled job runs every 60 seconds by default. Any slot still `PENDING` when `workDate` is today or earlier is changed to `REJECTED` automatically.
+- Automatic rejection sets `rejectionReason` to `Automatically rejected because the work date arrived before staff approval.` and releases the slot from schedule-conflict checks.
+- The interval can be configured with `WORK_SCHEDULE_EXPIRATION_JOB_DELAY_MS`.
+
 ## Roles
 
 - `DOCTOR`: xem options, submit, xem, sửa hoặc hủy submission phù hợp trạng thái.

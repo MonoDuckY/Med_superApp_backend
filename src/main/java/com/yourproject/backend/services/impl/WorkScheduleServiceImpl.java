@@ -61,9 +61,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     @Transactional
     public List<DoctorWorkSlot> submit(String doctorId, SubmitWorkScheduleRequest request) {
         User doctor = requireRole(doctorId, UserRole.DOCTOR, "Only doctors can submit work schedules.");
-        if (request.getWorkDate().isBefore(LocalDate.now(HOSPITAL_ZONE))) {
-            throw new BadRequestException("Work date cannot be in the past.");
-        }
+        validateDoctorRegistrationDate(request.getWorkDate());
 
         ClinicRoom room = clinicRoomRepository.findById(request.getRoomId().trim())
                 .filter(ClinicRoom::isActive)
@@ -229,6 +227,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             String submissionId,
             SubmitWorkScheduleRequest request) {
         requireRole(doctorId, UserRole.DOCTOR, "Only doctors can modify pending work schedules.");
+        validateDoctorRegistrationDate(request.getWorkDate());
         List<DoctorWorkSlot> current = doctorWorkSlotRepository
                 .findAllBySubmissionIdAndDoctorIdOrderBySlotIdAsc(submissionId, doctorId);
         if (current.isEmpty()) {
@@ -437,5 +436,12 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
 
     private String trimToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private void validateDoctorRegistrationDate(LocalDate workDate) {
+        LocalDate earliestAllowedDate = LocalDate.now(HOSPITAL_ZONE).plusDays(1);
+        if (workDate.isBefore(earliestAllowedDate)) {
+            throw new BadRequestException("Doctors must register work schedules at least one day in advance.");
+        }
     }
 }

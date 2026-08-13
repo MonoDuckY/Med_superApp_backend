@@ -32,6 +32,10 @@ public interface DoctorWorkSlotRepository extends MongoRepository<DoctorWorkSlot
 
     List<DoctorWorkSlot> findAllByStatusOrderBySubmittedAtDesc(DoctorWorkSlotStatus status);
 
+    List<DoctorWorkSlot> findAllByStatusAndWorkDateLessThanEqual(
+            DoctorWorkSlotStatus status,
+            LocalDate workDate);
+
     List<DoctorWorkSlot> findAllByOrderBySubmittedAtDesc();
 
     List<DoctorWorkSlot> findAllByWorkDateAndSlotIdInAndConflictActiveTrue(
