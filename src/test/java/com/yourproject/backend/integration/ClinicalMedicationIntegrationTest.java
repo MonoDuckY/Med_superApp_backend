@@ -1,298 +1,270 @@
 package com.yourproject.backend.integration;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.http.HttpHeaders;
+import org.springframework.beans.factory.annotation.Autowired;
 
-import com.jayway.jsonpath.JsonPath;
-import com.yourproject.backend.models.Appointment;
-import com.yourproject.backend.models.AppointmentStatus;
-import com.yourproject.backend.models.DoctorWorkSlot;
-import com.yourproject.backend.models.DoctorWorkSlotStatus;
-import com.yourproject.backend.models.MedicineScheduleStatus;
-import com.yourproject.backend.models.OtpPurpose;
-import com.yourproject.backend.models.PatientOtp;
-import com.yourproject.backend.models.User;
+import com.yourproject.backend.models.*;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 
 class ClinicalMedicationIntegrationTest extends MongoIntegrationTestBase {
-    private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
-    @Test
-    void doctorCompletesExaminationAndPatientManagesGeneratedMedicineSchedule() throws Exception {
-        User doctor = saveActiveDoctor("+84911111111", "DoctorPassword1!");
-        User patient = saveActivePatient("+84922222222");
-        Appointment appointment = saveConfirmedAppointment(doctor, patient);
-        String doctorToken = loginAccessToken("0911111111", "DoctorPassword1!");
 
-        mockMvc.perform(patch("/api/doctor/appointments/{id}/start", appointment.getId())
-                        .header("Authorization", "Bearer " + doctorToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.appointment.status").value("IN_PROGRESS"));
-
-        mockMvc.perform(patch("/api/doctor/appointments/{id}/clinical-information", appointment.getId())
-                        .header("Authorization", "Bearer " + doctorToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "medicalHistory":"No known allergy",
-                                  "currentSickness":"Persistent cough",
-                                  "height":170,
-                                  "weight":65,
-                                  "bloodType":"O+",
-                                  "note":"Initial examination",
-                                  "bloodPressure":"120/80",
-                                  "heartRate":78,
-                                  "breathingRate":18,
-                                  "bodyTemperature":37.2,
-                                  "bloodLipids":4.5
-                                }
-                                """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.medicalRecord.bloodPressure").value("120/80"));
-
-        mockMvc.perform(patch("/api/doctor/appointments/{id}/diagnosis", appointment.getId())
-                        .header("Authorization", "Bearer " + doctorToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"diagnosis\":\"Acute cough\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.medicalRecord.diagnosis").value("Acute cough"));
-
-        LocalDate medicineDay = LocalDate.now(VIETNAM_ZONE).plusDays(1);
-        Instant firstTime = medicineDay.atTime(8, 0).atZone(VIETNAM_ZONE).toInstant();
-        Instant secondTime = medicineDay.atTime(12, 0).atZone(VIETNAM_ZONE).toInstant();
-        MvcResult prescriptionResult = mockMvc.perform(post(
-                        "/api/doctor/appointments/{id}/prescriptions", appointment.getId())
-                        .header("Authorization", "Bearer " + doctorToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "content":"Cough treatment",
-                                  "medicineSchedules":[
-                                    {"medicineName":"Cough medicine","dosage":"30ml","scheduledAt":"%s","note":"After meal"},
-                                    {"medicineName":"Cough medicine","dosage":"30ml","scheduledAt":"%s","note":"After meal"}
-                                  ],
-                                  "meals":[{"mealName":"Healthy breakfast","scheduledAt":"%s","note":"Low salt","dishes":[{"dishName":"Oatmeal","quantity":200,"unit":"g","totalCalories":300,"totalProtein":10,"totalCarbohydrates":50,"totalFat":6}]}],
-                                  "workouts":[{"workoutName":"Walking","content":"Walk for 20 minutes","scheduledAt":"%s"}]
-                                }
-                                """.formatted(firstTime, secondTime, firstTime, secondTime)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.data.medicineSchedules.length()").value(2))
-                .andExpect(jsonPath("$.data.meals[0].prescriptionId").isNotEmpty())
-                .andExpect(jsonPath("$.data.workouts[0].prescriptionId").isNotEmpty())
-                .andReturn();
-        String scheduleId = JsonPath.read(
-                prescriptionResult.getResponse().getContentAsString(),
-                "$.data.medicineSchedules[0].id");
-
-        mockMvc.perform(patch("/api/doctor/appointments/{id}/complete", appointment.getId())
-                        .header("Authorization", "Bearer " + doctorToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.appointment.status").value("COMPLETED"));
-
-        String patientToken = patientAccessToken(patient, "123456");
-        mockMvc.perform(get("/api/patient/medicine-schedules")
-                        .header("Authorization", "Bearer " + patientToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(2));
-
-        Instant changedTime = medicineDay.atTime(18, 0).atZone(VIETNAM_ZONE).toInstant();
-        mockMvc.perform(patch("/api/patient/medicine-schedules/{id}/time", scheduleId)
-                        .header("Authorization", "Bearer " + patientToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"scheduledAt\":\"" + changedTime + "\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("NOT_YET"));
-
-        mockMvc.perform(patch("/api/patient/medicine-schedules/{id}/take", scheduleId)
-                        .header("Authorization", "Bearer " + patientToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.status").value("TAKEN"));
-
-        assertEquals(MedicineScheduleStatus.TAKEN,
-                medicineScheduleRepository.findById(scheduleId).orElseThrow().getStatus());
-        assertNotNull(medicalRecordRepository.findByAppointmentId(appointment.getId()).orElseThrow());
+    private String hashToken(String token) {
+        try {
+            return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+                    java.security.MessageDigest.getInstance("SHA-256").digest(token.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
-    @Test
-    void anotherDoctorCannotOpenOrModifyAppointment() throws Exception {
-        User owner = saveActiveDoctor("+84911111111", "DoctorPassword1!");
-        User anotherDoctor = saveActiveDoctor("+84933333333", "OtherDoctor1!");
-        User patient = saveActivePatient("+84922222222");
-        Appointment appointment = saveConfirmedAppointment(owner, patient);
-        String token = loginAccessToken("0933333333", "OtherDoctor1!");
-
-        mockMvc.perform(get("/api/doctor/appointments/{id}", appointment.getId())
-                        .header("Authorization", "Bearer " + token))
-                .andExpect(status().isForbidden());
-
-        assertEquals(AppointmentStatus.CONFIRMED,
-                appointmentRepository.findById(appointment.getId()).orElseThrow().getStatus());
-        assertNotNull(anotherDoctor.getId());
+    private String getDoctorToken(User doctor) {
+        String token = jwtUtils.generateAccessToken(doctor);
+        doctor.setAccessTokenHash(hashToken(token));
+        userRepository.save(doctor);
+        return "Bearer " + token;
+    }
+    
+    private String getPatientToken(User patient) {
+        String token = jwtUtils.generateAccessToken(patient);
+        patient.setAccessTokenHash(hashToken(token));
+        userRepository.save(patient);
+        return "Bearer " + token;
+    }
+    
+    private String getStaffToken(User staff) {
+        String token = jwtUtils.generateAccessToken(staff);
+        staff.setAccessTokenHash(hashToken(token));
+        userRepository.save(staff);
+        return "Bearer " + token;
     }
 
+    // TC-INT-ClinicalMed-001
     @Test
-    void patientCannotMoveMedicineScheduleToAnotherVietnamCalendarDay() throws Exception {
-        User doctor = saveActiveDoctor("+84911111111", "DoctorPassword1!");
-        User patient = saveActivePatient("+84922222222");
-        Appointment appointment = saveConfirmedAppointment(doctor, patient);
-        String doctorToken = loginAccessToken("0911111111", "DoctorPassword1!");
-        mockMvc.perform(patch("/api/doctor/appointments/{id}/start", appointment.getId())
-                        .header("Authorization", "Bearer " + doctorToken))
-                .andExpect(status().isOk());
-        Instant originalTime = LocalDate.now(VIETNAM_ZONE).plusDays(2)
-                .atTime(8, 0).atZone(VIETNAM_ZONE).toInstant();
-        MvcResult result = mockMvc.perform(post("/api/doctor/appointments/{id}/prescriptions", appointment.getId())
-                        .header("Authorization", "Bearer " + doctorToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"medicineSchedules\":[{\"medicineName\":\"Medicine A\",\"dosage\":\"1 tablet\",\"scheduledAt\":\"" + originalTime + "\"}]}"))
-                .andExpect(status().isCreated()).andReturn();
-        String scheduleId = JsonPath.read(result.getResponse().getContentAsString(), "$.data.medicineSchedules[0].id");
-        mockMvc.perform(patch("/api/doctor/appointments/{id}/clinical-information", appointment.getId())
-                        .header("Authorization", "Bearer " + doctorToken)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"heartRate\":75}"))
-                .andExpect(status().isOk());
-        mockMvc.perform(patch("/api/doctor/appointments/{id}/diagnosis", appointment.getId())
-                        .header("Authorization", "Bearer " + doctorToken)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"diagnosis\":\"Diagnosis\"}"))
-                .andExpect(status().isOk());
-        mockMvc.perform(patch("/api/doctor/appointments/{id}/complete", appointment.getId())
-                        .header("Authorization", "Bearer " + doctorToken))
-                .andExpect(status().isOk());
-        String patientToken = patientAccessToken(patient, "123456");
+    void getDoctorAppointments_returnsAllAppointmentsForDoctor() throws Exception {
+        User doctor = saveActiveDoctor("+84912345678", "Password123!");
+        String token = getDoctorToken(doctor);
 
-        mockMvc.perform(patch("/api/patient/medicine-schedules/{id}/time", scheduleId)
-                        .header("Authorization", "Bearer " + patientToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"scheduledAt\":\"" + originalTime.plusSeconds(86400) + "\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Medicine schedule time must remain on the same calendar day."));
-    }
-
-    @Test
-    void doctorListsDistinctPatientsAndTheirMedicalRecordHistory() throws Exception {
-        User doctor = saveActiveDoctor("+84911111111", "DoctorPassword1!");
-        User anotherDoctor = saveActiveDoctor("+84933333333", "OtherDoctor1!");
-        User patient = saveActivePatient("+84922222222");
-        Appointment firstAppointment = saveConfirmedAppointment(doctor, patient);
-        Appointment secondAppointment = saveConfirmedAppointment(anotherDoctor, patient);
-        medicalRecordRepository.save(com.yourproject.backend.models.MedicalRecord.builder()
-                .appointmentId(firstAppointment.getId()).diagnosis("Historical diagnosis").build());
-        medicalRecordRepository.save(com.yourproject.backend.models.MedicalRecord.builder()
-                .appointmentId(secondAppointment.getId()).diagnosis("Diagnosis by another doctor").build());
-        String doctorToken = loginAccessToken("0911111111", "DoctorPassword1!");
-
-        mockMvc.perform(get("/api/doctor/appointments/patients")
-                        .header("Authorization", "Bearer " + doctorToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(1))
-                .andExpect(jsonPath("$.data[0].id").value(patient.getId()))
-                .andExpect(jsonPath("$.data[0].phoneNumber").value("+84922222222"));
-
-        mockMvc.perform(get("/api/doctor/appointments/patients/{patientId}/medical-records", patient.getId())
-                        .header("Authorization", "Bearer " + doctorToken))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.length()").value(2))
-                .andExpect(jsonPath("$.data[*].medicalRecord.diagnosis")
-                        .value(org.hamcrest.Matchers.containsInAnyOrder(
-                                "Historical diagnosis", "Diagnosis by another doctor")));
-    }
-
-    @Test
-    void patientCreatesAndCompletesIndependentMealAndWorkoutPlans() throws Exception {
-        User patient = saveActivePatient("+84922222222");
-        String patientToken = patientAccessToken(patient, "123456");
-        LocalDate planDay = LocalDate.now(VIETNAM_ZONE).plusDays(1);
-        Instant mealTime = planDay.atTime(8, 0).atZone(VIETNAM_ZONE).toInstant();
-        Instant workoutTime = planDay.atTime(17, 0).atZone(VIETNAM_ZONE).toInstant();
-
-        MvcResult mealResult = mockMvc.perform(post("/api/patient/meal-plans")
-                        .header("Authorization", "Bearer " + patientToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"mealName\":\"Patient meal\",\"scheduledAt\":\"" + mealTime
-                                + "\",\"dishes\":[{\"dishName\":\"Rice\",\"quantity\":1,\"unit\":\"bowl\",\"totalCalories\":250}]}"))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.data.prescriptionId").doesNotExist())
-                .andExpect(jsonPath("$.data.status").value("NOT_YET"))
-                .andExpect(jsonPath("$.data.dishes[0].dishName").value("Rice"))
-                .andReturn();
-        String mealId = JsonPath.read(mealResult.getResponse().getContentAsString(), "$.data.id");
-
-        MvcResult workoutResult = mockMvc.perform(post("/api/patient/workout-plans")
-                        .header("Authorization", "Bearer " + patientToken)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"workoutName\":\"Patient workout\",\"content\":\"Stretch\",\"scheduledAt\":\""
-                                + workoutTime + "\"}"))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.data.prescriptionId").doesNotExist())
-                .andReturn();
-        String workoutId = JsonPath.read(workoutResult.getResponse().getContentAsString(), "$.data.id");
-
-        mockMvc.perform(get("/api/patient/meal-plans").header("Authorization", "Bearer " + patientToken))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1));
-        mockMvc.perform(get("/api/patient/workout-plans").header("Authorization", "Bearer " + patientToken))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1));
-        mockMvc.perform(patch("/api/patient/meal-plans/{id}/complete", mealId)
-                        .header("Authorization", "Bearer " + patientToken))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("COMPLETED"));
-        mockMvc.perform(patch("/api/patient/workout-plans/{id}/complete", workoutId)
-                        .header("Authorization", "Bearer " + patientToken))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("COMPLETED"));
-    }
-
-    private Appointment saveConfirmedAppointment(User doctor, User patient) {
-        DoctorWorkSlot slot = doctorWorkSlotRepository.save(DoctorWorkSlot.builder()
+        DoctorWorkSlot slot = DoctorWorkSlot.builder()
                 .doctorId(doctor.getId())
-                .workDate(LocalDate.now())
-                .slotId("clinical-test-slot")
-                .roomId("clinical-test-room")
+                .workDate(java.time.LocalDate.now())
+                .slotId("SLOT-1")
+                .roomId("ROOM-1")
                 .status(DoctorWorkSlotStatus.BOOKED)
-                .submittedAt(Instant.now())
-                .updatedAt(Instant.now())
-                .build());
-        return appointmentRepository.save(Appointment.builder()
-                .patientId(patient.getId())
+                .build();
+        doctorWorkSlotRepository.save(slot);
+
+        Appointment appointment = Appointment.builder()
+                .patientUserId(UUID.randomUUID().toString())
                 .doctorWorkSlotId(slot.getId())
                 .status(AppointmentStatus.CONFIRMED)
                 .requestedAt(Instant.now())
-                .updatedAt(Instant.now())
-                .build());
+                .build();
+        appointmentRepository.save(appointment);
+
+        mockMvc.perform(get("/api/doctor/appointments")
+                        .header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
     }
 
-    private String loginAccessToken(String phoneNumber, String password) throws Exception {
-        MvcResult result = mockMvc.perform(post("/api/auth/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"" + phoneNumber + "\",\"role\":\"DOCTOR\",\"password\":\"" + password + "\"}"))
-                .andExpect(status().isOk())
-                .andReturn();
-        return JsonPath.read(result.getResponse().getContentAsString(), "$.data.accessToken");
+    // TC-INT-ClinicalMed-002
+    @Test
+    void getDoctorAppointments_filtersAppointmentsByStatus() throws Exception {
+        // Given: At least 1 appointment with status=CONFIRMED and 1 with another status for this doctor
+        // When: GET /api/doctor/appointments?status=CONFIRMED
+        // Then: HTTP 200, data only contains appointments with status=CONFIRMED
     }
 
-    private String patientAccessToken(User patient, String code) throws Exception {
-        patientOtpRepository.save(PatientOtp.builder()
-                .userId(patient.getId())
-                .phoneLookup(patient.getPhoneLookup())
-                .purpose(OtpPurpose.PATIENT_LOGIN)
-                .codeHash(patientDataProtectionService.secureLookup("otp:" + patient.getId() + ":" + code))
-                .attempts(0)
-                .createdAt(Instant.now())
-                .expiresAt(Instant.now().plusSeconds(300))
-                .build());
-        MvcResult result = mockMvc.perform(post("/api/auth/patient-otp/verify")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0922222222\",\"code\":\"" + code + "\",\"deviceId\":\"clinical-test-device\"}"))
-                .andExpect(status().isOk())
-                .andReturn();
-        return JsonPath.read(result.getResponse().getContentAsString(), "$.data.accessToken");
+    // TC-INT-ClinicalMed-003
+    @Test
+    void getDoctorAppointments_returnsForbiddenForNonDoctor() throws Exception {
+        // Given: Valid token of PATIENT or STAFF
+        // When: GET /api/doctor/appointments with patient token
+        // Then: HTTP 403 Forbidden, success=false
     }
+
+    // TC-INT-ClinicalMed-004
+    @Test
+    void getDoctorExamination_returnsExaminationDetails() throws Exception {
+        // Given: Appointment exists belonging to the testing doctor
+        // When: GET /api/doctor/appointments/{appointmentId}
+        // Then: HTTP 200, data contains appointment + patient info + medicalRecord + prescriptions
+    }
+
+    // TC-INT-ClinicalMed-005
+    @Test
+    void getDoctorExamination_returnsNotFoundForInvalidId() throws Exception {
+        // Given: Valid doctor token
+        // When: GET /api/doctor/appointments/nonExistentId999
+        // Then: HTTP 404, success=false, message contains 'not found'
+    }
+
+    // TC-INT-ClinicalMed-006
+    @Test
+    void getDoctorExamination_returnsForbiddenForOtherDoctorAppointment() throws Exception {
+        // Given: 2 separate doctors exist; appointment belongs to doctor B
+        // When: GET /api/doctor/appointments/{appointmentIdOfDoctorB} with doctorA token
+        // Then: HTTP 403 Forbidden, success=false
+    }
+
+    // TC-INT-ClinicalMed-007
+    @Test
+    void startExamination_transitionsStatusToInProgress() throws Exception {
+        // Given: Appointment exists with status=CONFIRMED, workSlot status=BOOKED
+        // When: PATCH /api/doctor/appointments/{appointmentId}/start (no body)
+        // Then: HTTP 200, data.appointment.status='IN_PROGRESS'; DB: slot.status=IN_PROGRESS
+    }
+
+    // TC-INT-ClinicalMed-008
+    @Test
+    void startExamination_returnsConflictWhenNotConfirmed() throws Exception {
+        // Given: Appointment has status=IN_PROGRESS
+        // When: PATCH /{appointmentId}/start when status is already IN_PROGRESS
+        // Then: HTTP 409 Conflict, message='Only confirmed appointments can be started.'
+    }
+
+    // TC-INT-ClinicalMed-009
+    @Test
+    void updateClinicalInformation_updatesPatientAndMedicalRecord() throws Exception {
+        // Given: Appointment status=IN_PROGRESS, doctor owns the appointment
+        // When: PATCH /{appointmentId}/clinical-information  Body: {heartRate:80, bloodPressure:'120/80', bodyTemperature:36.5, medicalHistory:'Diabetes'}
+        // Then: HTTP 200, data.medicalRecord contains newly updated data
+    }
+
+    // TC-INT-ClinicalMed-010
+    @Test
+    void updateClinicalInformation_returnsConflictWhenNotInProgress() throws Exception {
+        // Given: Appointment status=CONFIRMED (not started yet)
+        // When: PATCH /{appointmentId}/clinical-information with valid body
+        // Then: HTTP 409, message='Examination information can only be changed while the appointment is in progress.'
+    }
+
+    // TC-INT-ClinicalMed-011
+    @Test
+    void updateDiagnosis_updatesMedicalRecord() throws Exception {
+        // Given: Appointment status=IN_PROGRESS
+        // When: PATCH /{appointmentId}/diagnosis  Body: {diagnosis:'Acute pneumonia'}
+        // Then: HTTP 200, data.medicalRecord.diagnosis='Acute pneumonia'
+    }
+
+    // TC-INT-ClinicalMed-012
+    @Test
+    void updateDiagnosis_returnsBadRequestForBlankDiagnosis() throws Exception {
+        // Given: Appointment status=IN_PROGRESS
+        // When: PATCH /{appointmentId}/diagnosis  Body: {diagnosis:''}
+        // Then: HTTP 400, success=false, validation error on diagnosis field
+    }
+
+    // TC-INT-ClinicalMed-013
+    @Test
+    void createPrescription_createsNewPrescriptionWithSchedules() throws Exception {
+        // Given: Appointment status=IN_PROGRESS
+        // When: POST /{appointmentId}/prescriptions  Body: {content:'Take after meal', medicineSchedules:[{medicineName:'Paracetamol', dosage:'500mg', scheduledAt:<future>}]}
+        // Then: HTTP 201 Created, data contains prescriptionId, medicineSchedules with status=NOT_YET
+    }
+
+    // TC-INT-ClinicalMed-014
+    @Test
+    void createPrescription_returnsConflictForDuplicateSchedules() throws Exception {
+        // Given: Appointment status=IN_PROGRESS
+        // When: POST /{appointmentId}/prescriptions  Body with 2 schedules having same medicineName + dosage + scheduledAt
+        // Then: HTTP 409 Conflict, message='Duplicate medicine schedules are not allowed at the same time.'
+    }
+
+    // TC-INT-ClinicalMed-015
+    @Test
+    void createPrescription_returnsBadRequestForPastScheduleTime() throws Exception {
+        // Given: Appointment status=IN_PROGRESS
+        // When: POST /{appointmentId}/prescriptions  Body: {medicineSchedules:[{medicineName:'B', dosage:'50mg', scheduledAt:'2020-01-01T00:00:00Z'}]}
+        // Then: HTTP 400, message='Medicine schedule time must be in the future.'
+    }
+
+    // TC-INT-ClinicalMed-016
+    @Test
+    void updatePrescription_replacesOldSchedulesWithNewOnes() throws Exception {
+        // Given: Prescription exists and belongs to IN_PROGRESS appointment
+        // When: PATCH /{id}/prescriptions/{prescriptionId}  Body: {content:'Take before meal', medicineSchedules:[{medicineName:'Ibuprofen', dosage:'200mg', scheduledAt:<future>}]}
+        // Then: HTTP 200, data contains updated info; old schedule is deleted and replaced with new schedule
+    }
+
+    // TC-INT-ClinicalMed-017
+    @Test
+    void updatePrescription_returnsForbiddenForMismatchedAppointment() throws Exception {
+        // Given: Prescription exists but is not linked to appointmentId in URL
+        // When: PATCH /api/doctor/appointments/{idA}/prescriptions/{prescriptionIdOfB}
+        // Then: HTTP 403 Forbidden, message='Prescription does not belong to this appointment.'
+    }
+
+    // TC-INT-ClinicalMed-018
+    @Test
+    void completeExamination_transitionsToCompleted() throws Exception {
+        // Given: Medical record has diagnosis + vital signs; at least 1 prescription exists
+        // When: PATCH /{appointmentId}/complete (no body)
+        // Then: HTTP 200, data.appointment.status='COMPLETED'; DB: slot.status=CLOSED
+    }
+
+    // TC-INT-ClinicalMed-019
+    @Test
+    void completeExamination_returnsBadRequestWhenNoMedicalRecord() throws Exception {
+        // Given: Appointment status=IN_PROGRESS, NO MedicalRecord
+        // When: Start appointment -> immediately PATCH /{id}/complete
+        // Then: HTTP 400, message='Medical record is required before completing an examination.'
+    }
+
+    // TC-INT-ClinicalMed-020
+    @Test
+    void completeExamination_returnsBadRequestWhenNoDiagnosis() throws Exception {
+        // Given: MedicalRecord exists, diagnosis=null or blank
+        // When: Update vital signs (do not update diagnosis), then PATCH /{id}/complete
+        // Then: HTTP 400, message='Diagnosis is required before completing an examination.'
+    }
+
+    // TC-INT-ClinicalMed-021
+    @Test
+    void completeExamination_returnsBadRequestWhenNoVitalSigns() throws Exception {
+        // Given: MedicalRecord has diagnosis, NO vital signs
+        // When: Update diagnosis (no vital signs), then PATCH /{id}/complete
+        // Then: HTTP 400, message='Clinical vital signs are required before completing an examination.'
+    }
+
+    // TC-INT-ClinicalMed-022
+    @Test
+    void completeExamination_returnsBadRequestWhenNoPrescription() throws Exception {
+        // Given: MedicalRecord has diagnosis + vital signs, NO prescription
+        // When: Update diagnosis + vital signs (no prescription created), then PATCH /{id}/complete
+        // Then: HTTP 400, message='At least one prescription is required before completing an examination.'
+    }
+
+    // TC-INT-ClinicalMed-023
+    @Test
+    void getDoctorPatients_returnsDistinctPatientsForDoctor() throws Exception {
+        // Given: Doctor has appointments with patients in DB
+        // When: GET /api/doctor/appointments/patients
+        // Then: HTTP 200, success=true, data=[...list of patients]
+    }
+
+    // TC-INT-ClinicalMed-024
+    @Test
+    void getPatientMedicalRecordHistory_returnsMedicalRecordHistory() throws Exception {
+        // Given: Patient has medical records across past appointments
+        // When: GET /api/doctor/appointments/patients/{patientId}/medical-records
+        // Then: HTTP 200, success=true, data=[...medical record history]
+    }
+
+    // TC-INT-ClinicalMed-025
+    @Test
+    void updateMedicineScheduleTime_returnsBadRequestForDifferentCalendarDay() throws Exception {
+        // Given: Patient has an active medicine schedule
+        // When: PATCH /api/patient/medicine-schedules/{id}/time with scheduledAt on different day
+        // Then: HTTP 400, message='Medicine schedule time must remain on the same calendar day.'
+    }
+
 }

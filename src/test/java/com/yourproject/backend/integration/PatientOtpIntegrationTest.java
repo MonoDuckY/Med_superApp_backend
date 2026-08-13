@@ -187,13 +187,13 @@ class PatientOtpIntegrationTest extends MongoIntegrationTestBase {
 
         mockMvc.perform(post("/api/auth/patient-otp/request").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"phoneNumber\":\"0912345678\",\"deviceId\":\"device-a\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Only patient accounts can use SMS OTP."));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Invalid phone number or password."));
 
         mockMvc.perform(post("/api/auth/patient-otp/verify").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"phoneNumber\":\"0912345678\",\"code\":\"123456\",\"deviceId\":\"device-a\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Only patient accounts can use SMS OTP."));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Invalid phone number or password."));
 
         assertEquals(0, patientOtpRepository.count());
         verifyNoInteractions(fcmGatewayService);

@@ -190,6 +190,7 @@ public abstract class MongoIntegrationTestBase {
     protected User saveActivePatient(String normalizedPhone, String patientId) {
         Instant now = Instant.now();
         User patient = User.builder()
+                .patientId(patientId)
                 .fullName("Patient Integration")
                 .roleId(UserRole.PATIENT.getId())
                 .status(AccountStatus.ACTIVE)

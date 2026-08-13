@@ -1,4 +1,4 @@
-package com.yourproject.backend.integration;
+package com.yourproject.backend.system;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -16,6 +16,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MvcResult;
 
 import com.jayway.jsonpath.JsonPath;
+import com.yourproject.backend.integration.MongoIntegrationTestBase;
 import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.User;
 import com.yourproject.backend.models.UserRole;

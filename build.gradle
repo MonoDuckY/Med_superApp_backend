@@ -33,6 +33,10 @@ dependencies {
 	// Validation
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 
+	// AWS S3 SDK
+	implementation platform('software.amazon.awssdk:bom:2.25.10')
+	implementation 'software.amazon.awssdk:s3'
+
 	// Firebase Cloud Messaging for the internal Android SMS gateway
 	implementation 'com.google.firebase:firebase-admin:9.10.0'
 
