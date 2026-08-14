@@ -20,7 +20,6 @@ import org.springframework.web.bind.annotation.PatchMapping;
 
 import com.yourproject.backend.dtos.requests.SubmitWorkScheduleRequest;
 import com.yourproject.backend.dtos.responses.ApiResponse;
-import com.yourproject.backend.dtos.responses.ClinicRoomResponse;
 import com.yourproject.backend.dtos.responses.SchedulingOptionsResponse;
 import com.yourproject.backend.dtos.responses.WorkScheduleSubmissionResponse;
 import com.yourproject.backend.dtos.responses.WorkSlotResponse;
@@ -44,7 +43,6 @@ public class DoctorWorkScheduleController {
     public ResponseEntity<ApiResponse<SchedulingOptionsResponse>> getOptions() {
         SchedulingOptionsResponse response = SchedulingOptionsResponse.builder()
                 .slots(schedulingCatalogService.getActiveWorkSlots().stream().map(WorkSlotResponse::from).toList())
-                .rooms(schedulingCatalogService.getActiveClinicRooms().stream().map(ClinicRoomResponse::from).toList())
                 .build();
         return ResponseEntity.ok(ApiResponse.success("Scheduling options retrieved successfully.", response));
     }

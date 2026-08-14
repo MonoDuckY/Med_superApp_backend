@@ -9,5 +9,4 @@ import lombok.Data;
 @Builder
 public class SchedulingOptionsResponse {
     private List<WorkSlotResponse> slots;
-    private List<ClinicRoomResponse> rooms;
 }

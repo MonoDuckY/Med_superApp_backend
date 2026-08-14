@@ -13,7 +13,7 @@ Các collection dưới đây mặc định nằm trong database nghiệp vụ `
 | `sms_gateway_jobs` | Trạng thái lệnh gửi SMS |
 | `work_slots` | Danh mục slot bắt đầu/kết thúc |
 | `clinic_rooms` | Danh mục phòng khám |
-| `doctor_work_slots` | Lịch làm việc theo doctor/slot/room/date và submission |
+| `doctor_work_slots` | Lịch theo doctor/slot/date/submission; `roomId` null khi pending và được Staff gán khi approve |
 | `appointments` | Patient booking tham chiếu DoctorWorkSlot |
 | `medical_records` | Hồ sơ lâm sàng và diagnosis, unique theo appointmentId |
 | `prescriptions` | Đơn thuốc theo medicalRecordId |

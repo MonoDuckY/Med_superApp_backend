@@ -680,7 +680,7 @@ Backend tự tạo 16 work slot, mỗi slot 30 phút:
 
 | Method | Endpoint | Mô tả |
 |---|---|---|
-| `GET` | `/api/doctor/work-schedules/options` | Lấy 16 slot chuẩn và danh sách phòng đang active. |
+| `GET` | `/api/doctor/work-schedules/options` | Lấy danh sách slot để Doctor chọn ca. |
 | `GET` | `/api/doctor/work-schedules?from=YYYY-MM-DD&to=YYYY-MM-DD` | Xem lịch Doctor hiện tại. |
 | `POST` | `/api/doctor/work-schedules` | Đăng ký ca làm việc và gửi Staff duyệt. |
 | `DELETE` | `/api/doctor/work-schedules/{submissionId}` | Hủy submission còn `PENDING_APPROVAL`. |
@@ -691,7 +691,6 @@ Ví dụ đăng ký ca sáng:
 {
   "workDate": "2026-08-10",
   "session": "MORNING",
-  "roomId": "<clinicRoomId>",
   "note": "Morning shift"
 }
 ```
@@ -714,7 +713,7 @@ Password mới phải đạt password policy. Backend chỉ lưu BCrypt hash và
 | `GET` | `/api/staff/scheduling/clinic-rooms` | Lấy phòng đang active. |
 | `GET` | `/api/staff/scheduling/work-schedules/pending` | Lấy submission Doctor đang chờ duyệt. |
 | `GET` | `/api/staff/scheduling/work-schedules?status=APPROVED` | Lấy lịch làm việc theo trạng thái; bỏ `status` để lấy tất cả. |
-| `PATCH` | `/api/staff/scheduling/work-schedules/{submissionId}/decision` | `APPROVE` hoặc `REJECT` lịch Doctor. |
+| `PATCH` | `/api/staff/scheduling/work-schedules/{submissionId}/decision` | `APPROVE` kèm `roomId`, hoặc `REJECT` kèm lý do. |
 | `GET` | `/api/staff/scheduling/appointments/pending` | Lấy Appointment Patient đang chờ duyệt lần hai. |
 | `GET` | `/api/staff/scheduling/appointments?status=CONFIRMED` | Lấy appointment theo trạng thái; bỏ `status` để lấy tất cả. |
 | `PATCH` | `/api/staff/scheduling/appointments/{appointmentId}/cancel` | Hủy appointment đã xác nhận và giải phóng slot; yêu cầu `cancellationReason`. |
@@ -727,6 +726,15 @@ Khi reject phải gửi `rejectionReason`:
 {
   "decision": "REJECT",
   "rejectionReason": "Clinic room is unavailable"
+}
+```
+
+Khi approve, Staff bắt buộc chọn phòng đang active:
+
+```json
+{
+  "decision": "APPROVE",
+  "roomId": "<clinicRoomId>"
 }
 ```
 

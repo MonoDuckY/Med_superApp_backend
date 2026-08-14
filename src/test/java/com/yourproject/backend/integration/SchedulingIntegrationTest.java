@@ -38,9 +38,7 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
     @Test
     void doctorMustSubmitWorkScheduleAtLeastOneDayInAdvance() throws Exception {
         User doctor = saveActiveDoctor("+84911111111", "Password123!");
-        ClinicRoom room = saveRoom("ROOM-101", "Clinic Room 101");
-
-        submitSchedule(doctor, LocalDate.now(HOSPITAL_ZONE), "MORNING", room.getId(), 400);
+        submitSchedule(doctor, LocalDate.now(HOSPITAL_ZONE), "MORNING", 400);
 
         assertEquals(0, doctorWorkSlotRepository.count());
     }
@@ -79,11 +77,12 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
         mockMvc.perform(post("/api/doctor/work-schedules")
                         .header("Authorization", bearer(doctor))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(scheduleRequest(workDate, "MORNING", room.getId())))
+                        .content(scheduleRequest(workDate, "MORNING")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.status").value("PENDING"))
-                .andExpect(jsonPath("$.data.slots.length()").value(8));
+                .andExpect(jsonPath("$.data.slots.length()").value(8))
+                .andExpect(jsonPath("$.data.slots[0].roomId").doesNotExist());
 
         List<DoctorWorkSlot> submittedSlots = doctorWorkSlotRepository.findAll();
         assertEquals(8, submittedSlots.size());
@@ -92,7 +91,7 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
         mockMvc.perform(patch("/api/staff/scheduling/work-schedules/{submissionId}/decision", submissionId)
                         .header("Authorization", bearer(staff))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"decision\":\"APPROVE\"}"))
+                        .content("{\"decision\":\"APPROVE\",\"roomId\":\"" + room.getId() + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.status").value("AVAILABLE"));
 
@@ -101,6 +100,7 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
                 .findFirst()
                 .orElseThrow();
         assertEquals(DoctorWorkSlotStatus.AVAILABLE, availableSlot.getStatus());
+        assertEquals(room.getId(), availableSlot.getRoomId());
 
         mockMvc.perform(get("/api/patient/appointments/available-slots")
                         .header("Authorization", bearer(patient))
@@ -139,18 +139,32 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
     }
 
     @Test
-    void pendingScheduleBlocksRoomAndDoctorConflicts() throws Exception {
+    void pendingSchedulesAllowDifferentDoctorsAndStaffAssignsAvailableRooms() throws Exception {
         User firstDoctor = saveActiveDoctor("+84911111111", "Password123!");
         User secondDoctor = saveActiveDoctor("+84922222222", "Password123!");
+        User staff = saveActiveStaff("+84933333333", "Password123!");
         ClinicRoom firstRoom = saveRoom("ROOM-101", "Clinic Room 101");
         ClinicRoom secondRoom = saveRoom("ROOM-102", "Clinic Room 102");
         LocalDate workDate = LocalDate.now(HOSPITAL_ZONE).plusDays(3);
 
-        submitSchedule(firstDoctor, workDate, "MORNING", firstRoom.getId(), 201);
-        submitSchedule(secondDoctor, workDate, "MORNING", firstRoom.getId(), 409);
-        submitSchedule(firstDoctor, workDate, "MORNING", secondRoom.getId(), 409);
+        submitSchedule(firstDoctor, workDate, "MORNING", 201);
+        String firstSubmissionId = doctorWorkSlotRepository.findAll().get(0).getSubmissionId();
+        submitSchedule(secondDoctor, workDate, "MORNING", 201);
+        submitSchedule(firstDoctor, workDate, "MORNING", 409);
 
-        assertEquals(8, doctorWorkSlotRepository.count());
+        List<String> submissionIds = doctorWorkSlotRepository.findAll().stream()
+                .map(DoctorWorkSlot::getSubmissionId)
+                .distinct()
+                .toList();
+        String secondSubmissionId = submissionIds.stream()
+                .filter(id -> !id.equals(firstSubmissionId))
+                .findFirst()
+                .orElseThrow();
+        approveSchedule(staff, firstSubmissionId, firstRoom.getId(), 200);
+        approveSchedule(staff, secondSubmissionId, firstRoom.getId(), 409);
+        approveSchedule(staff, secondSubmissionId, secondRoom.getId(), 200);
+
+        assertEquals(16, doctorWorkSlotRepository.count());
     }
 
     @Test
@@ -161,7 +175,7 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
         ClinicRoom room = saveRoom("ROOM-101", "Clinic Room 101");
         LocalDate workDate = LocalDate.now(HOSPITAL_ZONE).plusDays(4);
 
-        submitSchedule(firstDoctor, workDate, "AFTERNOON", room.getId(), 201);
+        submitSchedule(firstDoctor, workDate, "AFTERNOON", 201);
         String submissionId = doctorWorkSlotRepository.findAll().get(0).getSubmissionId();
 
         mockMvc.perform(patch("/api/staff/scheduling/work-schedules/{submissionId}/decision", submissionId)
@@ -172,7 +186,7 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
                 .andExpect(jsonPath("$.data.status").value("REJECTED"));
 
         assertTrue(doctorWorkSlotRepository.findAll().stream().noneMatch(DoctorWorkSlot::isConflictActive));
-        submitSchedule(secondDoctor, workDate, "AFTERNOON", room.getId(), 201);
+        submitSchedule(secondDoctor, workDate, "AFTERNOON", 201);
         assertEquals(16, doctorWorkSlotRepository.count());
     }
 
@@ -185,9 +199,9 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
         ClinicRoom room = saveRoom("ROOM-101", "Clinic Room 101");
         LocalDate workDate = LocalDate.now(HOSPITAL_ZONE).plusDays(5);
 
-        submitSchedule(doctor, workDate, "MORNING", room.getId(), 201);
+        submitSchedule(doctor, workDate, "MORNING", 201);
         String submissionId = doctorWorkSlotRepository.findAll().get(0).getSubmissionId();
-        approveSchedule(staff, submissionId);
+        approveSchedule(staff, submissionId, room.getId(), 200);
         List<DoctorWorkSlot> slots = doctorWorkSlotRepository.findAll().stream()
                 .sorted(java.util.Comparator.comparing(DoctorWorkSlot::getSlotId))
                 .toList();
@@ -232,30 +246,28 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
         return "Bearer " + token;
     }
 
-    private String scheduleRequest(LocalDate workDate, String session, String roomId) {
-        return "{\"workDate\":\"" + workDate + "\",\"session\":\"" + session
-                + "\",\"roomId\":\"" + roomId + "\"}";
+    private String scheduleRequest(LocalDate workDate, String session) {
+        return "{\"workDate\":\"" + workDate + "\",\"session\":\"" + session + "\"}";
     }
 
     private void submitSchedule(
             User doctor,
             LocalDate workDate,
             String session,
-            String roomId,
             int expectedStatus) throws Exception {
         mockMvc.perform(post("/api/doctor/work-schedules")
                         .header("Authorization", bearer(doctor))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(scheduleRequest(workDate, session, roomId)))
+                        .content(scheduleRequest(workDate, session)))
                 .andExpect(status().is(expectedStatus));
     }
 
-    private void approveSchedule(User staff, String submissionId) throws Exception {
+    private void approveSchedule(User staff, String submissionId, String roomId, int expectedStatus) throws Exception {
         mockMvc.perform(patch("/api/staff/scheduling/work-schedules/{submissionId}/decision", submissionId)
                         .header("Authorization", bearer(staff))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"decision\":\"APPROVE\"}"))
-                .andExpect(status().isOk());
+                        .content("{\"decision\":\"APPROVE\",\"roomId\":\"" + roomId + "\"}"))
+                .andExpect(status().is(expectedStatus));
     }
 
     private void book(User patient, String doctorWorkSlotId, int expectedStatus) throws Exception {
