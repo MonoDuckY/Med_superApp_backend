@@ -39,6 +39,7 @@
 - Sức khỏe tổng quát lâu dài: `users`.
 - Hồ sơ từng lần khám: `medical_records`, unique theo `appointmentId`.
 - MedicalRecord chứa `diagnosis`, `note`, `bloodPressure`, `heartRate`, `breathingRate`, `bodyTemperature`, `bloodLipids` và danh sách object key `medicalImages`.
+- `bloodPressure` chỉ nhận hai nhóm từ 1 đến 3 chữ số, phân cách bằng `/`. Backend chuẩn hóa mỗi nhóm thành 3 chữ số trước khi lưu, ví dụ `120/80` thành `120/080` và `12/8` thành `012/008`.
 - Mỗi Appointment chỉ có tối đa một Prescription; `prescriptions.medicalRecordId` là duy nhất.
 - Medicine schedule: `medicine_schedules.prescriptionId`.
 - Meal: `meals.userId`; `prescriptionId` bắt buộc khi Doctor tạo trong Prescription và `null` khi Patient tự ghi nhật ký.

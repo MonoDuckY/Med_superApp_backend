@@ -60,6 +60,7 @@ import com.yourproject.backend.services.ClinicalMedicationService;
 import com.yourproject.backend.services.MedicalImageService;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.services.UserService;
+import com.yourproject.backend.utils.BloodPressureUtils;
 
 import lombok.RequiredArgsConstructor;
 
@@ -159,7 +160,9 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
 
         MedicalRecord medicalRecord = getOrCreateMedicalRecord(appointmentId);
         setIfPresent(request.getNote(), medicalRecord::setNote);
-        setIfPresent(request.getBloodPressure(), medicalRecord::setBloodPressure);
+        if (request.getBloodPressure() != null) {
+            medicalRecord.setBloodPressure(BloodPressureUtils.normalize(request.getBloodPressure()));
+        }
         if (request.getHeartRate() != null) medicalRecord.setHeartRate(request.getHeartRate());
         if (request.getBreathingRate() != null) medicalRecord.setBreathingRate(request.getBreathingRate());
         if (request.getBodyTemperature() != null) medicalRecord.setBodyTemperature(request.getBodyTemperature());

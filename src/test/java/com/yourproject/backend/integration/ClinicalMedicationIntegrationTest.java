@@ -140,7 +140,7 @@ class ClinicalMedicationIntegrationTest extends MongoIntegrationTestBase {
                                 }
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.medicalRecord.bloodPressure").value("120/80"));
+                .andExpect(jsonPath("$.data.medicalRecord.bloodPressure").value("120/080"));
 
         mockMvc.perform(patch("/api/doctor/appointments/{id}/diagnosis", appointment.getId())
                         .header("Authorization", "Bearer " + doctorToken)
@@ -220,6 +220,25 @@ class ClinicalMedicationIntegrationTest extends MongoIntegrationTestBase {
         assertEquals(AppointmentStatus.CONFIRMED,
                 appointmentRepository.findById(appointment.getId()).orElseThrow().getStatus());
         assertNotNull(anotherDoctor.getId());
+    }
+
+    @Test
+    void doctorCannotStoreBloodPressureWithInvalidFormat() throws Exception {
+        User doctor = saveActiveDoctor("+84911111111", "DoctorPassword1!");
+        User patient = saveActivePatient("+84922222222");
+        Appointment appointment = saveConfirmedAppointment(doctor, patient);
+        String doctorToken = loginAccessToken("0911111111", "DoctorPassword1!");
+        mockMvc.perform(patch("/api/doctor/appointments/{id}/start", appointment.getId())
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(patch("/api/doctor/appointments/{id}/clinical-information", appointment.getId())
+                        .header("Authorization", "Bearer " + doctorToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bloodPressure\":\"120-80\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(
+                        "Blood pressure must use the format xxx/xxx with digits only, for example 120/80."));
     }
 
     @Test

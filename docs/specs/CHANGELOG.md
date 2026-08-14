@@ -1,5 +1,9 @@
 # Specification Changelog
 
+## 2026-08-15 - Blood pressure validation
+
+- Blood pressure accepts only `1-3 digits/1-3 digits` and is normalized to `xxx/xxx` before persistence.
+
 ## 2026-08-14 - Medical record images
 
 - Added private S3 medical-image upload and deletion for in-progress Doctor examinations.
