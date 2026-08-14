@@ -65,7 +65,7 @@ public class PatientCarePlanServiceImpl implements PatientCarePlanService {
             throw new ConflictException("The same meal already exists at the selected time.");
         }
         Meal meal = mealRepository.save(Meal.builder().userId(patientId).prescriptionId(null)
-                .mealName(name).scheduledAt(request.getScheduledAt()).status(PlanScheduleStatus.NOT_YET)
+                .mealName(name).scheduledAt(request.getScheduledAt()).status(PlanScheduleStatus.COMPLETED)
                 .note(trimToNull(request.getNote())).build());
         List<Dish> dishes = saveDishes(meal.getId(), request.getDishes());
         return MealResponse.from(meal, dishes);
@@ -109,7 +109,7 @@ public class PatientCarePlanServiceImpl implements PatientCarePlanService {
         }
         return WorkoutResponse.from(workoutRepository.save(Workout.builder().userId(patientId).prescriptionId(null)
                 .workoutName(name).content(trimToNull(request.getContent())).scheduledAt(request.getScheduledAt())
-                .status(PlanScheduleStatus.NOT_YET).note(trimToNull(request.getNote())).build()));
+                .status(PlanScheduleStatus.COMPLETED).note(trimToNull(request.getNote())).build()));
     }
 
     @Override
@@ -191,10 +191,13 @@ public class PatientCarePlanServiceImpl implements PatientCarePlanService {
     }
 
     private void validatePatientCreatedPlanTime(Instant time) {
-        validateFuture(time);
-        if (!time.atZone(VIETNAM_ZONE).toLocalDate()
-                .equals(Instant.now().atZone(VIETNAM_ZONE).toLocalDate())) {
-            throw new BadRequestException("Patient-created care plan time must be within the current Vietnam calendar day.");
+        if (time.isAfter(Instant.now())) {
+            throw new BadRequestException("Activity time cannot be in the future.");
+        }
+        java.time.LocalDate activityDate = time.atZone(VIETNAM_ZONE).toLocalDate();
+        java.time.LocalDate today = java.time.LocalDate.now(VIETNAM_ZONE);
+        if (activityDate.isAfter(today) || activityDate.isBefore(today.minusDays(2))) {
+            throw new BadRequestException("Patient-created activity must be for today or up to 2 previous days.");
         }
     }
 

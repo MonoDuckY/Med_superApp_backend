@@ -212,41 +212,34 @@ class ClinicalMedicationIntegrationTest extends MongoIntegrationTestBase {
     void patientCreatesAndCompletesIndependentMealAndWorkoutPlans() throws Exception {
         User patient = saveActivePatient("+84922222222");
         String patientToken = patientAccessToken(patient, "123456");
-        Instant mealTime = Instant.now().plusSeconds(30);
-        Instant workoutTime = Instant.now().plusSeconds(60);
+        Instant mealTime = Instant.now().minusSeconds(60);
+        Instant workoutTime = Instant.now().minusSeconds(30);
 
-        MvcResult mealResult = mockMvc.perform(post("/api/patient/meal-plans")
+        mockMvc.perform(post("/api/patient/meal-plans")
                         .header("Authorization", "Bearer " + patientToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"mealName\":\"Patient meal\",\"scheduledAt\":\"" + mealTime
                                 + "\",\"dishes\":[{\"dishName\":\"Rice\",\"quantity\":1,\"unit\":\"bowl\",\"totalCalories\":250}]}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.prescriptionId").doesNotExist())
-                .andExpect(jsonPath("$.data.status").value("NOT_YET"))
-                .andExpect(jsonPath("$.data.dishes[0].dishName").value("Rice"))
-                .andReturn();
-        String mealId = JsonPath.read(mealResult.getResponse().getContentAsString(), "$.data.id");
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"))
+                .andExpect(jsonPath("$.data.dishes[0].dishName").value("Rice"));
 
-        MvcResult workoutResult = mockMvc.perform(post("/api/patient/workout-plans")
+        mockMvc.perform(post("/api/patient/workout-plans")
                         .header("Authorization", "Bearer " + patientToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"workoutName\":\"Patient workout\",\"content\":\"Stretch\",\"scheduledAt\":\""
                                 + workoutTime + "\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.prescriptionId").doesNotExist())
-                .andReturn();
-        String workoutId = JsonPath.read(workoutResult.getResponse().getContentAsString(), "$.data.id");
+                .andExpect(jsonPath("$.data.status").value("COMPLETED"));
 
         mockMvc.perform(get("/api/patient/meal-plans").header("Authorization", "Bearer " + patientToken))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].status").value("COMPLETED"));
         mockMvc.perform(get("/api/patient/workout-plans").header("Authorization", "Bearer " + patientToken))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1));
-        mockMvc.perform(patch("/api/patient/meal-plans/{id}/complete", mealId)
-                        .header("Authorization", "Bearer " + patientToken))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("COMPLETED"));
-        mockMvc.perform(patch("/api/patient/workout-plans/{id}/complete", workoutId)
-                        .header("Authorization", "Bearer " + patientToken))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.data.status").value("COMPLETED"));
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].status").value("COMPLETED"));
     }
 
     @Test
@@ -291,28 +284,45 @@ class ClinicalMedicationIntegrationTest extends MongoIntegrationTestBase {
     }
 
     @Test
-    void patientCannotCreateMealOrWorkoutOutsideCurrentVietnamDay() throws Exception {
+    void patientCannotCreateMealOrWorkoutInFutureOrOlderThanTwoDays() throws Exception {
         User patient = saveActivePatient("+84922222222");
         String patientToken = patientAccessToken(patient, "123456");
         Instant tomorrow = LocalDate.now(VIETNAM_ZONE).plusDays(1)
+                .atTime(12, 0).atZone(VIETNAM_ZONE).toInstant();
+        Instant threeDaysAgo = LocalDate.now(VIETNAM_ZONE).minusDays(3)
                 .atTime(12, 0).atZone(VIETNAM_ZONE).toInstant();
 
         mockMvc.perform(post("/api/patient/meal-plans")
                         .header("Authorization", "Bearer " + patientToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"mealName\":\"Tomorrow meal\",\"scheduledAt\":\"" + tomorrow
+                        .content("{\"mealName\":\"Future meal\",\"scheduledAt\":\"" + tomorrow
+                                + "\",\"dishes\":[{\"dishName\":\"Rice\",\"quantity\":1,\"unit\":\"bowl\"}]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Activity time cannot be in the future."));
+
+        mockMvc.perform(post("/api/patient/meal-plans")
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"mealName\":\"Old meal\",\"scheduledAt\":\"" + threeDaysAgo
                                 + "\",\"dishes\":[{\"dishName\":\"Rice\",\"quantity\":1,\"unit\":\"bowl\"}]}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(
-                        "Patient-created care plan time must be within the current Vietnam calendar day."));
+                        "Patient-created activity must be for today or up to 2 previous days."));
 
         mockMvc.perform(post("/api/patient/workout-plans")
                         .header("Authorization", "Bearer " + patientToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"workoutName\":\"Tomorrow workout\",\"scheduledAt\":\"" + tomorrow + "\"}"))
+                        .content("{\"workoutName\":\"Future workout\",\"scheduledAt\":\"" + tomorrow + "\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Activity time cannot be in the future."));
+
+        mockMvc.perform(post("/api/patient/workout-plans")
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"workoutName\":\"Old workout\",\"scheduledAt\":\"" + threeDaysAgo + "\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(
-                        "Patient-created care plan time must be within the current Vietnam calendar day."));
+                        "Patient-created activity must be for today or up to 2 previous days."));
     }
 
     private Appointment saveConfirmedAppointment(User doctor, User patient) {

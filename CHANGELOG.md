@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-14
+
+- Adjusted Patient-created Meal and Workout into Health Activity Tracker mode:
+  - Allowed activity logging for today and up to 2 previous days (`<= Instant.now()`).
+  - Saved Patient-created activities directly with `COMPLETED` status.
+  - Rejected future activity timestamps.
+
 ## 2026-08-11
 
 - Enforced one Prescription per Appointment through unique `medicalRecordId` and service conflict validation.
