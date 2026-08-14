@@ -10,6 +10,8 @@
 | `GET` | `/api/patient/appointments` | Lấy appointment của Patient |
 | `PATCH` | `/api/patient/appointments/{appointmentId}/cancel` | Hủy appointment thuộc Patient |
 
+Khi Staff approve appointment hoặc reschedule appointment, backend tạo một notification `UNREAD` cho Patient. Reject, cancel và các sự kiện của Doctor không tạo notification trong phạm vi hiện tại.
+
 ## Staff endpoints
 
 | Method | Endpoint | Chức năng |

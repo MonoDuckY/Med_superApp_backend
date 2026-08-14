@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.yourproject.backend.dtos.requests.MedicineScheduleRequest;
 import com.yourproject.backend.dtos.requests.MealRequest;
@@ -22,6 +23,7 @@ import com.yourproject.backend.dtos.requests.WorkoutRequest;
 import com.yourproject.backend.dtos.responses.AppointmentResponse;
 import com.yourproject.backend.dtos.responses.DoctorExaminationResponse;
 import com.yourproject.backend.dtos.responses.MedicineScheduleResponse;
+import com.yourproject.backend.dtos.responses.MedicalImageResponse;
 import com.yourproject.backend.dtos.responses.MedicalRecordResponse;
 import com.yourproject.backend.dtos.responses.PrescriptionResponse;
 import com.yourproject.backend.dtos.responses.UserResponse;
@@ -55,6 +57,7 @@ import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.repositories.WorkoutRepository;
 import com.yourproject.backend.services.AppointmentService;
 import com.yourproject.backend.services.ClinicalMedicationService;
+import com.yourproject.backend.services.MedicalImageService;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.services.UserService;
 
@@ -72,6 +75,7 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
     private final DishRepository dishRepository;
     private final WorkoutRepository workoutRepository;
     private final MedicalRecordRepository medicalRecordRepository;
+    private final MedicalImageService medicalImageService;
     private final UserRepository userRepository;
     private final UserService userService;
     private final AppointmentService appointmentService;
@@ -175,6 +179,29 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
         medicalRecordRepository.save(medicalRecord);
         appointment.setUpdatedAt(Instant.now());
         return toExaminationResponse(appointmentRepository.save(appointment));
+    }
+
+    @Override
+    @Transactional
+    public List<MedicalImageResponse> uploadMedicalImage(
+            String doctorId,
+            String appointmentId,
+            MultipartFile image) {
+        requireMutableExamination(doctorId, appointmentId);
+        MedicalRecord medicalRecord = medicalRecordRepository.save(getOrCreateMedicalRecord(appointmentId));
+        return medicalImageService.upload(medicalRecord, image);
+    }
+
+    @Override
+    @Transactional
+    public List<MedicalImageResponse> deleteMedicalImage(
+            String doctorId,
+            String appointmentId,
+            String imageId) {
+        requireMutableExamination(doctorId, appointmentId);
+        MedicalRecord medicalRecord = medicalRecordRepository.findByAppointmentId(appointmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Medical record was not found."));
+        return medicalImageService.delete(medicalRecord, imageId);
     }
 
     @Override
@@ -293,6 +320,7 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
             throw new ConflictException("The same medicine schedule already exists at the selected time.");
         }
         schedule.setScheduledAt(request.getScheduledAt());
+        schedule.setNotified(false);
         return MedicineScheduleResponse.from(medicineScheduleRepository.save(schedule));
     }
 
@@ -325,7 +353,9 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
         return DoctorExaminationResponse.builder()
                 .appointment(appointmentService.toResponse(appointment))
                 .patient(UserResponse.from(patient, patientDataProtectionService))
-                .medicalRecord(MedicalRecordResponse.from(medicalRecord))
+                .medicalRecord(MedicalRecordResponse.from(
+                        medicalRecord,
+                        medicalImageService.createResponses(medicalRecord)))
                 .prescriptions(prescriptions.stream()
                         .map(prescription -> PrescriptionResponse.from(
                                 prescription,
@@ -413,6 +443,7 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
                         .scheduledAt(request.getScheduledAt())
                         .status(MedicineScheduleStatus.NOT_YET)
                         .note(trimToNull(request.getNote()))
+                        .isNotified(false)
                         .build())
                 .toList());
     }

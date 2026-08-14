@@ -1,5 +1,7 @@
 package com.yourproject.backend.dtos.responses;
 
+import java.util.List;
+
 import com.yourproject.backend.models.MedicalRecord;
 
 import lombok.Builder;
@@ -17,8 +19,11 @@ public class MedicalRecordResponse {
     Integer breathingRate;
     Double bodyTemperature;
     Double bloodLipids;
+    List<MedicalImageResponse> medicalImages;
 
-    public static MedicalRecordResponse from(MedicalRecord record) {
+    public static MedicalRecordResponse from(
+            MedicalRecord record,
+            List<MedicalImageResponse> medicalImages) {
         if (record == null) return null;
         return MedicalRecordResponse.builder()
                 .id(record.getId())
@@ -30,6 +35,7 @@ public class MedicalRecordResponse {
                 .breathingRate(record.getBreathingRate())
                 .bodyTemperature(record.getBodyTemperature())
                 .bloodLipids(record.getBloodLipids())
+                .medicalImages(medicalImages == null ? List.of() : List.copyOf(medicalImages))
                 .build();
     }
 }

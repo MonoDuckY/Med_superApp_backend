@@ -2,7 +2,13 @@ package com.yourproject.backend.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -14,7 +20,10 @@ import java.time.ZoneId;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.jayway.jsonpath.JsonPath;
 import com.yourproject.backend.models.Appointment;
@@ -25,9 +34,81 @@ import com.yourproject.backend.models.MedicineScheduleStatus;
 import com.yourproject.backend.models.OtpPurpose;
 import com.yourproject.backend.models.PatientOtp;
 import com.yourproject.backend.models.User;
+import com.yourproject.backend.services.S3StorageService;
+import com.yourproject.backend.services.S3StorageService.PresignedObjectUrl;
 
 class ClinicalMedicationIntegrationTest extends MongoIntegrationTestBase {
     private static final ZoneId VIETNAM_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
+
+    @MockitoBean
+    private S3StorageService s3StorageService;
+
+    @Test
+    void doctorUploadsReadsAndDeletesMedicalImageDuringExamination() throws Exception {
+        User doctor = saveActiveDoctor("+84911111111", "DoctorPassword1!");
+        User patient = saveActivePatient("+84922222222");
+        Appointment appointment = saveConfirmedAppointment(doctor, patient);
+        String doctorToken = loginAccessToken("0911111111", "DoctorPassword1!");
+        mockMvc.perform(patch("/api/doctor/appointments/{id}/start", appointment.getId())
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk());
+
+        when(s3StorageService.uploadMedicalImage(anyString(), any(MultipartFile.class)))
+                .thenAnswer(invocation -> "medical-images/" + invocation.getArgument(0) + "/image-1.jpg");
+        when(s3StorageService.createPresignedGetUrl(anyString()))
+                .thenReturn(new PresignedObjectUrl(
+                        "https://signed.example/medical-image.jpg",
+                        Instant.now().plusSeconds(600)));
+        MockMultipartFile image = new MockMultipartFile(
+                "image", "scan.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[] { 1, 2, 3 });
+
+        mockMvc.perform(multipart("/api/doctor/appointments/{id}/medical-images", appointment.getId())
+                        .file(image)
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].imageId").value("image-1.jpg"))
+                .andExpect(jsonPath("$.data[0].url").value("https://signed.example/medical-image.jpg"));
+
+        var medicalRecord = medicalRecordRepository.findByAppointmentId(appointment.getId()).orElseThrow();
+        String objectKey = medicalRecord.getMedicalImages().get(0);
+        assertEquals("medical-images/" + medicalRecord.getId() + "/image-1.jpg", objectKey);
+
+        mockMvc.perform(get("/api/doctor/appointments/{id}", appointment.getId())
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.medicalRecord.medicalImages[0].imageId").value("image-1.jpg"));
+
+        mockMvc.perform(delete(
+                        "/api/doctor/appointments/{id}/medical-images/{imageId}",
+                        appointment.getId(),
+                        "image-1.jpg")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+
+        verify(s3StorageService).deleteObject(objectKey);
+        assertEquals(0, medicalRecordRepository.findById(medicalRecord.getId())
+                .orElseThrow().getMedicalImages().size());
+    }
+
+    @Test
+    void doctorCannotUploadMedicalImageBeforeExaminationStarts() throws Exception {
+        User doctor = saveActiveDoctor("+84911111111", "DoctorPassword1!");
+        User patient = saveActivePatient("+84922222222");
+        Appointment appointment = saveConfirmedAppointment(doctor, patient);
+        String doctorToken = loginAccessToken("0911111111", "DoctorPassword1!");
+        MockMultipartFile image = new MockMultipartFile(
+                "image", "scan.jpg", MediaType.IMAGE_JPEG_VALUE, new byte[] { 1 });
+
+        mockMvc.perform(multipart("/api/doctor/appointments/{id}/medical-images", appointment.getId())
+                        .file(image)
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(
+                        "Examination information can only be changed while the appointment is in progress."));
+    }
+
     @Test
     void doctorCompletesExaminationAndPatientManagesGeneratedMedicineSchedule() throws Exception {
         User doctor = saveActiveDoctor("+84911111111", "DoctorPassword1!");

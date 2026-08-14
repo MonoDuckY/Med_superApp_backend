@@ -12,26 +12,22 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-@Document(collection = "medicine_schedules")
-@CompoundIndex(
-        name = "prescription_medicine_dosage_time_unique",
-        def = "{'prescriptionId': 1, 'medicineName': 1, 'dosage': 1, 'scheduledAt': 1}",
-        unique = true)
+@Document(collection = "notifications")
+@CompoundIndex(name = "notification_user_time", def = "{'userId': 1, 'notifyTime': -1}")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class MedicineSchedule {
+public class Notification {
     @Id
     private String id;
-    private String medicineName;
-    private String dosage;
+
     @Indexed
-    private Instant scheduledAt;
+    private String userId;
+
+    private String content;
+    private Instant notifyTime;
+
     @Indexed
-    private MedicineScheduleStatus status;
-    @Indexed
-    private String prescriptionId;
-    private String note;
-    private boolean isNotified;
+    private NotificationStatus status;
 }

@@ -134,6 +134,10 @@ Khuyến nghị lưu token:
 | `GET` | `/api/patient/medicine-schedules` | `PATIENT` | Lấy lịch uống thuốc của Patient. |
 | `PATCH` | `/api/patient/medicine-schedules/{scheduleId}/time` | `PATIENT` | Đổi thời gian của schedule `NOT_YET`. |
 | `PATCH` | `/api/patient/medicine-schedules/{scheduleId}/take` | `PATIENT` | Đánh dấu schedule là `TAKEN`. |
+| `GET` | `/api/patient/notifications` | `PATIENT` | Lấy notification mới nhất của Patient. |
+| `GET` | `/api/patient/notifications/unread-count` | `PATIENT` | Đếm notification chưa đọc. |
+| `PATCH` | `/api/patient/notifications/{notificationId}/read` | `PATIENT` | Đánh dấu một notification đã đọc. |
+| `PATCH` | `/api/patient/notifications/read-all` | `PATIENT` | Đánh dấu tất cả notification đã đọc. |
 | `POST` | `/api/admin/users` | `ADMIN` | Tạo account bằng multipart parts `user` và `certificate`; Doctor bắt buộc có ảnh. |
 | `GET` | `/api/admin/users` | `ADMIN` | Lấy hoặc lọc account theo phone, CCCD và role. |
 | `GET` | `/api/admin/users/{userId}` | `ADMIN` | Lấy chi tiết một account. |
@@ -514,8 +518,11 @@ BOOTSTRAP_ADMIN_FULL_NAME=System Administrator
 AWS_REGION=ap-southeast-1
 AWS_S3_BUCKET_NAME=hms-private-files
 AWS_S3_CERTIFICATE_PREFIX=doctor-certificates
+AWS_S3_MEDICAL_IMAGE_PREFIX=medical-images
 AWS_S3_PRESIGNED_URL_MINUTES=10
 ```
+
+`AWS_S3_MEDICAL_IMAGE_PREFIX` is optional. When omitted, the backend uses `medical-images`. Doctor certificates and MedicalRecord images share the same private bucket, IAM role and presigned URL configuration, but use separate prefixes.
 
 Trên EC2, AWS SDK tự dùng IAM instance role `BackendEc2Role`; không thêm access key/secret key vào file môi trường. Khi chạy local, developer phải có AWS credentials hợp lệ trong AWS CLI/default credential chain mới gọi được S3.
 

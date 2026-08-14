@@ -1,5 +1,15 @@
 # Clinical Examination and Medication Specification
 
+## Medical record images
+
+- `POST /api/doctor/appointments/{appointmentId}/medical-images` uploads one JPEG, PNG or WEBP image from multipart part `image`.
+- `DELETE /api/doctor/appointments/{appointmentId}/medical-images/{imageId}` deletes one image.
+- Only the Doctor who owns the appointment may upload or delete images, and the appointment must be `IN_PROGRESS`.
+- Each image must not exceed 5 MB. Multiple images are added through repeated upload requests.
+- Files use the private S3 prefix `medical-images/<medicalRecordId>/` by default; MongoDB stores only object keys in `medical_records.medicalImages`.
+- Examination responses expose `medicalImages[]` with `imageId`, temporary presigned `url` and `expiresAt`.
+- Images are optional. After the examination is `COMPLETED`, they are read-only.
+
 ## Authorization
 
 - Chỉ Doctor được xem và sửa examination của chính mình.
@@ -18,6 +28,8 @@
 | `PATCH` | `/api/doctor/appointments/{id}/start` | `CONFIRMED → IN_PROGRESS` |
 | `PATCH` | `/api/doctor/appointments/{id}/clinical-information` | Cập nhật sức khỏe lâu dài trong User và MedicalRecord theo appointment |
 | `PATCH` | `/api/doctor/appointments/{id}/diagnosis` | Cập nhật diagnosis trong MedicalRecord |
+| `POST` | `/api/doctor/appointments/{id}/medical-images` | Upload một ảnh MedicalRecord qua multipart part `image` |
+| `DELETE` | `/api/doctor/appointments/{id}/medical-images/{imageId}` | Xóa ảnh MedicalRecord khi examination đang `IN_PROGRESS` |
 | `POST` | `/api/doctor/appointments/{id}/prescriptions` | Tạo prescription và medicine schedules |
 | `PATCH` | `/api/doctor/appointments/{id}/prescription` | Thay content và schedules của prescription duy nhất; không nhận prescription ID |
 | `PATCH` | `/api/doctor/appointments/{id}/complete` | Hoàn tất examination |
@@ -26,7 +38,7 @@
 
 - Sức khỏe tổng quát lâu dài: `users`.
 - Hồ sơ từng lần khám: `medical_records`, unique theo `appointmentId`.
-- MedicalRecord chứa `diagnosis`, `note`, `bloodPressure`, `heartRate`, `breathingRate`, `bodyTemperature`, `bloodLipids`.
+- MedicalRecord chứa `diagnosis`, `note`, `bloodPressure`, `heartRate`, `breathingRate`, `bodyTemperature`, `bloodLipids` và danh sách object key `medicalImages`.
 - Mỗi Appointment chỉ có tối đa một Prescription; `prescriptions.medicalRecordId` là duy nhất.
 - Medicine schedule: `medicine_schedules.prescriptionId`.
 - Meal: `meals.userId`; `prescriptionId` bắt buộc khi Doctor tạo trong Prescription và `null` khi Patient tự ghi nhật ký.
@@ -46,6 +58,8 @@ Complete yêu cầu MedicalRecord có diagnosis, ít nhất một chỉ số lâ
 | `PATCH` | `/api/patient/medicine-schedules/{id}/take` | `NOT_YET → TAKEN` |
 
 Job định kỳ chuyển `NOT_YET → MISSED` sau 60 phút kể từ `scheduledAt` nếu Patient chưa xác nhận.
+
+Job notification tạo reminder khi schedule `NOT_YET` còn không quá 30 phút và `isNotified=false`. Sau khi tạo, `isNotified=true`; khi Patient đổi giờ, field được reset về false.
 
 ## Patient meal and workout endpoints (Health Tracker)
 

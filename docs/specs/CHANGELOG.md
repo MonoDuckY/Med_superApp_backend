@@ -1,7 +1,16 @@
 # Specification Changelog
 
+## 2026-08-14 - Medical record images
+
+- Added private S3 medical-image upload and deletion for in-progress Doctor examinations.
+- Added `medical_records.medicalImages` object-key storage and presigned URLs in examination responses.
+- Added optional `AWS_S3_MEDICAL_IMAGE_PREFIX`; the default remains `medical-images`.
+
 ## 2026-08-14
 
+- Added Patient notification persistence and read/unread APIs.
+- Added notifications for approved/rescheduled appointments and medicine reminders 30 minutes before `scheduledAt`.
+- Added `MedicineSchedule.isNotified` and reset it when the Patient changes reminder time.
 - Removed `roomId` from Doctor work-schedule submit/modify requests.
 - Pending DoctorWorkSlot documents now keep `roomId=null` until Staff review.
 - Staff must provide an active `roomId` when approving a work schedule; room and Doctor conflicts are checked during approval.

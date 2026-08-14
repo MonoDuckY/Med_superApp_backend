@@ -1,5 +1,8 @@
 package com.yourproject.backend.models;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -28,4 +31,7 @@ public class MedicalRecord {
     private Integer breathingRate;
     private Double bodyTemperature;
     private Double bloodLipids;
+
+    @Builder.Default
+    private List<String> medicalImages = new ArrayList<>();
 }

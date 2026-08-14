@@ -130,6 +130,8 @@ class SchedulingIntegrationTest extends MongoIntegrationTestBase {
         assertEquals(AppointmentStatus.CONFIRMED, confirmed.getStatus());
         assertEquals(DoctorWorkSlotStatus.BOOKED,
                 doctorWorkSlotRepository.findById(availableSlot.getId()).orElseThrow().getStatus());
+        assertEquals(1, notificationRepository.count());
+        assertTrue(notificationRepository.findAll().get(0).getContent().contains("CONFIRMED"));
 
         mockMvc.perform(get("/api/patient/appointments/available-slots")
                         .header("Authorization", bearer(patient))

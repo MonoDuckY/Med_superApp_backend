@@ -45,6 +45,7 @@ import com.yourproject.backend.repositories.WorkSlotRepository;
 import com.yourproject.backend.repositories.ClinicRoomRepository;
 import com.yourproject.backend.services.AppointmentService;
 import com.yourproject.backend.services.PatientDataProtectionService;
+import com.yourproject.backend.services.NotificationService;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.utils.WorkSlotTimeUtils;
 
@@ -65,6 +66,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     private final MongoTemplate mongoTemplate;
     private final WorkSlotRepository workSlotRepository;
     private final ClinicRoomRepository clinicRoomRepository;
+    private final NotificationService notificationService;
 
     @Override
     public List<DoctorWorkSlot> getAvailableSlots(String patientUserId, LocalDate date, String doctorName) {
@@ -247,7 +249,11 @@ public class AppointmentServiceImpl implements AppointmentService {
             slot.setStatus(DoctorWorkSlotStatus.AVAILABLE);
         }
         doctorWorkSlotRepository.save(slot);
-        return appointmentRepository.save(appointment);
+        Appointment saved = appointmentRepository.save(appointment);
+        if (request.getDecision() == ScheduleDecision.APPROVE) {
+            notificationService.createAppointmentApproved(resolvePatientId(saved), startInstant(slot));
+        }
+        return saved;
     }
 
     @Override
@@ -330,7 +336,11 @@ public class AppointmentServiceImpl implements AppointmentService {
         appointment.setRescheduledAt(now);
         appointment.setRescheduleReason(request.getReason().trim());
         appointment.setUpdatedAt(now);
-        return appointmentRepository.save(appointment);
+        Appointment saved = appointmentRepository.save(appointment);
+        notificationService.createAppointmentRescheduled(
+                resolvePatientId(saved),
+                startInstant(claimedReplacement));
+        return saved;
     }
 
     @Override
@@ -386,6 +396,11 @@ public class AppointmentServiceImpl implements AppointmentService {
 
         doctorWorkSlotRepository.save(slot);
         return appointmentRepository.save(appointment);
+    }
+
+    private String resolvePatientId(Appointment appointment) {
+        String patientId = trimToNull(appointment.getPatientId());
+        return patientId != null ? patientId : appointment.getPatientUserId();
     }
 
     private DoctorWorkSlot requireStaffBookableSlot(String doctorWorkSlotId) {

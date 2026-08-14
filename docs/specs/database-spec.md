@@ -15,15 +15,18 @@ Các collection dưới đây mặc định nằm trong database nghiệp vụ `
 | `clinic_rooms` | Danh mục phòng khám |
 | `doctor_work_slots` | Lịch theo doctor/slot/date/submission; `roomId` null khi pending và được Staff gán khi approve |
 | `appointments` | Patient booking tham chiếu DoctorWorkSlot |
-| `medical_records` | Hồ sơ lâm sàng và diagnosis, unique theo appointmentId |
+| `medical_records` | Hồ sơ lâm sàng, diagnosis và danh sách S3 object key `medicalImages`, unique theo appointmentId |
 | `prescriptions` | Đơn thuốc theo medicalRecordId |
 | `medicine_schedules` | Lịch thuốc theo prescriptionId |
+| `notifications` | Notification của Patient, nội dung, thời điểm và trạng thái read/unread |
 | `meals` | Meal plan theo userId; prescriptionId nullable đối với plan Patient tự tạo |
 | `dishes` | Món ăn thuộc Meal thông qua mealId |
 | `workouts` | Workout plan theo userId; prescriptionId nullable đối với plan Patient tự tạo |
 | `audit_logs.audit_logs` | Audit của request ghi; lưu tại database riêng `audit_logs` và nhận diện backend instance |
 
 ## MongoDB relationships
+
+`medical_records.medicalImages` stores a list of private S3 object keys. The image bytes, public URLs and temporary presigned URLs are not stored in MongoDB.
 
 Quan hệ là manual reference bằng string/ObjectId; MongoDB không áp dụng foreign key. Service phải kiểm tra resource tồn tại, quyền sở hữu và status trước khi ghi.
 
@@ -37,6 +40,8 @@ Quan hệ là manual reference bằng string/ObjectId; MongoDB không áp dụng
 - Prescription có unique index `medicalRecordId`, bảo đảm một Appointment/MedicalRecord chỉ có một Prescription.
 - PatientOtp có index user, phone lookup, purpose và TTL expiration.
 - MedicineSchedule chống trùng prescription/medicine/dosage/scheduledAt.
+- MedicineSchedule lưu `isNotified`; job chỉ tạo reminder khi field là false hoặc chưa tồn tại.
+- Notification có index `(userId, notifyTime)` để lấy inbox mới nhất trước.
 - Meal chống trùng `(userId, mealName, scheduledAt)`.
 - Dish có index `mealId`; service xóa Dish trước khi thay thế Meal trong Prescription.
 - Workout chống trùng `(userId, workoutName, scheduledAt)`.
