@@ -1,0 +1,2 @@
+HfRepoId = tranqui247/adsus
+HfFilename = YOLO26_EffNetV2S_512_40H1_nbl.pt
