@@ -77,4 +77,43 @@ class S3StorageServiceTest {
 
         assertThrows(BadRequestException.class, () -> service.uploadMedicalImage("record-3", image));
     }
+
+    @Test
+    void uploadDoctorCertificateAcceptsPdfWithValidSignature() {
+        MockMultipartFile pdf = new MockMultipartFile(
+                "certificate",
+                "license.pdf",
+                "application/pdf",
+                "%PDF-1.7 certificate".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+        when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
+                .thenReturn(PutObjectResponse.builder().build());
+
+        String objectKey = service.uploadDoctorCertificate("doctor-1", pdf);
+
+        assertTrue(objectKey.startsWith("doctor-certificates/doctor-1/"));
+        assertTrue(objectKey.endsWith(".pdf"));
+    }
+
+    @Test
+    void uploadDoctorCertificateRejectsPdfWithInvalidSignature() {
+        MockMultipartFile fakePdf = new MockMultipartFile(
+                "certificate",
+                "license.pdf",
+                "application/pdf",
+                "not-a-pdf".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+
+        assertThrows(BadRequestException.class,
+                () -> service.uploadDoctorCertificate("doctor-1", fakePdf));
+    }
+
+    @Test
+    void uploadMedicalImageStillRejectsPdf() {
+        MockMultipartFile pdf = new MockMultipartFile(
+                "image",
+                "scan.pdf",
+                "application/pdf",
+                "%PDF-1.7 scan".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+
+        assertThrows(BadRequestException.class, () -> service.uploadMedicalImage("record-4", pdf));
+    }
 }

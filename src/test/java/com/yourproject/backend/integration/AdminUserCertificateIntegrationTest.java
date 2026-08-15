@@ -35,7 +35,7 @@ class AdminUserCertificateIntegrationTest extends MongoIntegrationTestBase {
                                 + "\"role\":\"DOCTOR\",\"fullName\":\"Doctor Missing Certificate\"}"))
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Doctor accounts require a certificate image."));
+                .andExpect(jsonPath("$.message").value("Doctor accounts require a certificate file."));
     }
 
     @Test
@@ -65,7 +65,7 @@ class AdminUserCertificateIntegrationTest extends MongoIntegrationTestBase {
                         .file(certificate())
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Only Doctor accounts can have a certificate image."));
+                .andExpect(jsonPath("$.message").value("Only Doctor accounts can have a certificate file."));
     }
 
     @Test

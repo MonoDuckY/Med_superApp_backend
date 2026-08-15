@@ -27,12 +27,12 @@ Toàn bộ `/api/admin/users/**` yêu cầu `ADMIN`.
 - User lưu `roleId` theo catalog cố định (`1=ADMIN`, `2=DOCTOR`, `3=STAFF`, `4=RESEARCHER`, `5=PATIENT`).
 - Patient-only không cần password và xác thực bằng SMS OTP.
 - Các account khác phải có password hợp lệ.
-- Doctor certificate là ảnh private trong Amazon S3. MongoDB chỉ lưu `certificateObjectKey`.
+- Doctor certificate là file JPEG, PNG, WEBP hoặc PDF trong private Amazon S3. MongoDB chỉ lưu `certificateObjectKey`.
 - Khi Admin tạo Doctor qua `POST /api/admin/users`, part `certificate` là bắt buộc.
 - Khi Admin patch Doctor, certificate mới là tùy chọn nếu Doctor đã có ảnh; gửi ảnh sẽ thay thế ảnh cũ.
 - Role khác Doctor không được gửi certificate. Nếu đổi Doctor sang role khác, backend xóa certificate cũ.
 - Chỉ response POST/PATCH user dành cho Admin mới trả presigned `certificateUrl`. API Patient/Staff không trả object key hoặc certificate URL.
-- Certificate chỉ nhận JPEG, PNG hoặc WEBP, tối đa 5 MB.
+- Certificate chỉ nhận JPEG, PNG, WEBP hoặc PDF, tối đa 5 MB. PDF phải có chữ ký file `%PDF-` hợp lệ.
 - Presigned URL mặc định có hiệu lực 10 phút và không được lưu trong MongoDB.
 
 ## User mutation endpoints

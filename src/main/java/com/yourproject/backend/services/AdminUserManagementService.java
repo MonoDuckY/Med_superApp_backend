@@ -53,10 +53,10 @@ public class AdminUserManagementService {
     private void validateCertificate(UserRole role, boolean hasStoredCertificate, MultipartFile certificate) {
         boolean supplied = hasFile(certificate);
         if (role == UserRole.DOCTOR && !hasStoredCertificate && !supplied) {
-            throw new BadRequestException("Doctor accounts require a certificate image.");
+            throw new BadRequestException("Doctor accounts require a certificate file.");
         }
         if (role != UserRole.DOCTOR && supplied) {
-            throw new BadRequestException("Only Doctor accounts can have a certificate image.");
+            throw new BadRequestException("Only Doctor accounts can have a certificate file.");
         }
     }
 

@@ -1,5 +1,11 @@
 # Specification Changelog
 
+## 2026-08-15 - Doctor certificate PDF
+
+- Doctor certificate upload now accepts PDF in addition to JPEG, PNG and WEBP.
+- PDF uploads require `application/pdf` and a valid `%PDF-` file signature.
+- MedicalRecord images remain image-only and do not accept PDF.
+
 ## 2026-08-15 - Blood pressure validation
 
 - Blood pressure accepts only `1-3 digits/1-3 digits` and is normalized to `xxx/xxx` before persistence.

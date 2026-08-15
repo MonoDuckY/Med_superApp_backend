@@ -1,8 +1,10 @@
 package com.yourproject.backend.services;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
 
@@ -31,6 +33,12 @@ public class S3StorageService {
             "image/jpeg", ".jpg",
             "image/png", ".png",
             "image/webp", ".webp");
+    private static final Map<String, String> ALLOWED_CERTIFICATE_TYPES = Map.of(
+            "image/jpeg", ".jpg",
+            "image/png", ".png",
+            "image/webp", ".webp",
+            "application/pdf", ".pdf");
+    private static final byte[] PDF_SIGNATURE = "%PDF-".getBytes(StandardCharsets.US_ASCII);
 
     private final S3Client s3Client;
     private final S3Presigner s3Presigner;
@@ -47,31 +55,30 @@ public class S3StorageService {
     private long maxFileSizeBytes;
 
     public String uploadDoctorCertificate(String doctorId, MultipartFile file) {
-        return uploadImage(
+        return uploadFile(
                 normalizedPrefix(certificatePrefix, "doctor-certificates"),
                 doctorId,
                 file,
-                "Certificate image",
+                validateCertificateFile(file),
                 "Unable to upload the doctor certificate.");
     }
 
     public String uploadMedicalImage(String medicalRecordId, MultipartFile file) {
-        return uploadImage(
+        return uploadFile(
                 normalizedPrefix(medicalImagePrefix, "medical-images"),
                 medicalRecordId,
                 file,
-                "Medical image",
+                validateMedicalImage(file),
                 "Unable to upload the medical image.");
     }
 
-    private String uploadImage(
+    private String uploadFile(
             String prefix,
             String ownerId,
             MultipartFile file,
-            String imageLabel,
+            String extension,
             String failureMessage) {
         validateConfiguration();
-        String extension = validateImage(file, imageLabel);
         String objectKey = prefix + "/" + ownerId + "/" + UUID.randomUUID() + extension;
         try {
             PutObjectRequest request = PutObjectRequest.builder()
@@ -122,18 +129,45 @@ public class S3StorageService {
         }
     }
 
-    private String validateImage(MultipartFile file, String imageLabel) {
-        if (file == null || file.isEmpty()) {
-            throw new BadRequestException(imageLabel + " is required.");
-        }
-        if (file.getSize() > maxFileSizeBytes) {
-            throw new BadRequestException(imageLabel + " must not exceed 5 MB.");
-        }
-        String extension = ALLOWED_IMAGE_TYPES.get(file.getContentType());
+    private String validateCertificateFile(MultipartFile file) {
+        validateFilePresenceAndSize(file, "Certificate file");
+        String extension = ALLOWED_CERTIFICATE_TYPES.get(file.getContentType());
         if (extension == null) {
-            throw new BadRequestException(imageLabel + " must be JPEG, PNG, or WEBP.");
+            throw new BadRequestException("Certificate file must be JPEG, PNG, WEBP, or PDF.");
+        }
+        if ("application/pdf".equals(file.getContentType())) {
+            validatePdfSignature(file);
         }
         return extension;
+    }
+
+    private String validateMedicalImage(MultipartFile file) {
+        validateFilePresenceAndSize(file, "Medical image");
+        String extension = ALLOWED_IMAGE_TYPES.get(file.getContentType());
+        if (extension == null) {
+            throw new BadRequestException("Medical image must be JPEG, PNG, or WEBP.");
+        }
+        return extension;
+    }
+
+    private void validateFilePresenceAndSize(MultipartFile file, String fileLabel) {
+        if (file == null || file.isEmpty()) {
+            throw new BadRequestException(fileLabel + " is required.");
+        }
+        if (file.getSize() > maxFileSizeBytes) {
+            throw new BadRequestException(fileLabel + " must not exceed 5 MB.");
+        }
+    }
+
+    private void validatePdfSignature(MultipartFile file) {
+        try (var inputStream = file.getInputStream()) {
+            byte[] signature = inputStream.readNBytes(PDF_SIGNATURE.length);
+            if (!Arrays.equals(signature, PDF_SIGNATURE)) {
+                throw new BadRequestException("Certificate PDF has an invalid file signature.");
+            }
+        } catch (IOException exception) {
+            throw new BadRequestException("Certificate PDF could not be read.");
+        }
     }
 
     private void validateConfiguration() {

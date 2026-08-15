@@ -50,7 +50,7 @@ public class AdminUserController {
             mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
             encoding = {
                     @Encoding(name = "user", contentType = MediaType.APPLICATION_JSON_VALUE),
-                    @Encoding(name = "certificate", contentType = "image/png, image/jpeg, image/webp")
+                    @Encoding(name = "certificate", contentType = "image/png, image/jpeg, image/webp, application/pdf")
             }))
     public ResponseEntity<ApiResponse<UserResponse>> createUser(
             Authentication authentication,
@@ -82,7 +82,7 @@ public class AdminUserController {
             mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
             encoding = {
                     @Encoding(name = "user", contentType = MediaType.APPLICATION_JSON_VALUE),
-                    @Encoding(name = "certificate", contentType = "image/png, image/jpeg, image/webp")
+                    @Encoding(name = "certificate", contentType = "image/png, image/jpeg, image/webp, application/pdf")
             }))
     public ResponseEntity<ApiResponse<UserResponse>> updateUser(
             Authentication authentication,
