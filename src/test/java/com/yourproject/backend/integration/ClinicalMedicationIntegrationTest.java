@@ -309,6 +309,27 @@ class ClinicalMedicationIntegrationTest extends MongoIntegrationTestBase {
     }
 
     @Test
+    void patientRetrievesOwnMedicalRecordHistory() throws Exception {
+        User doctor = saveActiveDoctor("+84911111111", "DoctorPassword1!");
+        User patient = saveActivePatient("+84922222222");
+        Appointment appointment = saveConfirmedAppointment(doctor, patient);
+        medicalRecordRepository.save(com.yourproject.backend.models.MedicalRecord.builder()
+                .appointmentId(appointment.getId())
+                .diagnosis("Patient diagnosis")
+                .bloodPressure("120/080")
+                .build());
+        String patientToken = patientAccessToken(patient, "123456");
+
+        mockMvc.perform(get("/api/patient/medical-records")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].appointment.id").value(appointment.getId()))
+                .andExpect(jsonPath("$.data[0].medicalRecord.diagnosis").value("Patient diagnosis"))
+                .andExpect(jsonPath("$.data[0].medicalRecord.bloodPressure").value("120/080"));
+    }
+
+    @Test
     void patientCreatesAndCompletesIndependentMealAndWorkoutPlans() throws Exception {
         User patient = saveActivePatient("+84922222222");
         String patientToken = patientAccessToken(patient, "123456");

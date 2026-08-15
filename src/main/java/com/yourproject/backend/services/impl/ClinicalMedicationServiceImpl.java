@@ -124,6 +124,14 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
     }
 
     @Override
+    public List<DoctorExaminationResponse> getOwnMedicalRecordHistory(String patientId) {
+        requirePatient(patientId);
+        return appointmentRepository.findAllForPatient(patientId).stream()
+                .map(this::toExaminationResponse)
+                .toList();
+    }
+
+    @Override
     @Transactional
     public DoctorExaminationResponse startExamination(String doctorId, String appointmentId) {
         Appointment appointment = requireDoctorAppointment(doctorId, appointmentId);

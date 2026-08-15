@@ -50,7 +50,11 @@
 
 Complete yêu cầu MedicalRecord có diagnosis, ít nhất một chỉ số lâm sàng và ít nhất một prescription; appointment chuyển `COMPLETED`, DoctorWorkSlot chuyển `CLOSED`.
 
-## Patient medication endpoints
+## Patient medical record and medication endpoints
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/patient/medical-records` | Retrieves all examination details, MedicalRecords, Prescriptions and medicine schedules belonging to the authenticated patient. |
 
 | Method | Endpoint | Chức năng |
 | --- | --- | --- |

@@ -21,6 +21,7 @@ public interface ClinicalMedicationService {
     DoctorExaminationResponse getDoctorExamination(String doctorId, String appointmentId);
     List<UserSummaryResponse> getDoctorPatients(String doctorId);
     List<DoctorExaminationResponse> getPatientMedicalRecordHistory(String doctorId, String patientId);
+    List<DoctorExaminationResponse> getOwnMedicalRecordHistory(String patientId);
     DoctorExaminationResponse startExamination(String doctorId, String appointmentId);
     DoctorExaminationResponse updateClinicalInformation(
             String doctorId, String appointmentId, UpdateClinicalInformationRequest request);

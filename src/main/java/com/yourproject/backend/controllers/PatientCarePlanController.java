@@ -19,7 +19,9 @@ import com.yourproject.backend.dtos.requests.UpdateMedicineScheduleTimeRequest;
 import com.yourproject.backend.dtos.requests.WorkoutRequest;
 import com.yourproject.backend.dtos.responses.ApiResponse;
 import com.yourproject.backend.dtos.responses.MealResponse;
+import com.yourproject.backend.dtos.responses.DoctorExaminationResponse;
 import com.yourproject.backend.dtos.responses.WorkoutResponse;
+import com.yourproject.backend.services.ClinicalMedicationService;
 import com.yourproject.backend.services.PatientCarePlanService;
 
 import jakarta.validation.Valid;
@@ -31,11 +33,20 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class PatientCarePlanController {
     private final PatientCarePlanService patientCarePlanService;
+    private final ClinicalMedicationService clinicalMedicationService;
 
     @GetMapping("/meal-plans")
     public ResponseEntity<ApiResponse<List<MealResponse>>> getMeals(Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.success(
                 "Meal plans retrieved successfully.", patientCarePlanService.getMeals(authentication.getName())));
+    }
+
+    @GetMapping("/medical-records")
+    public ResponseEntity<ApiResponse<List<DoctorExaminationResponse>>> getMedicalRecords(
+            Authentication authentication) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Patient medical records retrieved successfully.",
+                clinicalMedicationService.getOwnMedicalRecordHistory(authentication.getName())));
     }
 
     @PostMapping("/meal-plans")
