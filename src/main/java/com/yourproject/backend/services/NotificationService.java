@@ -35,6 +35,11 @@ public class NotificationService {
                 + ". Status: CONFIRMED.");
     }
 
+    public Notification createAppointmentCancelled(String patientId, Instant appointmentTime) {
+        return create(patientId, "Appointment for " + formatTime(appointmentTime)
+                + " has been cancelled. Status: CANCELLED.");
+    }
+
     public Notification createMedicineReminder(String patientId, MedicineSchedule schedule) {
         return create(patientId, "Medication reminder: " + schedule.getMedicineName()
                 + ", dosage " + schedule.getDosage()

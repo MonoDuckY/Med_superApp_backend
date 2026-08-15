@@ -395,7 +395,9 @@ public class AppointmentServiceImpl implements AppointmentService {
         slot.setUpdatedAt(cancelledAt);
 
         doctorWorkSlotRepository.save(slot);
-        return appointmentRepository.save(appointment);
+        Appointment saved = appointmentRepository.save(appointment);
+        notificationService.createAppointmentCancelled(resolvePatientId(saved), startInstant(slot));
+        return saved;
     }
 
     private String resolvePatientId(Appointment appointment) {

@@ -1,5 +1,10 @@
 # Specification Changelog
 
+## 2026-08-15 - Appointment cancellation notification
+
+- Added automatic Patient notification when a pending or confirmed appointment is cancelled by Staff or Patient.
+- Updated `notification-spec.md` with appointment cancellation event.
+
 ## 2026-08-15 - Doctor certificate PDF
 
 - Doctor certificate upload now accepts PDF in addition to JPEG, PNG and WEBP.

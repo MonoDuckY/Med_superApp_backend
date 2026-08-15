@@ -315,6 +315,7 @@ class AppointmentServiceImplTest {
         assertEquals("Doctor unavailable", result.getCancellationReason());
         assertEquals("staff-1", result.getCancelledBy());
         assertEquals(DoctorWorkSlotStatus.AVAILABLE, bookedSlot.getStatus());
+        verify(notificationService).createAppointmentCancelled(eq("PAT-0001"), any());
     }
 
     @Test
@@ -347,6 +348,7 @@ class AppointmentServiceImplTest {
         assertFalse(result.isActive());
         assertEquals("patient-user-1", result.getCancelledBy());
         assertEquals(DoctorWorkSlotStatus.AVAILABLE, pendingSlot.getStatus());
+        verify(notificationService).createAppointmentCancelled(eq("PAT-0001"), any());
     }
 
     @Test

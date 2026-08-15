@@ -8,6 +8,7 @@ Notifications are created for exactly these events:
 
 - Staff approves a pending Patient appointment.
 - Staff reschedules a pending or confirmed Patient appointment.
+- Staff or Patient cancels a pending or confirmed Patient appointment.
 - A `NOT_YET` medicine schedule enters the 30-minute window before `scheduledAt`.
 
 ## Medicine reminder

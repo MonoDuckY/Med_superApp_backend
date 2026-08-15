@@ -51,6 +51,20 @@ class NotificationServiceTest {
     }
 
     @Test
+    void createsUnreadAppointmentCancelledNotification() {
+        when(notificationRepository.save(any(Notification.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        Instant time = Instant.parse("2026-08-20T09:00:00Z");
+
+        Notification result = service.createAppointmentCancelled("patient-1", time);
+
+        assertEquals("patient-1", result.getUserId());
+        assertEquals(NotificationStatus.UNREAD, result.getStatus());
+        assertTrue(result.getContent().contains("cancelled"));
+        assertTrue(result.getContent().contains("CANCELLED"));
+    }
+
+    @Test
     void patientMarksOwnNotificationRead() {
         Notification notification = Notification.builder()
                 .id("notification-1")
