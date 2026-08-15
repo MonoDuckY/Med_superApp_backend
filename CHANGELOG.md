@@ -1,0 +1,70 @@
+# Changelog
+
+## 2026-08-14
+
+- Adjusted Patient-created Meal and Workout into Health Activity Tracker mode:
+  - Allowed activity logging for today and up to 2 previous days (`<= Instant.now()`).
+  - Saved Patient-created activities directly with `COMPLETED` status.
+  - Rejected future activity timestamps.
+
+## 2026-08-11
+
+- Enforced one Prescription per Appointment through unique `medicalRecordId` and service conflict validation.
+- Changed prescription update to `PATCH /api/doctor/appointments/{appointmentId}/prescription`, removing the prescription ID input.
+- Restricted Patient-created Meal and Workout times to a future instant within the current Vietnam calendar day.
+
+All notable backend changes are documented in this file. This project follows a lightweight Keep a Changelog structure; version tags are added when the team creates a release.
+
+## Unreleased
+
+### Added
+
+- Request-level database audit logs stored in `audit_logs.audit_logs` with automatic persistent backend instance identity, hostname and IP.
+- Dish collection and nested Dish payloads/responses for every Meal plan.
+- Doctor-created Meal and Workout plans attached to prescriptions, plus Patient-created independent plans.
+- Patient Meal/Workout list, create, reschedule and complete endpoints.
+- Doctor Patient directory and cross-doctor Patient medical-history endpoints.
+- HMAC-backed citizen-identification lookup and startup backfill for existing users.
+- Doctor-wide work-schedule search endpoint at `GET /api/doctor/work-schedules/all`.
+- Staff doctor directory endpoint at `GET /api/staff/doctors`.
+- Doctor night work session with 30-minute slots from 17:00 through 08:00 the following day.
+- Role catalog collection seeded with stable IDs: `1=ADMIN`, `2=DOCTOR`, `3=STAFF`, `4=RESEARCHER`, `5=PATIENT`.
+- Feature specifications under `docs/specs` for API conventions, authentication, user management, scheduling, appointments, clinical medication, SMS gateway, data protection and MongoDB schema.
+- Three-step forgot-password flow with OTP verification and a one-time reset token.
+- Doctor examination, prescription and Patient medicine-schedule APIs.
+- Staff schedule/appointment filtering, blocking, rescheduling and Staff-created appointments.
+
+### Changed
+
+- Patient medicine-schedule rescheduling must remain on the original Vietnam calendar day.
+- Doctor Patient medical history now includes all of the Patient's appointments, including appointments handled by other Doctors.
+- Startup migration links legacy prescriptions using `appointmentId` to the new MedicalRecord schema.
+- Admin User GET and Staff Patient search support phone-number and citizen-identification filters.
+- Doctor work-schedule responses now include the resolved WorkSlot object for every `slotId`.
+- Doctor directory and Staff patient search now query the fixed numeric role IDs instead of legacy role names.
+- Startup migration converts legacy User `roleId` names to the fixed numeric IDs.
+- Updated work-slot and integration fixtures to match the 46-slot catalog and numeric role IDs.
+- Replaced `vital_signs` with one `medical_records` document per appointment, moved diagnosis out of Appointment, and changed Prescription references to `medicalRecordId`.
+- Patient slot search and direct booking exclude night shifts; Staff may create or reschedule appointments into approved night slots.
+- Role catalog startup synchronization now replaces legacy role documents whose IDs do not match the fixed `1..5` mapping.
+- User now references one role through `roleId`; authentication and authorization use the singular role.
+- Login and forgot-password account selection now require `role` and use `(phoneLookup, roleId)`.
+- Phone numbers may be reused by accounts with different roles, while remaining unique within one role.
+- Password reset now uses `request → verify → reset`; the final request no longer contains OTP.
+- Medicine schedule uses full `scheduledAt` date-time and supports `NOT_YET`, `TAKEN`, `MISSED`.
+- Appointment supports `IN_PROGRESS` examination state.
+
+### Security
+
+- Password reset token is random, short-lived, one-time and stored only as SHA-256 hash.
+- Password reset invalidates access/refresh token hashes and clears account lockout.
+
+## Documentation update rule
+
+Every pull request that changes public APIs, validation, permissions, status transitions, persistence or security must also update the relevant file in `docs/specs` and add an entry under `Unreleased`.
+# 2026-08-10
+
+- Added private Amazon S3 storage for Doctor certificate images.
+- Merged Doctor certificate upload/replacement into Admin user POST/PATCH multipart APIs and removed standalone certificate endpoints.
+- Replaced free-text `users.certificate` with private `users.certificateObjectKey`.
+- Restricted certificate presence, object key and presigned URLs to Admin certificate APIs; Patient/Staff Doctor lists do not expose certificate data.

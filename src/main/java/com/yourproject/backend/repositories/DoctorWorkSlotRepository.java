@@ -19,9 +19,22 @@ public interface DoctorWorkSlotRepository extends MongoRepository<DoctorWorkSlot
             LocalDate from,
             LocalDate to);
 
+    List<DoctorWorkSlot> findAllByWorkDateBetweenOrderByWorkDateAscSlotIdAsc(
+            LocalDate from,
+            LocalDate to);
+
+    List<DoctorWorkSlot> findAllByWorkDateBetweenAndStatusOrderByWorkDateAscSlotIdAsc(
+            LocalDate from,
+            LocalDate to,
+            DoctorWorkSlotStatus status);
+
     List<DoctorWorkSlot> findAllByStatusOrderBySubmittedAtAsc(DoctorWorkSlotStatus status);
 
     List<DoctorWorkSlot> findAllByStatusOrderBySubmittedAtDesc(DoctorWorkSlotStatus status);
+
+    List<DoctorWorkSlot> findAllByStatusAndWorkDateLessThanEqual(
+            DoctorWorkSlotStatus status,
+            LocalDate workDate);
 
     List<DoctorWorkSlot> findAllByOrderBySubmittedAtDesc();
 
@@ -32,4 +45,6 @@ public interface DoctorWorkSlotRepository extends MongoRepository<DoctorWorkSlot
     List<DoctorWorkSlot> findAllByWorkDateAndSlotIdIn(LocalDate workDate, Collection<String> slotIds);
 
     List<DoctorWorkSlot> findAllByStatusOrderByWorkDateAscSlotIdAsc(DoctorWorkSlotStatus status);
+
+    List<DoctorWorkSlot> findAllByDoctorIdOrderByWorkDateDescSlotIdAsc(String doctorId);
 }

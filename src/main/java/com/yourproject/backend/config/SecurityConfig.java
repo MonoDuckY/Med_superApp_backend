@@ -22,6 +22,7 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.yourproject.backend.security.JwtAuthenticationFilter;
+import com.yourproject.backend.audit.DatabaseAuditFilter;
 import com.yourproject.backend.security.RestAccessDeniedHandler;
 import com.yourproject.backend.security.RestAuthenticationEntryPoint;
 
@@ -33,6 +34,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final DatabaseAuditFilter databaseAuditFilter;
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
     private final RestAccessDeniedHandler accessDeniedHandler;
 
@@ -50,11 +52,12 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/refresh", "/api/auth/patient-otp/request", "/api/auth/patient-otp/verify", "/api/auth/forgot-password/request", "/api/auth/forgot-password/reset", "/api/sms-gateway/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/refresh", "/api/auth/patient-otp/request", "/api/auth/patient-otp/verify", "/api/auth/forgot-password/request", "/api/auth/forgot-password/verify", "/api/auth/forgot-password/reset", "/api/sms-gateway/**").permitAll()
                         .requestMatchers("/api/ai/**", "/api/webhooks/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(databaseAuditFilter, JwtAuthenticationFilter.class)
                 .build();
     }
 

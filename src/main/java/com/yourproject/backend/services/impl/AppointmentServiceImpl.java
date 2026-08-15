@@ -24,6 +24,7 @@ import com.yourproject.backend.dtos.requests.RescheduleAppointmentRequest;
 import com.yourproject.backend.dtos.requests.StaffCreateAppointmentRequest;
 import com.yourproject.backend.dtos.responses.AppointmentResponse;
 import com.yourproject.backend.dtos.responses.AvailableAppointmentSlotResponse;
+import com.yourproject.backend.dtos.responses.UserResponse;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ConflictException;
 import com.yourproject.backend.exceptions.ForbiddenException;
@@ -44,7 +45,9 @@ import com.yourproject.backend.repositories.WorkSlotRepository;
 import com.yourproject.backend.repositories.ClinicRoomRepository;
 import com.yourproject.backend.services.AppointmentService;
 import com.yourproject.backend.services.PatientDataProtectionService;
+import com.yourproject.backend.services.NotificationService;
 import com.yourproject.backend.services.UserService;
+import com.yourproject.backend.utils.WorkSlotTimeUtils;
 
 import lombok.RequiredArgsConstructor;
 
@@ -63,6 +66,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     private final MongoTemplate mongoTemplate;
     private final WorkSlotRepository workSlotRepository;
     private final ClinicRoomRepository clinicRoomRepository;
+    private final NotificationService notificationService;
 
     @Override
     public List<DoctorWorkSlot> getAvailableSlots(String patientUserId, LocalDate date, String doctorName) {
@@ -86,11 +90,29 @@ public class AppointmentServiceImpl implements AppointmentService {
 
         Instant effectiveFrom = from;
         Instant effectiveTo = to;
-        List<DoctorWorkSlot> availableSlots = doctorWorkSlotRepository
-                .findAllByStatusOrderByWorkDateAscSlotIdAsc(DoctorWorkSlotStatus.AVAILABLE)
+        List<DoctorWorkSlot> availableCandidates = doctorWorkSlotRepository
+                .findAllByStatusOrderByWorkDateAscSlotIdAsc(DoctorWorkSlotStatus.AVAILABLE);
+        Map<String, WorkSlot> availableDefinitions = workSlotRepository.findAllById(
+                        availableCandidates.stream()
+                                .map(DoctorWorkSlot::getSlotId)
+                                .filter(id -> id != null && !id.isBlank())
+                                .distinct()
+                                .toList())
                 .stream()
+                .collect(Collectors.toMap(WorkSlot::getId, definition -> definition));
+        List<DoctorWorkSlot> availableSlots = availableCandidates.stream()
+                .filter(slot -> slot.getWorkDate() != null)
                 .filter(slot -> {
-                    Instant startAt = startInstant(slot);
+                    WorkSlot definition = availableDefinitions.get(slot.getSlotId());
+                    return definition != null
+                            && definition.getStartTime() != null
+                            && definition.getEndTime() != null
+                            && !WorkSlotTimeUtils.isNight(definition);
+                })
+                .filter(slot -> {
+                    Instant startAt = toInstant(
+                            slot.getWorkDate(),
+                            availableDefinitions.get(slot.getSlotId()).getStartTime());
                     return !startAt.isBefore(effectiveFrom) && !startAt.isAfter(effectiveTo);
                 })
                 .toList();
@@ -98,6 +120,8 @@ public class AppointmentServiceImpl implements AppointmentService {
                         availableSlots.stream().map(DoctorWorkSlot::getDoctorId).distinct().toList())
                 .stream()
                 .collect(Collectors.toMap(User::getId, doctor -> doctor));
+        Map<String, String> doctorDisplayNames = doctors.values().stream()
+                .collect(Collectors.toMap(User::getId, this::doctorDisplayName));
         String normalizedDoctorName = doctorName == null
                 ? null
                 : doctorName.trim().toLowerCase(Locale.ROOT);
@@ -105,12 +129,12 @@ public class AppointmentServiceImpl implements AppointmentService {
                 .filter(slot -> {
                     User doctor = doctors.get(slot.getDoctorId());
                     return doctor != null
-                            && doctor.getRoles().contains(UserRole.DOCTOR)
+                            && doctor.getRole() == UserRole.DOCTOR
                             && doctor.getStatus() == AccountStatus.ACTIVE
                             && (normalizedDoctorName == null
                                     || normalizedDoctorName.isBlank()
-                                    || (doctor.getFullName() != null
-                                            && doctor.getFullName().toLowerCase(Locale.ROOT)
+                                    || (doctorDisplayNames.get(doctor.getId()) != null
+                                            && doctorDisplayNames.get(doctor.getId()).toLowerCase(Locale.ROOT)
                                                     .contains(normalizedDoctorName)));
                 })
                 .toList();
@@ -123,8 +147,13 @@ public class AppointmentServiceImpl implements AppointmentService {
         DoctorWorkSlot currentSlot = doctorWorkSlotRepository.findById(request.getDoctorWorkSlotId())
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor work slot was not found."));
         User doctor = userService.getActiveUserById(currentSlot.getDoctorId());
-        if (!doctor.getRoles().contains(UserRole.DOCTOR)) {
+        if (doctor.getRole() != UserRole.DOCTOR) {
             throw new ConflictException("The selected work slot does not belong to an active doctor.");
+        }
+        WorkSlot definition = workSlotRepository.findById(currentSlot.getSlotId())
+                .orElseThrow(() -> new ResourceNotFoundException("Work slot definition was not found."));
+        if (WorkSlotTimeUtils.isNight(definition)) {
+            throw new ForbiddenException("Night-shift appointments can only be created by staff.");
         }
         validateBookableSlot(currentSlot);
         boolean alreadyBookedThatDay = appointmentRepository.findAllForPatient(patient.getId()).stream()
@@ -220,7 +249,11 @@ public class AppointmentServiceImpl implements AppointmentService {
             slot.setStatus(DoctorWorkSlotStatus.AVAILABLE);
         }
         doctorWorkSlotRepository.save(slot);
-        return appointmentRepository.save(appointment);
+        Appointment saved = appointmentRepository.save(appointment);
+        if (request.getDecision() == ScheduleDecision.APPROVE) {
+            notificationService.createAppointmentApproved(resolvePatientId(saved), startInstant(slot));
+        }
+        return saved;
     }
 
     @Override
@@ -303,7 +336,11 @@ public class AppointmentServiceImpl implements AppointmentService {
         appointment.setRescheduledAt(now);
         appointment.setRescheduleReason(request.getReason().trim());
         appointment.setUpdatedAt(now);
-        return appointmentRepository.save(appointment);
+        Appointment saved = appointmentRepository.save(appointment);
+        notificationService.createAppointmentRescheduled(
+                resolvePatientId(saved),
+                startInstant(claimedReplacement));
+        return saved;
     }
 
     @Override
@@ -311,7 +348,7 @@ public class AppointmentServiceImpl implements AppointmentService {
     public Appointment createByStaff(String staffId, StaffCreateAppointmentRequest request) {
         requireStaff(staffId);
         User patient = userService.getActiveUserById(request.getPatientId().trim());
-        if (!patient.getRoles().contains(UserRole.PATIENT)) {
+        if (patient.getRole() != UserRole.PATIENT) {
             throw new BadRequestException("The selected user is not a patient.");
         }
         DoctorWorkSlot target = requireStaffBookableSlot(request.getDoctorWorkSlotId());
@@ -358,7 +395,14 @@ public class AppointmentServiceImpl implements AppointmentService {
         slot.setUpdatedAt(cancelledAt);
 
         doctorWorkSlotRepository.save(slot);
-        return appointmentRepository.save(appointment);
+        Appointment saved = appointmentRepository.save(appointment);
+        notificationService.createAppointmentCancelled(resolvePatientId(saved), startInstant(slot));
+        return saved;
+    }
+
+    private String resolvePatientId(Appointment appointment) {
+        String patientId = trimToNull(appointment.getPatientId());
+        return patientId != null ? patientId : appointment.getPatientUserId();
     }
 
     private DoctorWorkSlot requireStaffBookableSlot(String doctorWorkSlotId) {
@@ -371,7 +415,7 @@ public class AppointmentServiceImpl implements AppointmentService {
             throw new ConflictException("The selected doctor work slot has already started.");
         }
         User doctor = userService.getActiveUserById(slot.getDoctorId());
-        if (!doctor.getRoles().contains(UserRole.DOCTOR)) {
+        if (doctor.getRole() != UserRole.DOCTOR) {
             throw new ConflictException("The selected work slot does not belong to an active doctor.");
         }
         return slot;
@@ -413,9 +457,10 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     @Override
     public Map<String, String> getDoctorNames(List<DoctorWorkSlot> slots) {
-        return userRepository.findAllById(slots.stream().map(DoctorWorkSlot::getDoctorId).distinct().toList())
+        return userRepository.findAllById(slots.stream().map(DoctorWorkSlot::getDoctorId)
+                        .filter(id -> id != null && !id.isBlank()).distinct().toList())
                 .stream()
-                .collect(Collectors.toMap(User::getId, User::getFullName));
+                .collect(Collectors.toMap(User::getId, this::doctorDisplayName));
     }
 
     @Override
@@ -428,15 +473,17 @@ public class AppointmentServiceImpl implements AppointmentService {
         return slots.stream()
                 .map(slot -> {
                     WorkSlot definition = definitions.get(slot.getSlotId());
-                    if (definition == null) {
-                        throw new ResourceNotFoundException("Work slot definition was not found.");
-                    }
+                    if (slot.getWorkDate() == null
+                            || definition == null
+                            || definition.getStartTime() == null
+                            || definition.getEndTime() == null) return null;
                     return AvailableAppointmentSlotResponse.from(
                             slot,
                             doctorNames.get(slot.getDoctorId()),
                             toInstant(slot.getWorkDate(), definition.getStartTime()),
                             toInstant(slot.getWorkDate(), definition.getEndTime()));
                 })
+                .filter(java.util.Objects::nonNull)
                 .toList();
     }
 
@@ -518,12 +565,12 @@ public class AppointmentServiceImpl implements AppointmentService {
     }
 
     private Instant toInstant(LocalDate workDate, java.time.LocalTime time) {
-        return workDate.atTime(time).atZone(HOSPITAL_ZONE).toInstant();
+        return WorkSlotTimeUtils.resolveStart(workDate, time).atZone(HOSPITAL_ZONE).toInstant();
     }
 
     private User requirePatient(String userId) {
         User patient = userService.getActiveUserById(userId);
-        if (!patient.getRoles().contains(UserRole.PATIENT)) {
+        if (patient.getRole() != UserRole.PATIENT) {
             throw new ForbiddenException("Only patients can use patient appointment operations.");
         }
         return patient;
@@ -531,12 +578,17 @@ public class AppointmentServiceImpl implements AppointmentService {
 
     private void requireStaff(String userId) {
         User staff = userService.getActiveUserById(userId);
-        if (!staff.getRoles().contains(UserRole.STAFF)) {
+        if (staff.getRole() != UserRole.STAFF) {
             throw new ForbiddenException("Only staff can review appointments.");
         }
     }
 
     private String trimToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private String doctorDisplayName(User doctor) {
+        String fullName = UserResponse.from(doctor, patientDataProtectionService).getFullName();
+        return fullName == null || fullName.isBlank() ? "Unknown doctor" : fullName;
     }
 }

@@ -4,23 +4,22 @@ import java.util.Optional;
 import java.util.List;
 
 import org.springframework.data.mongodb.repository.MongoRepository;
-import org.springframework.data.mongodb.repository.Query;
-
+import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.User;
 
 public interface UserRepository extends MongoRepository<User, String> {
     java.util.Optional<User> findByRefreshTokenHash(String refreshTokenHash);
-    Optional<User> findByPhoneLookup(String phoneLookup);
+    Optional<User> findByPhoneLookupAndRoleId(String phoneLookup, String roleId);
 
-    Optional<User> findByPhoneNumber(String phoneNumber);
+    Optional<User> findByPhoneNumberAndRoleId(String phoneNumber, String roleId);
 
-    boolean existsByPhoneLookup(String phoneLookup);
+    boolean existsByPhoneLookupAndRoleId(String phoneLookup, String roleId);
+
+    List<User> findAllByPhoneLookup(String phoneLookup);
+
+    List<User> findAllByCitizenIdentificationLookup(String citizenIdentificationLookup);
 
     boolean existsByPatientIdLookup(String patientIdLookup);
 
-    @Query("{'status': 'ACTIVE', '$or': [{'roles': 'DOCTOR'}, {'role': 'DOCTOR'}]}")
-    List<User> findActiveDoctors();
-
-    @Query("{'status': 'ACTIVE', '$or': [{'roles': 'PATIENT'}, {'role': 'PATIENT'}]}")
-    List<User> findActivePatients();
+    List<User> findAllByStatusAndRoleId(AccountStatus status, String roleId);
 }

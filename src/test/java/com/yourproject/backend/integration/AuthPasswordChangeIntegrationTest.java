@@ -41,10 +41,10 @@ class AuthPasswordChangeIntegrationTest extends MongoIntegrationTestBase {
         mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + firstLogin.accessToken()))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"OldPassword1!\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"OldPassword1!\"}"))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"0912345678\",\"password\":\"NewPassword2!\"}"))
+                        .content("{\"phoneNumber\":\"0912345678\",\"role\":\"DOCTOR\",\"password\":\"NewPassword2!\"}"))
                 .andExpect(status().isOk());
     }
 
@@ -211,7 +211,7 @@ class AuthPasswordChangeIntegrationTest extends MongoIntegrationTestBase {
 
     private TokenPair login(String phoneNumber, String password) throws Exception {
         MvcResult result = mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"phoneNumber\":\"" + phoneNumber + "\",\"password\":\"" + password + "\"}"))
+                        .content("{\"phoneNumber\":\"" + phoneNumber + "\",\"role\":\"DOCTOR\",\"password\":\"" + password + "\"}"))
                 .andExpect(status().isOk())
                 .andReturn();
         return new TokenPair(

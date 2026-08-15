@@ -52,7 +52,7 @@ public class PatientDataProtectionService {
     }
 
     public void encryptPatientFields(User user) {
-        if (!user.getRoles().contains(UserRole.PATIENT)) return;
+        if (user.getRole() != UserRole.PATIENT) return;
         user.setPatientPhoneEncrypted(encrypt(user.getPhoneNumber()));
         user.setPatientFullNameEncrypted(encrypt(user.getFullName()));
         user.setPatientGenderEncrypted(encrypt(user.getGender()));
@@ -72,7 +72,7 @@ public class PatientDataProtectionService {
     }
 
     public void decryptPatientFields(User user) {
-        if (!user.getRoles().contains(UserRole.PATIENT) || user.getEncryptionVersion() == null) return;
+        if (user.getRole() != UserRole.PATIENT || user.getEncryptionVersion() == null) return;
         user.setPhoneNumber(decrypt(user.getPatientPhoneEncrypted()));
         user.setFullName(decrypt(user.getPatientFullNameEncrypted()));
         user.setGender(decrypt(user.getPatientGenderEncrypted()));

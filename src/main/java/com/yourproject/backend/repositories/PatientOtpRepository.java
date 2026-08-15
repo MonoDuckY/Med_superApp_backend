@@ -7,5 +7,7 @@ import com.yourproject.backend.models.OtpPurpose;
 
 public interface PatientOtpRepository extends MongoRepository<PatientOtp, String> {
     Optional<PatientOtp> findTopByPhoneLookupAndPurposeOrderByCreatedAtDesc(String phoneLookup, OtpPurpose purpose);
+    Optional<PatientOtp> findByResetTokenHashAndPurpose(String resetTokenHash, OtpPurpose purpose);
+    java.util.List<PatientOtp> findAllByPhoneLookupAndPurpose(String phoneLookup, OtpPurpose purpose);
     java.util.List<PatientOtp> findAllByPhoneLookupAndPurposeAndConsumedAtIsNull(String phoneLookup, OtpPurpose purpose);
 }

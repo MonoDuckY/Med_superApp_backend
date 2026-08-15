@@ -19,7 +19,7 @@ import com.yourproject.backend.dtos.requests.AppointmentDecisionRequest;
 import com.yourproject.backend.dtos.requests.CreateClinicRoomRequest;
 import com.yourproject.backend.dtos.requests.CancelAppointmentRequest;
 import com.yourproject.backend.dtos.requests.ScheduleDecisionRequest;
-import com.yourproject.backend.dtos.requests.SubmitWorkScheduleRequest;
+import com.yourproject.backend.dtos.requests.ModifyApprovedWorkScheduleRequest;
 import com.yourproject.backend.dtos.requests.BlockWorkSlotRequest;
 import com.yourproject.backend.dtos.requests.RescheduleAppointmentRequest;
 import com.yourproject.backend.dtos.requests.StaffCreateAppointmentRequest;
@@ -97,7 +97,7 @@ public class StaffSchedulingController {
     public ResponseEntity<ApiResponse<WorkScheduleSubmissionResponse>> modifyApprovedWorkSchedule(
             Authentication authentication,
             @PathVariable String submissionId,
-            @Valid @RequestBody SubmitWorkScheduleRequest request) {
+            @Valid @RequestBody ModifyApprovedWorkScheduleRequest request) {
         WorkScheduleSubmissionResponse response = workScheduleService.toResponse(
                 workScheduleService.modifyApprovedSubmission(
                         authentication.getName(),
@@ -113,8 +113,9 @@ public class StaffSchedulingController {
             Authentication authentication,
             @PathVariable String doctorWorkSlotId,
             @Valid @RequestBody BlockWorkSlotRequest request) {
-        DoctorWorkSlotResponse response = DoctorWorkSlotResponse.from(
-                workScheduleService.blockSlot(authentication.getName(), doctorWorkSlotId, request));
+        DoctorWorkSlot blockedSlot = workScheduleService.blockSlot(
+                authentication.getName(), doctorWorkSlotId, request);
+        DoctorWorkSlotResponse response = workScheduleService.toResponse(List.of(blockedSlot)).getSlots().get(0);
         return ResponseEntity.ok(ApiResponse.success("Doctor work slot blocked successfully.", response));
     }
 

@@ -16,9 +16,11 @@ import com.yourproject.backend.dtos.requests.RequestPatientOtpRequest;
 import com.yourproject.backend.dtos.requests.VerifyPatientOtpRequest;
 import com.yourproject.backend.dtos.requests.ForgotPasswordRequest;
 import com.yourproject.backend.dtos.requests.ResetPasswordRequest;
+import com.yourproject.backend.dtos.requests.VerifyPasswordResetOtpRequest;
 import com.yourproject.backend.dtos.responses.ApiResponse;
 import com.yourproject.backend.dtos.responses.AuthResponse;
 import com.yourproject.backend.dtos.responses.UserResponse;
+import com.yourproject.backend.dtos.responses.PasswordResetTokenResponse;
 import com.yourproject.backend.services.AuthService;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.services.PatientDataProtectionService;
@@ -45,6 +47,14 @@ public class AuthController {
     public ResponseEntity<ApiResponse<Void>> requestPasswordReset(@Valid @RequestBody ForgotPasswordRequest request) {
         authService.requestPasswordReset(request);
         return ResponseEntity.ok(ApiResponse.success("If the account is eligible, a password reset OTP has been sent.", null));
+    }
+
+    @PostMapping("/forgot-password/verify")
+    public ResponseEntity<ApiResponse<PasswordResetTokenResponse>> verifyPasswordResetOtp(
+            @Valid @RequestBody VerifyPasswordResetOtpRequest request) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Password reset OTP verified successfully.",
+                authService.verifyPasswordResetOtp(request)));
     }
 
     @PostMapping("/forgot-password/reset")

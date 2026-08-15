@@ -1,8 +1,10 @@
 # Med Super App Backend — Hướng dẫn tích hợp Frontend
 
+> Đặc tả kỹ thuật của các luồng backend nằm tại [`docs/specs/README.md`](docs/specs/README.md). Mọi thay đổi API, business rule, database hoặc security phải cập nhật spec liên quan và [`CHANGELOG.md`](CHANGELOG.md) trong cùng pull request.
+
 Tài liệu này dành cho Web Admin, Web Doctor và Mobile App. Hiện backend đã triển khai nhóm API **xác thực** và **quản lý tài khoản của Admin**.
 
-> Các API khám bệnh, lịch hẹn, đơn thuốc, AI và ảnh y tế chưa được triển khai; không được tự suy đoán endpoint cho các chức năng đó.
+> Backend hiện có Auth, Admin User, Doctor/Staff scheduling, Patient appointment, Doctor examination, prescription, medicine schedule và Android SMS Gateway. Xem spec để phân biệt chức năng hiện tại với thay đổi ERD đang được lên kế hoạch.
 
 ##-3.6.vẻy importance
 -Cách chạy: clone về
@@ -113,13 +115,33 @@ Khuyến nghị lưu token:
 | `POST` | `/api/auth/logout` | Authenticated | Thu hồi refresh token hiện tại. |
 | `POST` | `/api/auth/change-password` | Authenticated | Đổi password hiện tại. |
 | `POST` | `/api/auth/forgot-password/request` | Public | Gửi OTP đặt lại mật khẩu theo số điện thoại. |
-| `POST` | `/api/auth/forgot-password/reset` | Public | Xác minh OTP và đặt mật khẩu mới. |
+| `POST` | `/api/auth/forgot-password/verify` | Public | Xác minh OTP và nhận reset token dùng một lần. |
+| `POST` | `/api/auth/forgot-password/reset` | Public | Đặt mật khẩu mới bằng reset token. |
 | `GET` | `/api/auth/me` | Authenticated | Lấy profile account đang đăng nhập. |
-| `GET` | `/api/staff/patients/search?name={name}&n={count}` | `STAFF` | Tìm tối đa `n` bệnh nhân có tên khớp gần nhất. |
-| `POST` | `/api/admin/users` | `ADMIN` | Tạo account. |
-| `GET` | `/api/admin/users` | `ADMIN` | Lấy danh sách account. |
+| `GET` | `/api/staff/patients/search?name={name}&phoneNumber={phone}&citizenIdentificationCode={cccd}&n={count}` | `STAFF` | Tìm Patient bằng tên, số điện thoại hoặc CCCD. |
+| `POST` | `/api/staff/patients` | `STAFF` | Tạo account Patient active; request JSON không có `role` hoặc `password`, backend tự gán `PATIENT`. |
+| `GET` | `/api/patient/doctors` | `PATIENT` | Lấy danh sách Doctor active. |
+| `GET` | `/api/staff/doctors` | `STAFF` | Lấy danh sách Doctor active cho Staff. |
+| `GET` | `/api/doctor/appointments` | `DOCTOR` | Lấy các appointment thuộc Doctor hiện tại. |
+| `GET` | `/api/doctor/work-schedules/all` | `DOCTOR` | Lấy lịch làm việc của mọi Doctor; hỗ trợ `from`, `to`, `status`. |
+| `GET` | `/api/doctor/appointments/{appointmentId}` | `DOCTOR` | Lấy hồ sơ khám, MedicalRecord và prescriptions. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/start` | `DOCTOR` | Chuyển appointment sang `IN_PROGRESS`. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/clinical-information` | `DOCTOR` | Cập nhật sức khỏe tổng quát và MedicalRecord. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/diagnosis` | `DOCTOR` | Cập nhật diagnosis trong MedicalRecord. |
+| `POST` | `/api/doctor/appointments/{appointmentId}/prescriptions` | `DOCTOR` | Tạo prescription cùng medicine schedules. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/prescription` | `DOCTOR` | Cập nhật prescription duy nhất của appointment và thay thế schedules; không cần prescription ID. |
+| `PATCH` | `/api/doctor/appointments/{appointmentId}/complete` | `DOCTOR` | Hoàn thành examination. |
+| `GET` | `/api/patient/medicine-schedules` | `PATIENT` | Lấy lịch uống thuốc của Patient. |
+| `PATCH` | `/api/patient/medicine-schedules/{scheduleId}/time` | `PATIENT` | Đổi thời gian của schedule `NOT_YET`. |
+| `PATCH` | `/api/patient/medicine-schedules/{scheduleId}/take` | `PATIENT` | Đánh dấu schedule là `TAKEN`. |
+| `GET` | `/api/patient/notifications` | `PATIENT` | Lấy notification mới nhất của Patient. |
+| `GET` | `/api/patient/notifications/unread-count` | `PATIENT` | Đếm notification chưa đọc. |
+| `PATCH` | `/api/patient/notifications/{notificationId}/read` | `PATIENT` | Đánh dấu một notification đã đọc. |
+| `PATCH` | `/api/patient/notifications/read-all` | `PATIENT` | Đánh dấu tất cả notification đã đọc. |
+| `POST` | `/api/admin/users` | `ADMIN` | Tạo account bằng multipart parts `user` và `certificate`; Doctor bắt buộc có certificate JPEG/PNG/WEBP/PDF. |
+| `GET` | `/api/admin/users` | `ADMIN` | Lấy hoặc lọc account theo phone, CCCD và role. |
 | `GET` | `/api/admin/users/{userId}` | `ADMIN` | Lấy chi tiết một account. |
-| `PATCH` | `/api/admin/users/{userId}` | `ADMIN` | Cập nhật các field được gửi lên. |
+| `PATCH` | `/api/admin/users/{userId}` | `ADMIN` | Cập nhật bằng multipart parts `user` và `certificate`; file chỉ dành cho Doctor. |
 | `DELETE` | `/api/admin/users/{userId}` | `ADMIN` | Khóa account, không xóa cứng dữ liệu. |
 
 ---
@@ -264,14 +286,27 @@ Response luôn dùng thông báo chung để không làm lộ số điện tho�
 Xác minh OTP và đặt mật khẩu mới:
 
 ```http
-POST /api/auth/forgot-password/reset
+POST /api/auth/forgot-password/verify
 Content-Type: application/json
 ```
 
 ```json
 {
   "phoneNumber": "0912345678",
-  "code": "123456",
+  "code": "123456"
+}
+```
+
+Nếu OTP hợp lệ, response `data` trả về `resetToken` và `expiresInSeconds`. Frontend dùng reset token để mở màn hình nhập mật khẩu mới.
+
+```http
+POST /api/auth/forgot-password/reset
+Content-Type: application/json
+```
+
+```json
+{
+  "resetToken": "token-returned-by-verify-api",
   "newPassword": "NewPassword2!",
   "confirmPassword": "NewPassword2!"
 }
@@ -312,7 +347,7 @@ Ví dụ tạo Doctor:
   "role": "DOCTOR",
   "fullName": "Dr Nguyen",
   "phoneNumber": "0912345678",
-  "certificate": "Medical practice certificate"
+  "certificateObjectKey": "doctor-certificates/<doctorId>/<uuid>.jpg"
 }
 ```
 
@@ -334,14 +369,14 @@ Response `201`: `data` là `UserResponse`; backend không trả `password` hoặ
 
 Quy tắc quan trọng:
 
-- `phoneNumber` là bắt buộc và unique cho mọi role; backend lưu chuẩn quốc tế `+84xxxxxxxxx`.
+- `phoneNumber` là bắt buộc và được lưu theo chuẩn quốc tế `+84xxxxxxxxx`. Cùng một số có thể dùng cho các role khác nhau, nhưng cặp `phoneNumber + role` phải unique.
 - Nhập `0912345678` được chuyển thành `+84912345678`; nhập `+84912345678` giữ nguyên.
 - `PATIENT`: bắt buộc có `patientId`, `fullName`, `gender`, `dateOfBirth`, `phoneNumber`.
 - `patientId` là unique.
 - Ngày sinh, nếu được gửi, không được ở tương lai.
 - Account mới mặc định có `status: "ACTIVE"`.
 
-Các field profile có thể gửi khi tạo hoặc cập nhật account: `fullName`, `gender`, `dateOfBirth`, `address`, `citizenIdentificationCode`, `healthInsuranceCode`, `certificate`. Chỉ `phoneNumber`, `password` và `role` bắt buộc khi tạo mọi account; riêng `PATIENT` có thêm các field bắt buộc nêu trên.
+Các field profile có thể gửi khi tạo hoặc cập nhật account: `fullName`, `gender`, `dateOfBirth`, `address`, `citizenIdentificationCode`, `healthInsuranceCode`. Certificate của Doctor không nhận trong JSON create/update; Admin upload file JPEG, PNG, WEBP hoặc PDF qua endpoint multipart. Chỉ `phoneNumber`, `password` và `role` bắt buộc khi tạo mọi account; riêng `PATIENT` có thêm các field bắt buộc nêu trên.
 
 > **Chuyển từ phiên bản username cũ:** khi backend khởi động, nó tự gỡ index MongoDB `username_1` cũ để account mới không còn bị ràng buộc bởi username. Dữ liệu account cũ không có `phoneNumber` vẫn tồn tại, nhưng không thể đăng nhập cho đến khi được cập nhật một số điện thoại hợp lệ. Tạo bootstrap Admin bằng `BOOTSTRAP_ADMIN_PHONE_NUMBER` nếu cần một Admin mới.
 
@@ -426,7 +461,7 @@ Response `200` chỉ đặt `status` thành `DISABLED`; không hard-delete docum
 | `address` | string/null | Địa chỉ. |
 | `citizenIdentificationCode` | string/null | Mã định danh công dân. |
 | `healthInsuranceCode` | string/null | Mã bảo hiểm y tế. |
-| `certificate` | string/null | Chứng chỉ chuyên môn. |
+| `hasCertificate` | boolean | Doctor đã có file chứng chỉ trên private S3 hay chưa. |
 | `createdAt` | ISO-8601 UTC | Thời điểm tạo. |
 | `updatedAt` | ISO-8601 UTC | Thời điểm cập nhật cuối. |
 | `lastLoginAt` | ISO-8601 UTC/null | Lần đăng nhập thành công gần nhất. |
@@ -480,7 +515,16 @@ JWT_SECRET=<chuoi-duoc-tao-o-buoc-10.2>
 BOOTSTRAP_ADMIN_PHONE_NUMBER=0912345678
 BOOTSTRAP_ADMIN_PASSWORD=<mat-khau-admin-bootstrap>
 BOOTSTRAP_ADMIN_FULL_NAME=System Administrator
+AWS_REGION=ap-southeast-1
+AWS_S3_BUCKET_NAME=hms-private-files
+AWS_S3_CERTIFICATE_PREFIX=doctor-certificates
+AWS_S3_MEDICAL_IMAGE_PREFIX=medical-images
+AWS_S3_PRESIGNED_URL_MINUTES=10
 ```
+
+`AWS_S3_MEDICAL_IMAGE_PREFIX` is optional. When omitted, the backend uses `medical-images`. Doctor certificates and MedicalRecord images share the same private bucket, IAM role and presigned URL configuration, but use separate prefixes.
+
+Trên EC2, AWS SDK tự dùng IAM instance role `BackendEc2Role`; không thêm access key/secret key vào file môi trường. Khi chạy local, developer phải có AWS credentials hợp lệ trong AWS CLI/default credential chain mới gọi được S3.
 
 Nếu password của Database User có ký tự như `@`, `:`, `/`, `?`, `#` hoặc `&`, phải URL-encode password trước khi đặt vào `MONGODB_URI`.
 
@@ -643,7 +687,7 @@ Backend tự tạo 16 work slot, mỗi slot 30 phút:
 
 | Method | Endpoint | Mô tả |
 |---|---|---|
-| `GET` | `/api/doctor/work-schedules/options` | Lấy 16 slot chuẩn và danh sách phòng đang active. |
+| `GET` | `/api/doctor/work-schedules/options` | Lấy danh sách slot để Doctor chọn ca. |
 | `GET` | `/api/doctor/work-schedules?from=YYYY-MM-DD&to=YYYY-MM-DD` | Xem lịch Doctor hiện tại. |
 | `POST` | `/api/doctor/work-schedules` | Đăng ký ca làm việc và gửi Staff duyệt. |
 | `DELETE` | `/api/doctor/work-schedules/{submissionId}` | Hủy submission còn `PENDING_APPROVAL`. |
@@ -654,7 +698,6 @@ Ví dụ đăng ký ca sáng:
 {
   "workDate": "2026-08-10",
   "session": "MORNING",
-  "roomId": "<clinicRoomId>",
   "note": "Morning shift"
 }
 ```
@@ -677,7 +720,7 @@ Password mới phải đạt password policy. Backend chỉ lưu BCrypt hash và
 | `GET` | `/api/staff/scheduling/clinic-rooms` | Lấy phòng đang active. |
 | `GET` | `/api/staff/scheduling/work-schedules/pending` | Lấy submission Doctor đang chờ duyệt. |
 | `GET` | `/api/staff/scheduling/work-schedules?status=APPROVED` | Lấy lịch làm việc theo trạng thái; bỏ `status` để lấy tất cả. |
-| `PATCH` | `/api/staff/scheduling/work-schedules/{submissionId}/decision` | `APPROVE` hoặc `REJECT` lịch Doctor. |
+| `PATCH` | `/api/staff/scheduling/work-schedules/{submissionId}/decision` | `APPROVE` kèm `roomId`, hoặc `REJECT` kèm lý do. |
 | `GET` | `/api/staff/scheduling/appointments/pending` | Lấy Appointment Patient đang chờ duyệt lần hai. |
 | `GET` | `/api/staff/scheduling/appointments?status=CONFIRMED` | Lấy appointment theo trạng thái; bỏ `status` để lấy tất cả. |
 | `PATCH` | `/api/staff/scheduling/appointments/{appointmentId}/cancel` | Hủy appointment đã xác nhận và giải phóng slot; yêu cầu `cancellationReason`. |
@@ -690,6 +733,15 @@ Khi reject phải gửi `rejectionReason`:
 {
   "decision": "REJECT",
   "rejectionReason": "Clinic room is unavailable"
+}
+```
+
+Khi approve, Staff bắt buộc chọn phòng đang active:
+
+```json
+{
+  "decision": "APPROVE",
+  "roomId": "<clinicRoomId>"
 }
 ```
 

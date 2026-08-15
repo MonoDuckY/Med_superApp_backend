@@ -2,7 +2,6 @@ package com.yourproject.backend.security;
 
 import java.io.IOException;
 import java.util.Date;
-import java.util.List;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Base64;
@@ -54,17 +53,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             if (user != null
                     && user.getStatus() == AccountStatus.ACTIVE
-                    && user.getRoles() != null && !user.getRoles().isEmpty()
+                    && user.getRole() != null
                     && hashToken(token).equals(user.getAccessTokenHash())
                     && isIssuedAfterPasswordChange(claims, user)
                     && SecurityContextHolder.getContext().getAuthentication() == null) {
-                List<SimpleGrantedAuthority> authorities = user.getRoles().stream()
-                        .map(role -> new SimpleGrantedAuthority("ROLE_" + role.name()))
-                        .toList();
+                String tokenRole = claims.get("role", String.class);
+                if (tokenRole == null || !tokenRole.equals(user.getRole().name())) {
+                    SecurityContextHolder.clearContext();
+                    filterChain.doFilter(request, response);
+                    return;
+                }
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                         user.getId(),
                         null,
-                        authorities);
+                        java.util.List.of(new SimpleGrantedAuthority("ROLE_" + tokenRole)));
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }

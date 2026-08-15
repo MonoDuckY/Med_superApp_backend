@@ -24,6 +24,13 @@ import com.yourproject.backend.repositories.DoctorWorkSlotRepository;
 import com.yourproject.backend.repositories.SmsGatewayDeviceRepository;
 import com.yourproject.backend.repositories.SmsGatewayJobRepository;
 import com.yourproject.backend.repositories.UserRepository;
+import com.yourproject.backend.repositories.MedicalRecordRepository;
+import com.yourproject.backend.repositories.PrescriptionRepository;
+import com.yourproject.backend.repositories.MedicineScheduleRepository;
+import com.yourproject.backend.repositories.NotificationRepository;
+import com.yourproject.backend.repositories.MealRepository;
+import com.yourproject.backend.repositories.WorkoutRepository;
+import com.yourproject.backend.repositories.DishRepository;
 import com.yourproject.backend.services.FcmGatewayService;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.utils.JwtUtils;
@@ -41,6 +48,27 @@ public abstract class MongoIntegrationTestBase {
 
     @Autowired
     protected UserRepository userRepository;
+
+    @Autowired
+    protected MedicalRecordRepository medicalRecordRepository;
+
+    @Autowired
+    protected PrescriptionRepository prescriptionRepository;
+
+    @Autowired
+    protected MedicineScheduleRepository medicineScheduleRepository;
+
+    @Autowired
+    protected NotificationRepository notificationRepository;
+
+    @Autowired
+    protected MealRepository mealRepository;
+
+    @Autowired
+    protected WorkoutRepository workoutRepository;
+
+    @Autowired
+    protected DishRepository dishRepository;
 
     @Autowired
     protected PasswordEncoder passwordEncoder;
@@ -98,7 +126,14 @@ public abstract class MongoIntegrationTestBase {
 
     @BeforeEach
     void clearDatabase() {
+        notificationRepository.deleteAll();
         appointmentRepository.deleteAll();
+        dishRepository.deleteAll();
+        workoutRepository.deleteAll();
+        mealRepository.deleteAll();
+        medicineScheduleRepository.deleteAll();
+        prescriptionRepository.deleteAll();
+        medicalRecordRepository.deleteAll();
         doctorWorkSlotRepository.deleteAll();
         clinicRoomRepository.deleteAll();
         patientOtpRepository.deleteAll();
@@ -111,12 +146,12 @@ public abstract class MongoIntegrationTestBase {
         Instant now = Instant.now();
         return userRepository.save(User.builder()
                 .fullName("Dr Integration")
-                .role(UserRole.DOCTOR)
+                .roleId(UserRole.DOCTOR.getId())
                 .status(AccountStatus.ACTIVE)
                 .phoneNumber(normalizedPhone)
                 .phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
                 .passwordHash(passwordEncoder.encode(password))
-                .certificate("Practice certificate")
+                .certificateObjectKey("doctor-certificates/doctor/certificate.jpg")
                 .createdAt(now)
                 .updatedAt(now)
                 .passwordChangedAt(now.minusSeconds(10))
@@ -127,7 +162,7 @@ public abstract class MongoIntegrationTestBase {
         Instant now = Instant.now();
         return userRepository.save(User.builder()
                 .fullName("Admin Integration")
-                .role(UserRole.ADMIN)
+                .roleId(UserRole.ADMIN.getId())
                 .status(AccountStatus.ACTIVE)
                 .phoneNumber(normalizedPhone)
                 .phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
@@ -142,7 +177,7 @@ public abstract class MongoIntegrationTestBase {
         Instant now = Instant.now();
         return userRepository.save(User.builder()
                 .fullName("Staff Integration")
-                .role(UserRole.STAFF)
+                .roleId(UserRole.STAFF.getId())
                 .status(AccountStatus.ACTIVE)
                 .phoneNumber(normalizedPhone)
                 .phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
@@ -161,7 +196,7 @@ public abstract class MongoIntegrationTestBase {
         Instant now = Instant.now();
         User patient = User.builder()
                 .fullName("Patient Integration")
-                .role(UserRole.PATIENT)
+                .roleId(UserRole.PATIENT.getId())
                 .status(AccountStatus.ACTIVE)
                 .gender("NONE")
                 .dateOfBirth(java.time.LocalDate.of(1995, 1, 1))

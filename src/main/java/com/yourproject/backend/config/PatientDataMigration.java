@@ -44,7 +44,7 @@ public class PatientDataMigration implements ApplicationRunner {
         if (user.getPhoneNumber() != null && user.getPhoneLookup() == null) {
             user.setPhoneLookup(patientDataProtectionService.phoneLookup(PhoneNumberNormalizer.normalize(user.getPhoneNumber())));
         }
-        if (user.getRoles().contains(UserRole.PATIENT) && user.getEncryptionVersion() == null) {
+        if (user.getRole() == UserRole.PATIENT && user.getEncryptionVersion() == null) {
             patientDataProtectionService.encryptPatientFields(user);
         }
         userRepository.save(user);

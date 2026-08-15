@@ -8,4 +8,6 @@ import lombok.Value;
 public class StaffPatientSearchResponse {
     String id;
     String fullName;
+    String phoneNumber;
+    String citizenIdentificationCode;
 }

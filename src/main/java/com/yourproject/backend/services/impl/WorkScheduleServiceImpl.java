@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.yourproject.backend.dtos.requests.ScheduleDecisionRequest;
 import com.yourproject.backend.dtos.requests.SubmitWorkScheduleRequest;
+import com.yourproject.backend.dtos.requests.ModifyApprovedWorkScheduleRequest;
 import com.yourproject.backend.dtos.requests.BlockWorkSlotRequest;
 import com.yourproject.backend.dtos.responses.WorkScheduleSubmissionResponse;
 import com.yourproject.backend.exceptions.BadRequestException;
@@ -40,6 +41,7 @@ import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.services.WorkScheduleService;
+import com.yourproject.backend.utils.WorkSlotTimeUtils;
 
 import lombok.RequiredArgsConstructor;
 
@@ -60,13 +62,8 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     @Transactional
     public List<DoctorWorkSlot> submit(String doctorId, SubmitWorkScheduleRequest request) {
         User doctor = requireRole(doctorId, UserRole.DOCTOR, "Only doctors can submit work schedules.");
-        if (request.getWorkDate().isBefore(LocalDate.now(HOSPITAL_ZONE))) {
-            throw new BadRequestException("Work date cannot be in the past.");
-        }
+        validateDoctorRegistrationDate(request.getWorkDate());
 
-        ClinicRoom room = clinicRoomRepository.findById(request.getRoomId().trim())
-                .filter(ClinicRoom::isActive)
-                .orElseThrow(() -> new ResourceNotFoundException("Active clinic room was not found."));
         List<WorkSlot> selectedSlots = getSlots(request.getSession());
         if (selectedSlots.isEmpty()) {
             throw new BadRequestException("No active work slots are available for the selected session.");
@@ -85,8 +82,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                 .filter(existing -> existing.getStatus() != DoctorWorkSlotStatus.REJECTED
                         && existing.getStatus() != DoctorWorkSlotStatus.CANCELLED
                         && existing.getStatus() != DoctorWorkSlotStatus.CLOSED)
-                .filter(existing -> existing.getDoctorId().equals(doctor.getId())
-                        || existing.getRoomId().equals(room.getId()))
+                .filter(existing -> existing.getDoctorId().equals(doctor.getId()))
                 .toList();
         if (!conflicts.isEmpty()) {
             String names = conflicts.stream().map(DoctorWorkSlot::getSlotId).distinct().sorted()
@@ -103,11 +99,11 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                     .doctorId(doctor.getId())
                     .workDate(request.getWorkDate())
                     .slotId(slot.getId())
-                    .roomId(room.getId())
+                    .roomId(null)
                     .status(DoctorWorkSlotStatus.PENDING)
                     .note(note)
                     .submittedAt(now)
-                    .conflictActive(true)
+                    .conflictActive(false)
                     .updatedAt(now)
                     .build());
         }
@@ -126,6 +122,25 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
                 doctorId,
                 effectiveFrom,
                 effectiveTo);
+    }
+
+    @Override
+    public List<DoctorWorkSlot> getAllDoctorSchedules(
+            String requestingDoctorId,
+            LocalDate from,
+            LocalDate to,
+            DoctorWorkSlotStatus status) {
+        requireRole(requestingDoctorId, UserRole.DOCTOR, "Only doctors can view all doctor work schedules.");
+        LocalDate effectiveFrom = from == null ? LocalDate.now(HOSPITAL_ZONE) : from;
+        LocalDate effectiveTo = to == null ? effectiveFrom.plusDays(30) : to;
+        if (effectiveTo.isBefore(effectiveFrom)) {
+            throw new BadRequestException("The end date cannot be before the start date.");
+        }
+        return status == null
+                ? doctorWorkSlotRepository.findAllByWorkDateBetweenOrderByWorkDateAscSlotIdAsc(
+                        effectiveFrom, effectiveTo)
+                : doctorWorkSlotRepository.findAllByWorkDateBetweenAndStatusOrderByWorkDateAscSlotIdAsc(
+                        effectiveFrom, effectiveTo, status);
     }
 
     @Override
@@ -158,9 +173,19 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         if (request.getDecision() == ScheduleDecision.REJECT && rejectionReason == null) {
             throw new BadRequestException("Rejection reason is required when rejecting a work schedule.");
         }
-        if (request.getDecision() == ScheduleDecision.APPROVE
-                && slots.stream().anyMatch(slot -> !startInstant(slot).isAfter(Instant.now()))) {
-            throw new ConflictException("A work schedule with elapsed slots cannot be approved.");
+        ClinicRoom room = null;
+        if (request.getDecision() == ScheduleDecision.APPROVE) {
+            room = requireActiveRoom(request.getRoomId());
+            if (slots.stream().anyMatch(slot -> !startInstant(slot).isAfter(Instant.now()))) {
+                throw new ConflictException("A work schedule with elapsed slots cannot be approved.");
+            }
+            ensureNoScheduleConflict(
+                    slots.get(0).getSubmissionId(),
+                    slots.get(0).getDoctorId(),
+                    slots.get(0).getWorkDate(),
+                    slots.stream().map(DoctorWorkSlot::getSlotId).collect(Collectors.toSet()),
+                    room.getId(),
+                    "The selected clinic room or doctor conflicts with an existing schedule.");
         }
 
         Instant reviewedAt = Instant.now();
@@ -169,8 +194,10 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             slot.setReviewedAt(reviewedAt);
             slot.setUpdatedAt(reviewedAt);
             if (request.getDecision() == ScheduleDecision.APPROVE) {
+                slot.setRoomId(room.getId());
                 slot.setStatus(DoctorWorkSlotStatus.AVAILABLE);
                 slot.setRejectionReason(null);
+                slot.setConflictActive(true);
             } else {
                 slot.setStatus(DoctorWorkSlotStatus.REJECTED);
                 slot.setRejectionReason(rejectionReason);
@@ -209,6 +236,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             String submissionId,
             SubmitWorkScheduleRequest request) {
         requireRole(doctorId, UserRole.DOCTOR, "Only doctors can modify pending work schedules.");
+        validateDoctorRegistrationDate(request.getWorkDate());
         List<DoctorWorkSlot> current = doctorWorkSlotRepository
                 .findAllBySubmissionIdAndDoctorIdOrderBySlotIdAsc(submissionId, doctorId);
         if (current.isEmpty()) {
@@ -217,7 +245,14 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         if (current.stream().anyMatch(slot -> slot.getStatus() != DoctorWorkSlotStatus.PENDING)) {
             throw new ConflictException("Only pending work schedule submissions can be modified by a doctor.");
         }
-        return replaceSubmission(current, request, DoctorWorkSlotStatus.PENDING, null);
+        return replaceSubmission(
+                current,
+                request.getWorkDate(),
+                request.getSession(),
+                null,
+                request.getNote(),
+                DoctorWorkSlotStatus.PENDING,
+                null);
     }
 
     @Override
@@ -225,7 +260,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     public List<DoctorWorkSlot> modifyApprovedSubmission(
             String staffId,
             String submissionId,
-            SubmitWorkScheduleRequest request) {
+            ModifyApprovedWorkScheduleRequest request) {
         requireStaff(staffId);
         List<DoctorWorkSlot> current = doctorWorkSlotRepository
                 .findAllBySubmissionIdOrderBySlotIdAsc(submissionId);
@@ -236,7 +271,14 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             throw new ConflictException(
                     "Only approved work schedules without active appointments can be modified.");
         }
-        return replaceSubmission(current, request, DoctorWorkSlotStatus.AVAILABLE, staffId);
+        return replaceSubmission(
+                current,
+                request.getWorkDate(),
+                request.getSession(),
+                request.getRoomId(),
+                request.getNote(),
+                DoctorWorkSlotStatus.AVAILABLE,
+                staffId);
     }
 
     @Override
@@ -275,7 +317,8 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
             throw new IllegalArgumentException("A work schedule submission must contain at least one slot.");
         }
         User doctor = userRepository.findById(slots.get(0).getDoctorId()).orElse(null);
-        return WorkScheduleSubmissionResponse.from(slots, doctor, patientDataProtectionService);
+        Map<String, WorkSlot> definitions = loadSlotDefinitions(slots);
+        return WorkScheduleSubmissionResponse.from(slots, doctor, patientDataProtectionService, definitions);
     }
 
     @Override
@@ -283,75 +326,119 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
         List<String> doctorIds = slots.stream().map(DoctorWorkSlot::getDoctorId).distinct().toList();
         Map<String, User> doctors = userRepository.findAllById(doctorIds).stream()
                 .collect(Collectors.toMap(User::getId, doctor -> doctor));
-        return WorkScheduleSubmissionResponse.group(slots, doctors, patientDataProtectionService);
+        return WorkScheduleSubmissionResponse.group(
+                slots,
+                doctors,
+                patientDataProtectionService,
+                loadSlotDefinitions(slots));
+    }
+
+    private Map<String, WorkSlot> loadSlotDefinitions(List<DoctorWorkSlot> slots) {
+        return workSlotRepository.findAllById(slots.stream()
+                        .map(DoctorWorkSlot::getSlotId)
+                        .filter(id -> id != null && !id.isBlank())
+                        .distinct()
+                        .toList())
+                .stream()
+                .collect(Collectors.toMap(WorkSlot::getId, definition -> definition));
     }
 
     private List<WorkSlot> getSlots(WorkSession session) {
         List<WorkSlot> slots = workSlotRepository.findAllByOrderByStartTimeAsc();
-        if (session == WorkSession.FULL_TIME) return slots;
         LocalTime noon = LocalTime.NOON;
-        return slots.stream()
-                .filter(slot -> session == WorkSession.MORNING
-                        ? slot.getStartTime().isBefore(noon)
-                        : !slot.getStartTime().isBefore(noon))
+        return slots.stream().filter(slot -> switch (session) {
+                    case MORNING -> !WorkSlotTimeUtils.isNight(slot)
+                            && slot.getStartTime().isBefore(noon);
+                    case AFTERNOON -> !WorkSlotTimeUtils.isNight(slot)
+                            && !slot.getStartTime().isBefore(noon);
+                    case FULL_TIME -> !WorkSlotTimeUtils.isNight(slot);
+                    case NIGHT -> WorkSlotTimeUtils.isNight(slot);
+                })
+                .sorted(java.util.Comparator.comparing(slot ->
+                        WorkSlotTimeUtils.resolveStart(LocalDate.of(2000, 1, 1), slot.getStartTime())))
                 .toList();
     }
 
     private List<DoctorWorkSlot> replaceSubmission(
             List<DoctorWorkSlot> current,
-            SubmitWorkScheduleRequest request,
+            LocalDate workDate,
+            WorkSession session,
+            String roomId,
+            String requestedNote,
             DoctorWorkSlotStatus targetStatus,
             String reviewedBy) {
         DoctorWorkSlot first = current.get(0);
-        if (request.getWorkDate().isBefore(LocalDate.now(HOSPITAL_ZONE))) {
+        if (workDate.isBefore(LocalDate.now(HOSPITAL_ZONE))) {
             throw new BadRequestException("Work date cannot be in the past.");
         }
-        ClinicRoom room = clinicRoomRepository.findById(request.getRoomId().trim())
-                .filter(ClinicRoom::isActive)
-                .orElseThrow(() -> new ResourceNotFoundException("Active clinic room was not found."));
-        List<WorkSlot> selectedSlots = getSlots(request.getSession());
+        ClinicRoom room = targetStatus == DoctorWorkSlotStatus.PENDING ? null : requireActiveRoom(roomId);
+        List<WorkSlot> selectedSlots = getSlots(session);
         if (selectedSlots.isEmpty()) {
             throw new BadRequestException("No work slots are available for the selected session.");
         }
         Instant now = Instant.now();
-        if (selectedSlots.stream().map(slot -> toInstant(request.getWorkDate(), slot))
+        if (selectedSlots.stream().map(slot -> toInstant(workDate, slot))
                 .anyMatch(startAt -> !startAt.isAfter(now))) {
             throw new BadRequestException("Every selected work slot must start in the future.");
         }
 
         Set<String> selectedIds = selectedSlots.stream().map(WorkSlot::getId).collect(Collectors.toSet());
-        boolean conflict = doctorWorkSlotRepository
-                .findAllByWorkDateAndSlotIdIn(request.getWorkDate(), selectedIds)
-                .stream()
-                .filter(existing -> !first.getSubmissionId().equals(existing.getSubmissionId()))
-                .filter(existing -> existing.getStatus() != DoctorWorkSlotStatus.REJECTED
-                        && existing.getStatus() != DoctorWorkSlotStatus.CANCELLED
-                        && existing.getStatus() != DoctorWorkSlotStatus.CLOSED)
-                .anyMatch(existing -> existing.getDoctorId().equals(first.getDoctorId())
-                        || existing.getRoomId().equals(room.getId()));
-        if (conflict) {
-            throw new ConflictException("Modified work schedule conflicts with an existing schedule.");
-        }
+        ensureNoScheduleConflict(
+                first.getSubmissionId(),
+                first.getDoctorId(),
+                workDate,
+                selectedIds,
+                room == null ? null : room.getId(),
+                "Modified work schedule conflicts with an existing schedule.");
 
-        String note = trimToNull(request.getNote());
+        String note = trimToNull(requestedNote);
         List<DoctorWorkSlot> replacements = selectedSlots.stream()
                 .map(definition -> DoctorWorkSlot.builder()
                         .submissionId(first.getSubmissionId())
                         .doctorId(first.getDoctorId())
-                        .workDate(request.getWorkDate())
+                        .workDate(workDate)
                         .slotId(definition.getId())
-                        .roomId(room.getId())
+                        .roomId(room == null ? null : room.getId())
                         .status(targetStatus)
                         .note(note)
                         .submittedAt(first.getSubmittedAt())
                         .reviewedBy(reviewedBy == null ? first.getReviewedBy() : reviewedBy)
                         .reviewedAt(reviewedBy == null ? first.getReviewedAt() : now)
-                        .conflictActive(true)
+                        .conflictActive(targetStatus != DoctorWorkSlotStatus.PENDING)
                         .updatedAt(now)
                         .build())
                 .toList();
         doctorWorkSlotRepository.deleteAll(current);
         return doctorWorkSlotRepository.saveAll(replacements);
+    }
+
+    private ClinicRoom requireActiveRoom(String roomId) {
+        String normalizedRoomId = trimToNull(roomId);
+        if (normalizedRoomId == null) {
+            throw new BadRequestException("Clinic room ID is required when approving a work schedule.");
+        }
+        return clinicRoomRepository.findById(normalizedRoomId)
+                .filter(ClinicRoom::isActive)
+                .orElseThrow(() -> new ResourceNotFoundException("Active clinic room was not found."));
+    }
+
+    private void ensureNoScheduleConflict(
+            String submissionId,
+            String doctorId,
+            LocalDate workDate,
+            Set<String> slotIds,
+            String roomId,
+            String message) {
+        boolean conflict = doctorWorkSlotRepository.findAllByWorkDateAndSlotIdIn(workDate, slotIds).stream()
+                .filter(existing -> !submissionId.equals(existing.getSubmissionId()))
+                .filter(existing -> existing.getStatus() != DoctorWorkSlotStatus.REJECTED
+                        && existing.getStatus() != DoctorWorkSlotStatus.CANCELLED
+                        && existing.getStatus() != DoctorWorkSlotStatus.CLOSED)
+                .anyMatch(existing -> existing.getDoctorId().equals(doctorId)
+                        || (roomId != null && roomId.equals(existing.getRoomId())));
+        if (conflict) {
+            throw new ConflictException(message);
+        }
     }
 
     private void cancelAffectedAppointment(
@@ -369,7 +456,9 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
     }
 
     private Instant toInstant(LocalDate workDate, WorkSlot slot) {
-        return workDate.atTime(slot.getStartTime()).atZone(HOSPITAL_ZONE).toInstant();
+        return WorkSlotTimeUtils.resolveStart(workDate, slot.getStartTime())
+                .atZone(HOSPITAL_ZONE)
+                .toInstant();
     }
 
     private Instant startInstant(DoctorWorkSlot doctorWorkSlot) {
@@ -380,7 +469,7 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
 
     private User requireRole(String userId, UserRole role, String message) {
         User user = userService.getActiveUserById(userId);
-        if (!user.getRoles().contains(role)) {
+        if (user.getRole() != role) {
             throw new ForbiddenException(message);
         }
         return user;
@@ -388,12 +477,19 @@ public class WorkScheduleServiceImpl implements WorkScheduleService {
 
     private void requireStaff(String userId) {
         User user = userService.getActiveUserById(userId);
-        if (!user.getRoles().contains(UserRole.STAFF)) {
+        if (user.getRole() != UserRole.STAFF) {
             throw new ForbiddenException("Only staff can review work schedules.");
         }
     }
 
     private String trimToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private void validateDoctorRegistrationDate(LocalDate workDate) {
+        LocalDate earliestAllowedDate = LocalDate.now(HOSPITAL_ZONE).plusDays(1);
+        if (workDate.isBefore(earliestAllowedDate)) {
+            throw new BadRequestException("Doctors must register work schedules at least one day in advance.");
+        }
     }
 }

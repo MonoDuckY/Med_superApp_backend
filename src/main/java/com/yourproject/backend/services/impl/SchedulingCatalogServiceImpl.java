@@ -28,7 +28,9 @@ public class SchedulingCatalogServiceImpl implements SchedulingCatalogService {
 
     @Override
     public List<WorkSlot> getActiveWorkSlots() {
-        return workSlotRepository.findAllByOrderByStartTimeAsc();
+        return workSlotRepository.findAllByOrderByStartTimeAsc().stream()
+                .sorted(java.util.Comparator.comparingInt(this::slotNumber))
+                .toList();
     }
 
     @Override
@@ -39,7 +41,7 @@ public class SchedulingCatalogServiceImpl implements SchedulingCatalogService {
     @Override
     public ClinicRoom createClinicRoom(String requestedBy, CreateClinicRoomRequest request) {
         User staff = userService.getActiveUserById(requestedBy);
-        if (!staff.getRoles().contains(UserRole.STAFF)) {
+        if (staff.getRole() != UserRole.STAFF) {
             throw new ForbiddenException("Only staff can create clinic rooms.");
         }
 
@@ -57,5 +59,13 @@ public class SchedulingCatalogServiceImpl implements SchedulingCatalogService {
                 .createdAt(now)
                 .updatedAt(now)
                 .build());
+    }
+
+    private int slotNumber(WorkSlot slot) {
+        try {
+            return Integer.parseInt(slot.getName().substring("Slot".length()));
+        } catch (RuntimeException exception) {
+            return Integer.MAX_VALUE;
+        }
     }
 }

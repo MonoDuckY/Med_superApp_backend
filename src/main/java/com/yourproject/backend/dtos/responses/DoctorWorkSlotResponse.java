@@ -17,6 +17,7 @@ public class DoctorWorkSlotResponse {
     private String doctorId;
     private LocalDate workDate;
     private String slotId;
+    private WorkSlotResponse slot;
     private String roomId;
     private DoctorWorkSlotStatus status;
     private String note;
@@ -26,12 +27,17 @@ public class DoctorWorkSlotResponse {
     private String rejectionReason;
 
     public static DoctorWorkSlotResponse from(DoctorWorkSlot slot) {
+        return from(slot, null);
+    }
+
+    public static DoctorWorkSlotResponse from(DoctorWorkSlot slot, com.yourproject.backend.models.WorkSlot definition) {
         return DoctorWorkSlotResponse.builder()
                 .id(slot.getId())
                 .submissionId(slot.getSubmissionId())
                 .doctorId(slot.getDoctorId())
                 .workDate(slot.getWorkDate())
                 .slotId(slot.getSlotId())
+                .slot(definition == null ? null : WorkSlotResponse.from(definition))
                 .roomId(slot.getRoomId())
                 .status(slot.getStatus())
                 .note(slot.getNote())

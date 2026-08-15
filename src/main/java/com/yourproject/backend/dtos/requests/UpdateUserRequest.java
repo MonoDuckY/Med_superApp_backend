@@ -1,7 +1,6 @@
 package com.yourproject.backend.dtos.requests;
 
 import java.time.LocalDate;
-import java.util.Set;
 
 import com.yourproject.backend.models.AccountStatus;
 import com.yourproject.backend.models.UserRole;
@@ -14,9 +13,7 @@ public class UpdateUserRequest {
     @Size(max = 50, message = "Password must not exceed 50 characters.")
     private String password;
 
-    private Set<UserRole> roles;
-    public UserRole getRole() { return roles == null || roles.isEmpty() ? null : roles.iterator().next(); }
-    public void setRole(UserRole role) { roles = role == null ? null : Set.of(role); }
+    private UserRole role;
     private AccountStatus status;
 
     @Size(max = 100, message = "Full name must not exceed 100 characters.")
@@ -39,8 +36,6 @@ public class UpdateUserRequest {
     @Size(max = 50, message = "Health insurance code must not exceed 50 characters.")
     private String healthInsuranceCode;
 
-    @Size(max = 255, message = "Certificate must not exceed 255 characters.")
-    private String certificate;
     private String medicalHistory;
     private String currentSickness;
     private Double height;

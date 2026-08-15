@@ -44,7 +44,7 @@ class PatientDataProtectionServiceTest {
     @Test
     void decryptPatientFields_restoresEveryPatientField() {
         User patient = User.builder()
-                .role(UserRole.PATIENT)
+                .roleId(UserRole.PATIENT.name())
                 .encryptionVersion(1)
                 .patientPhoneEncrypted(protectionService.encryptSensitiveValue("+84363636363"))
                 .patientFullNameEncrypted(protectionService.encryptSensitiveValue("Nguyen Van A"))
@@ -78,7 +78,7 @@ class PatientDataProtectionServiceTest {
 
     @Test
     void encryptPatientFields_leavesNonPatientDataUntouched() {
-        User doctor = User.builder().role(UserRole.DOCTOR).phoneNumber("+84363636363").fullName("Dr Nguyen").build();
+        User doctor = User.builder().roleId(UserRole.DOCTOR.name()).phoneNumber("+84363636363").fullName("Dr Nguyen").build();
 
         protectionService.encryptPatientFields(doctor);
 
@@ -88,14 +88,14 @@ class PatientDataProtectionServiceTest {
 
     @Test
     void decryptPatientFields_rejectsMalformedCiphertext() {
-        User patient = User.builder().role(UserRole.PATIENT).encryptionVersion(1)
+        User patient = User.builder().roleId(UserRole.PATIENT.name()).encryptionVersion(1)
                 .patientPhoneEncrypted("v1:not-valid-base64").build();
 
         assertThrows(IllegalStateException.class, () -> protectionService.decryptPatientFields(patient));
     }
 
     private User patientWithPlaintextFields() {
-        return User.builder().role(UserRole.PATIENT).phoneNumber("+84363636363").patientId("PAT-001")
+        return User.builder().roleId(UserRole.PATIENT.name()).phoneNumber("+84363636363").patientId("PAT-001")
                 .fullName("Nguyen Van A").gender("MALE").dateOfBirth(LocalDate.of(1995, 1, 1))
                 .address("Ha Noi").citizenIdentificationCode("001095000001").healthInsuranceCode("HN-001").build();
     }

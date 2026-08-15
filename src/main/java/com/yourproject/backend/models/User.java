@@ -2,11 +2,11 @@ package com.yourproject.backend.models;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.Set;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Transient;
 import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import lombok.AllArgsConstructor;
@@ -15,6 +15,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Document(collection = "users")
+@CompoundIndex(name = "phone_role_unique", def = "{'phoneLookup': 1, 'roleId': 1}", unique = true)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -24,8 +25,8 @@ public class User {
     private String id;
 
     private String passwordHash;
-    private Set<UserRole> roles;
-    private UserRole role;
+    @Indexed
+    private String roleId;
     private AccountStatus status;
 
     private String fullName;
@@ -36,7 +37,7 @@ public class User {
     private String address;
     private String citizenIdentificationCode;
     private String healthInsuranceCode;
-    private String certificate;
+    private String certificateObjectKey;
     private String medicalHistory;
     private String currentSickness;
     private Double height;
@@ -47,11 +48,11 @@ public class User {
     private Instant refreshTokenExpiresAt;
     private String deviceId;
 
-    @Indexed(unique = true, sparse = true)
     private String phoneNumber;
 
-    @Indexed(unique = true, sparse = true)
     private String phoneLookup;
+    @Indexed
+    private String citizenIdentificationLookup;
     @Transient
     private String patientIdLookup;
 
@@ -74,18 +75,11 @@ public class User {
     private int failedLoginAttempts;
     private Instant lockedUntil;
 
-    public UserRole getRole() {
-        return roles == null || roles.isEmpty() ? role : roles.iterator().next();
-    }
-
-    public Set<UserRole> getRoles() {
-        return roles == null || roles.isEmpty()
-                ? (role == null ? Set.of() : Set.of(role))
-                : roles;
-    }
-
     public void setRole(UserRole role) {
-        this.roles = role == null ? Set.of() : Set.of(role);
-        this.role = role;
+        this.roleId = role == null ? null : role.getId();
+    }
+
+    public UserRole getRole() {
+        return roleId == null ? null : UserRole.fromId(roleId);
     }
 }

@@ -150,7 +150,7 @@ class AuthTokenLifecycleIntegrationTest extends MongoIntegrationTestBase {
         MvcResult result = mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"phoneNumber\":\"" + phoneNumber
-                                + "\",\"password\":\"" + password + "\"" + deviceJson + "}"))
+                                + "\",\"role\":\"DOCTOR\",\"password\":\"" + password + "\"" + deviceJson + "}"))
                 .andExpect(status().isOk())
                 .andReturn();
         return new TokenPair(

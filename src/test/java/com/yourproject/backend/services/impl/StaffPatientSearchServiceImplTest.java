@@ -32,7 +32,7 @@ class StaffPatientSearchServiceImplTest {
 
     @Test
     void searchByName_normalizesVietnameseNamesAndReturnsClosestLimitedResults() {
-        when(userRepository.findActivePatients()).thenReturn(List.of(
+        when(userRepository.findAllByStatusAndRoleId(AccountStatus.ACTIVE, UserRole.PATIENT.getId())).thenReturn(List.of(
                 patient("3", "Nguyen Van Binh"),
                 patient("1", "Nguyễn Văn An"),
                 patient("2", "Nguyễn Văn Anh"),
@@ -47,7 +47,7 @@ class StaffPatientSearchServiceImplTest {
 
     @Test
     void searchByName_supportsTypoMatching() {
-        when(userRepository.findActivePatients()).thenReturn(List.of(
+        when(userRepository.findAllByStatusAndRoleId(AccountStatus.ACTIVE, UserRole.PATIENT.getId())).thenReturn(List.of(
                 patient("1", "Nguyễn Văn An"),
                 patient("2", "Trần Minh Đức")));
 
@@ -63,10 +63,39 @@ class StaffPatientSearchServiceImplTest {
         assertThrows(BadRequestException.class, () -> service.searchByName("Nguyen", 51));
     }
 
+    @Test
+    void search_findsPatientByPhoneNumber() {
+        User patient = patient("1", "Nguyen Van A");
+        patient.setPhoneNumber("+84912345678");
+        when(patientDataProtectionService.phoneLookup("+84912345678")).thenReturn("phone-lookup");
+        when(userRepository.findAllByPhoneLookup("phone-lookup")).thenReturn(List.of(patient));
+
+        var results = service.search(null, "0912345678", null, 10);
+
+        assertEquals(1, results.size());
+        assertEquals("+84912345678", results.get(0).getPhoneNumber());
+    }
+
+    @Test
+    void search_findsPatientByCitizenIdentificationCode() {
+        User patient = patient("1", "Nguyen Van A");
+        patient.setCitizenIdentificationCode("012345678901");
+        patient.setCitizenIdentificationLookup("citizen-lookup");
+        when(patientDataProtectionService.secureLookup("citizen-id:012345678901"))
+                .thenReturn("citizen-lookup");
+        when(userRepository.findAllByCitizenIdentificationLookup("citizen-lookup"))
+                .thenReturn(List.of(patient));
+
+        var results = service.search(null, null, "012345678901", 10);
+
+        assertEquals(1, results.size());
+        assertEquals("012345678901", results.get(0).getCitizenIdentificationCode());
+    }
+
     private User patient(String id, String fullName) {
         return User.builder()
                 .id(id)
-                .roles(java.util.Set.of(UserRole.PATIENT))
+                .roleId(UserRole.PATIENT.name())
                 .status(AccountStatus.ACTIVE)
                 .fullName(fullName)
                 .phoneNumber("+8490000000" + id)

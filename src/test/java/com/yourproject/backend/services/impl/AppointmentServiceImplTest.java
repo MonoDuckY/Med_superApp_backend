@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -51,6 +52,7 @@ import com.yourproject.backend.repositories.WorkSlotRepository;
 import com.yourproject.backend.repositories.ClinicRoomRepository;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.services.PatientDataProtectionService;
+import com.yourproject.backend.services.NotificationService;
 
 @ExtendWith(MockitoExtension.class)
 class AppointmentServiceImplTest {
@@ -78,6 +80,9 @@ class AppointmentServiceImplTest {
     @Mock
     private ClinicRoomRepository clinicRoomRepository;
 
+    @Mock
+    private NotificationService notificationService;
+
     @InjectMocks
     private AppointmentServiceImpl service;
 
@@ -91,11 +96,11 @@ class AppointmentServiceImplTest {
         patient = User.builder()
                 .id("patient-user-1")
                 .patientId("PAT-0001")
-                .role(UserRole.PATIENT)
+                .roleId(UserRole.PATIENT.name())
                 .status(AccountStatus.ACTIVE)
                 .build();
-        doctor = User.builder().id("doctor-1").role(UserRole.DOCTOR).status(AccountStatus.ACTIVE).build();
-        staff = User.builder().id("staff-1").role(UserRole.STAFF).status(AccountStatus.ACTIVE).build();
+        doctor = User.builder().id("doctor-1").roleId(UserRole.DOCTOR.name()).status(AccountStatus.ACTIVE).build();
+        staff = User.builder().id("staff-1").roleId(UserRole.STAFF.name()).status(AccountStatus.ACTIVE).build();
         availableSlot = DoctorWorkSlot.builder()
                 .id("work-slot-1")
                 .doctorId("doctor-1")
@@ -136,6 +141,38 @@ class AppointmentServiceImplTest {
         assertEquals(AppointmentStatus.PENDING_STAFF_CONFIRMATION, appointment.getStatus());
         assertEquals("patient-user-1", appointment.getPatientId());
         assertEquals("work-slot-1", appointment.getDoctorWorkSlotId());
+    }
+
+    @Test
+    void patientCannotBookNightShiftSlotDirectly() {
+        when(userService.getActiveUserById("patient-user-1")).thenReturn(patient);
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+        when(doctorWorkSlotRepository.findById("work-slot-1")).thenReturn(Optional.of(availableSlot));
+        when(workSlotRepository.findById("slot-1")).thenReturn(Optional.of(WorkSlot.builder()
+                .id("slot-1")
+                .startTime(java.time.LocalTime.of(17, 0))
+                .endTime(java.time.LocalTime.of(17, 30))
+                .build()));
+        BookAppointmentRequest request = new BookAppointmentRequest();
+        request.setDoctorWorkSlotId("work-slot-1");
+
+        assertThrows(ForbiddenException.class, () -> service.book("patient-user-1", request));
+    }
+
+    @Test
+    void patientAvailableSlotSearchExcludesNightShiftSlots() {
+        when(userService.getActiveUserById("patient-user-1")).thenReturn(patient);
+        when(doctorWorkSlotRepository.findAllByStatusOrderByWorkDateAscSlotIdAsc(
+                DoctorWorkSlotStatus.AVAILABLE)).thenReturn(List.of(availableSlot));
+        when(workSlotRepository.findAllById(List.of("slot-1"))).thenReturn(List.of(WorkSlot.builder()
+                .id("slot-1")
+                .startTime(java.time.LocalTime.of(17, 0))
+                .endTime(java.time.LocalTime.of(17, 30))
+                .build()));
+
+        List<DoctorWorkSlot> result = service.getAvailableSlots("patient-user-1", null, null);
+
+        assertEquals(0, result.size());
     }
 
     @Test
@@ -186,10 +223,28 @@ class AppointmentServiceImplTest {
     }
 
     @Test
+    void approvingAppointmentCreatesPatientNotification() {
+        Appointment appointment = pendingAppointment();
+        DoctorWorkSlot pendingSlot = copySlot(DoctorWorkSlotStatus.SCHEDULING);
+        when(userService.getActiveUserById("staff-1")).thenReturn(staff);
+        when(appointmentRepository.findById("appointment-1")).thenReturn(Optional.of(appointment));
+        when(doctorWorkSlotRepository.findById("work-slot-1")).thenReturn(Optional.of(pendingSlot));
+        when(doctorWorkSlotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(appointmentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        AppointmentDecisionRequest request = new AppointmentDecisionRequest();
+        request.setDecision(ScheduleDecision.APPROVE);
+
+        Appointment result = service.decide("staff-1", "appointment-1", request);
+
+        assertEquals(AppointmentStatus.CONFIRMED, result.getStatus());
+        verify(notificationService).createAppointmentApproved(eq("PAT-0001"), any(Instant.class));
+    }
+
+    @Test
     void toResponsesLooksUpDoctorAndPatientDetails() {
         doctor.setFullName("Dr Nguyen Van A");
         doctor.setPhoneNumber("+84911111111");
-        doctor.setCertificate("Internal Medicine");
+        doctor.setCertificateObjectKey("doctor-certificates/doctor-id/certificate.jpg");
         patient.setFullName("Tran Thi B");
         patient.setPhoneNumber("+84922222222");
         Appointment appointment = pendingAppointment();
@@ -199,7 +254,7 @@ class AppointmentServiceImplTest {
         var response = service.toResponses(List.of(appointment)).get(0);
 
         assertEquals("Dr Nguyen Van A", response.getDoctor().getFullName());
-        assertEquals("Internal Medicine", response.getDoctor().getCertificate());
+        assertEquals(true, response.getDoctor().isHasCertificate());
         assertEquals("Tran Thi B", response.getPatient().getFullName());
         assertEquals("patient-user-1", response.getPatient().getId());
     }
@@ -216,15 +271,15 @@ class AppointmentServiceImplTest {
     }
 
     @Test
-    void doctorAndStaffUserCanUseStaffAppointmentOperations() {
-        User multiRoleUser = User.builder().id("multi-role-user")
-                .roles(Set.of(UserRole.STAFF, UserRole.DOCTOR))
+    void staffUserCanUseStaffAppointmentOperations() {
+        User multiRoleUser = User.builder().id("staff-user")
+                .roleId(UserRole.STAFF.name())
                 .status(AccountStatus.ACTIVE).build();
-        when(userService.getActiveUserById("multi-role-user")).thenReturn(multiRoleUser);
+        when(userService.getActiveUserById("staff-user")).thenReturn(multiRoleUser);
         when(appointmentRepository.findAllByStatusOrderByRequestedAtDesc(AppointmentStatus.CONFIRMED))
                 .thenReturn(List.of());
 
-        List<Appointment> result = service.getAppointments("multi-role-user", AppointmentStatus.CONFIRMED);
+        List<Appointment> result = service.getAppointments("staff-user", AppointmentStatus.CONFIRMED);
 
         assertEquals(0, result.size());
     }
@@ -232,7 +287,7 @@ class AppointmentServiceImplTest {
     @Test
     void adminWithoutStaffRoleCannotUseStaffAppointmentOperations() {
         User admin = User.builder().id("admin-user")
-                .roles(Set.of(UserRole.ADMIN)).status(AccountStatus.ACTIVE).build();
+                .roleId(UserRole.ADMIN.name()).status(AccountStatus.ACTIVE).build();
         when(userService.getActiveUserById("admin-user")).thenReturn(admin);
 
         assertThrows(ForbiddenException.class,
@@ -260,6 +315,7 @@ class AppointmentServiceImplTest {
         assertEquals("Doctor unavailable", result.getCancellationReason());
         assertEquals("staff-1", result.getCancelledBy());
         assertEquals(DoctorWorkSlotStatus.AVAILABLE, bookedSlot.getStatus());
+        verify(notificationService).createAppointmentCancelled(eq("PAT-0001"), any());
     }
 
     @Test
@@ -292,6 +348,7 @@ class AppointmentServiceImplTest {
         assertFalse(result.isActive());
         assertEquals("patient-user-1", result.getCancelledBy());
         assertEquals(DoctorWorkSlotStatus.AVAILABLE, pendingSlot.getStatus());
+        verify(notificationService).createAppointmentCancelled(eq("PAT-0001"), any());
     }
 
     @Test
@@ -318,7 +375,7 @@ class AppointmentServiceImplTest {
     void patientCannotCancelAnotherPatientsAppointment() {
         User anotherPatient = User.builder()
                 .id("patient-user-2")
-                .role(UserRole.PATIENT)
+                .roleId(UserRole.PATIENT.name())
                 .status(AccountStatus.ACTIVE)
                 .build();
         Appointment appointment = pendingAppointment();
@@ -373,6 +430,7 @@ class AppointmentServiceImplTest {
         assertEquals(AppointmentStatus.CONFIRMED, result.getStatus());
         assertEquals(DoctorWorkSlotStatus.AVAILABLE, current.getStatus());
         assertEquals("Doctor unavailable", result.getRescheduleReason());
+        verify(notificationService).createAppointmentRescheduled(eq("PAT-0001"), any(Instant.class));
     }
 
     @Test
@@ -395,6 +453,32 @@ class AppointmentServiceImplTest {
 
         assertEquals(AppointmentStatus.CONFIRMED, result.getStatus());
         assertEquals("patient-user-1", result.getPatientId());
+        assertEquals("work-slot-1", result.getDoctorWorkSlotId());
+    }
+
+    @Test
+    void staffCanCreateAppointmentForNightShiftSlot() {
+        StaffCreateAppointmentRequest request = new StaffCreateAppointmentRequest();
+        request.setPatientId("patient-user-1");
+        request.setDoctorWorkSlotId("work-slot-1");
+        DoctorWorkSlot claimed = copySlot(DoctorWorkSlotStatus.BOOKED);
+        when(userService.getActiveUserById("staff-1")).thenReturn(staff);
+        when(userService.getActiveUserById("patient-user-1")).thenReturn(patient);
+        when(userService.getActiveUserById("doctor-1")).thenReturn(doctor);
+        when(doctorWorkSlotRepository.findById("work-slot-1")).thenReturn(Optional.of(availableSlot));
+        when(workSlotRepository.findById("slot-1")).thenReturn(Optional.of(WorkSlot.builder()
+                .id("slot-1")
+                .startTime(java.time.LocalTime.of(1, 0))
+                .endTime(java.time.LocalTime.of(1, 30))
+                .build()));
+        when(appointmentRepository.findAllForPatient("patient-user-1")).thenReturn(List.of());
+        when(mongoTemplate.findAndModify(any(Query.class), any(Update.class),
+                any(FindAndModifyOptions.class), eq(DoctorWorkSlot.class))).thenReturn(claimed);
+        when(appointmentRepository.save(any(Appointment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Appointment result = service.createByStaff("staff-1", request);
+
+        assertEquals(AppointmentStatus.CONFIRMED, result.getStatus());
         assertEquals("work-slot-1", result.getDoctorWorkSlotId());
     }
 

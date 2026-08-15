@@ -36,6 +36,10 @@ dependencies {
 
 	// Firebase Cloud Messaging for the internal Android SMS gateway
 	implementation 'com.google.firebase:firebase-admin:9.10.0'
+
+	// AWS S3 private object storage and presigned URLs
+	implementation platform('software.amazon.awssdk:bom:2.31.78')
+	implementation 'software.amazon.awssdk:s3'
 	
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
