@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.yourproject.backend.dtos.responses.ApiResponse;
 import com.yourproject.backend.services.ResearcherAiDetectionService;
 

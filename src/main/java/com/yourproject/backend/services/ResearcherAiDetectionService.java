@@ -9,7 +9,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.FileStorageException;
 
