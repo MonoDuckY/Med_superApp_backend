@@ -1,5 +1,11 @@
 # Clinical Examination and Medication Specification
 
+## Researcher endpoints
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| `GET` | `/api/researcher/medical-records/images` | Retrieves all medical record images. Each item includes patient identity, appointment identity, medical record identity and presigned image URLs. |
+
 ## Medical record images
 
 - `POST /api/doctor/appointments/{appointmentId}/medical-images` uploads one JPEG, PNG or WEBP image from multipart part `image`.
