@@ -4,6 +4,10 @@
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
+| `POST` | `/api/researcher/detect` | Uploads one image to the internal AI backend and returns the detection result. Requires `RESEARCHER`; the client only sends multipart part `file`. |
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
 | `GET` | `/api/researcher/medical-records/images` | Retrieves all medical record images. Each item includes patient identity, appointment identity, medical record identity and presigned image URLs. |
 
 ## Medical record images
