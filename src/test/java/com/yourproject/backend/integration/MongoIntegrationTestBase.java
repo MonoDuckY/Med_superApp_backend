@@ -27,6 +27,7 @@ import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.repositories.MedicalRecordRepository;
 import com.yourproject.backend.repositories.PrescriptionRepository;
 import com.yourproject.backend.repositories.MedicineScheduleRepository;
+import com.yourproject.backend.repositories.NotificationRepository;
 import com.yourproject.backend.repositories.MealRepository;
 import com.yourproject.backend.repositories.WorkoutRepository;
 import com.yourproject.backend.repositories.DishRepository;
@@ -56,6 +57,9 @@ public abstract class MongoIntegrationTestBase {
 
     @Autowired
     protected MedicineScheduleRepository medicineScheduleRepository;
+
+    @Autowired
+    protected NotificationRepository notificationRepository;
 
     @Autowired
     protected MealRepository mealRepository;
@@ -122,6 +126,7 @@ public abstract class MongoIntegrationTestBase {
 
     @BeforeEach
     void clearDatabase() {
+        notificationRepository.deleteAll();
         appointmentRepository.deleteAll();
         dishRepository.deleteAll();
         workoutRepository.deleteAll();

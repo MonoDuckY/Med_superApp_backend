@@ -3,9 +3,11 @@ package com.yourproject.backend.controllers;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,7 +15,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.yourproject.backend.dtos.requests.UpdateClinicalInformationRequest;
 import com.yourproject.backend.dtos.requests.UpdateDiagnosisRequest;
@@ -21,6 +25,7 @@ import com.yourproject.backend.dtos.requests.UpsertPrescriptionRequest;
 import com.yourproject.backend.dtos.responses.ApiResponse;
 import com.yourproject.backend.dtos.responses.AppointmentResponse;
 import com.yourproject.backend.dtos.responses.DoctorExaminationResponse;
+import com.yourproject.backend.dtos.responses.MedicalImageResponse;
 import com.yourproject.backend.dtos.responses.PrescriptionResponse;
 import com.yourproject.backend.dtos.responses.UserSummaryResponse;
 import com.yourproject.backend.models.AppointmentStatus;
@@ -99,6 +104,28 @@ public class DoctorExaminationController {
                 clinicalMedicationService.updateDiagnosis(authentication.getName(), appointmentId, request)));
     }
 
+    @PostMapping(value = "/{appointmentId}/medical-images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<List<MedicalImageResponse>>> uploadMedicalImage(
+            Authentication authentication,
+            @PathVariable String appointmentId,
+            @RequestPart("image") MultipartFile image) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(
+                "Medical image uploaded successfully.",
+                clinicalMedicationService.uploadMedicalImage(
+                        authentication.getName(), appointmentId, image)));
+    }
+
+    @DeleteMapping("/{appointmentId}/medical-images/{imageId}")
+    public ResponseEntity<ApiResponse<List<MedicalImageResponse>>> deleteMedicalImage(
+            Authentication authentication,
+            @PathVariable String appointmentId,
+            @PathVariable String imageId) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Medical image deleted successfully.",
+                clinicalMedicationService.deleteMedicalImage(
+                        authentication.getName(), appointmentId, imageId)));
+    }
+
     @PostMapping("/{appointmentId}/prescriptions")
     public ResponseEntity<ApiResponse<PrescriptionResponse>> createPrescription(
             Authentication authentication,
@@ -109,16 +136,15 @@ public class DoctorExaminationController {
                 clinicalMedicationService.createPrescription(authentication.getName(), appointmentId, request)));
     }
 
-    @PatchMapping("/{appointmentId}/prescriptions/{prescriptionId}")
+    @PatchMapping("/{appointmentId}/prescription")
     public ResponseEntity<ApiResponse<PrescriptionResponse>> updatePrescription(
             Authentication authentication,
             @PathVariable String appointmentId,
-            @PathVariable String prescriptionId,
             @Valid @RequestBody UpsertPrescriptionRequest request) {
         return ResponseEntity.ok(ApiResponse.success(
                 "Prescription updated successfully.",
                 clinicalMedicationService.updatePrescription(
-                        authentication.getName(), appointmentId, prescriptionId, request)));
+                        authentication.getName(), appointmentId, request)));
     }
 
     @PatchMapping("/{appointmentId}/complete")

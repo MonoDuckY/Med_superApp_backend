@@ -182,7 +182,7 @@ class PatientOtpIntegrationTest extends MongoIntegrationTestBase {
     }
 
     @Test
-    void nonPatientCannotRequestOrVerifyOtp() throws Exception {
+    void phoneWithoutPatientAccountCannotRequestOrVerifyOtp() throws Exception {
         saveActiveDoctor(PHONE, "Password123!");
 
         mockMvc.perform(post("/api/auth/patient-otp/request").contentType(MediaType.APPLICATION_JSON)

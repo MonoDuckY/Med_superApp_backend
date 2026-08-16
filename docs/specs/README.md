@@ -12,6 +12,7 @@ Thư mục này là nguồn đặc tả kỹ thuật cho hành vi backend đang 
 | `scheduling-spec.md` | Room, work slot, Doctor schedule và Staff approval |
 | `appointment-spec.md` | Patient/Staff booking, confirm, reject, cancel và reschedule |
 | `clinical-medication-spec.md` | Doctor examination, MedicalRecord, diagnosis, prescription và medicine schedule |
+| `notification-spec.md` | Patient notification inbox, appointment events và medicine reminder 30 phút |
 | `audit-log-spec.md` | Audit request ghi, database admin và định danh backend instance tự động |
 | `sms-gateway-spec.md` | Firebase và Android SMS Gateway |
 | `data-protection-spec.md` | BCrypt, AES-256-GCM, HMAC lookup và token hashing |

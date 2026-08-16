@@ -25,6 +25,7 @@ public class UserResponse {
     String citizenIdentificationCode;
     String healthInsuranceCode;
     boolean hasCertificate;
+    String certificateUrl;
     String medicalHistory;
     String currentSickness;
     Double height;
@@ -35,9 +36,27 @@ public class UserResponse {
     Instant lastLoginAt;
 
     public static UserResponse from(User user, PatientDataProtectionService patientDataProtectionService) {
+        return from(user, patientDataProtectionService, null);
+    }
+
+    public static UserResponse from(
+            User user,
+            PatientDataProtectionService patientDataProtectionService,
+            String certificateUrl) {
         User responseUser = copyOf(user);
         patientDataProtectionService.decryptPatientFields(responseUser);
-        return fromUnprotected(responseUser);
+        UserResponse response = fromUnprotected(responseUser);
+        return UserResponse.builder()
+                .id(response.getId()).role(response.getRole()).status(response.getStatus())
+                .fullName(response.getFullName()).gender(response.getGender()).dateOfBirth(response.getDateOfBirth())
+                .phoneNumber(response.getPhoneNumber()).address(response.getAddress())
+                .citizenIdentificationCode(response.getCitizenIdentificationCode())
+                .healthInsuranceCode(response.getHealthInsuranceCode())
+                .hasCertificate(response.isHasCertificate()).certificateUrl(certificateUrl)
+                .medicalHistory(response.getMedicalHistory()).currentSickness(response.getCurrentSickness())
+                .height(response.getHeight()).weight(response.getWeight()).bloodType(response.getBloodType())
+                .createdAt(response.getCreatedAt()).updatedAt(response.getUpdatedAt())
+                .lastLoginAt(response.getLastLoginAt()).build();
     }
 
     public static UserResponse fromUnprotected(User user) {

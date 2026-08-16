@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-08-14
+
+- Adjusted Patient-created Meal and Workout into Health Activity Tracker mode:
+  - Allowed activity logging for today and up to 2 previous days (`<= Instant.now()`).
+  - Saved Patient-created activities directly with `COMPLETED` status.
+  - Rejected future activity timestamps.
+
+## 2026-08-11
+
+- Enforced one Prescription per Appointment through unique `medicalRecordId` and service conflict validation.
+- Changed prescription update to `PATCH /api/doctor/appointments/{appointmentId}/prescription`, removing the prescription ID input.
+- Restricted Patient-created Meal and Workout times to a future instant within the current Vietnam calendar day.
+
 All notable backend changes are documented in this file. This project follows a lightweight Keep a Changelog structure; version tags are added when the team creates a release.
 
 ## Unreleased
@@ -52,6 +65,6 @@ Every pull request that changes public APIs, validation, permissions, status tra
 # 2026-08-10
 
 - Added private Amazon S3 storage for Doctor certificate images.
-- Added Admin upload, presigned-view, and delete certificate APIs.
+- Merged Doctor certificate upload/replacement into Admin user POST/PATCH multipart APIs and removed standalone certificate endpoints.
 - Replaced free-text `users.certificate` with private `users.certificateObjectKey`.
 - Restricted certificate presence, object key and presigned URLs to Admin certificate APIs; Patient/Staff Doctor lists do not expose certificate data.

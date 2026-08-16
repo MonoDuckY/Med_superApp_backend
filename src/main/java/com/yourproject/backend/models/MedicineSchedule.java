@@ -33,4 +33,5 @@ public class MedicineSchedule {
     @Indexed
     private String prescriptionId;
     private String note;
+    private boolean isNotified;
 }

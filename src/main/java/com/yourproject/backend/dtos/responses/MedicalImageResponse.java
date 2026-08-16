@@ -7,8 +7,8 @@ import lombok.Value;
 
 @Value
 @Builder
-public class DoctorCertificateResponse {
-    String doctorId;
-    String certificateUrl;
+public class MedicalImageResponse {
+    String imageId;
+    String url;
     Instant expiresAt;
 }

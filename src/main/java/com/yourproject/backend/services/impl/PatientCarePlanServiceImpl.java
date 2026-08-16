@@ -59,13 +59,13 @@ public class PatientCarePlanServiceImpl implements PatientCarePlanService {
     @Override
     public MealResponse createMeal(String patientId, MealRequest request) {
         requirePatient(patientId);
-        validateFuture(request.getScheduledAt());
+        validatePatientCreatedPlanTime(request.getScheduledAt());
         String name = request.getMealName().trim();
         if (mealRepository.existsByUserIdAndMealNameAndScheduledAt(patientId, name, request.getScheduledAt())) {
             throw new ConflictException("The same meal already exists at the selected time.");
         }
         Meal meal = mealRepository.save(Meal.builder().userId(patientId).prescriptionId(null)
-                .mealName(name).scheduledAt(request.getScheduledAt()).status(PlanScheduleStatus.NOT_YET)
+                .mealName(name).scheduledAt(request.getScheduledAt()).status(PlanScheduleStatus.COMPLETED)
                 .note(trimToNull(request.getNote())).build());
         List<Dish> dishes = saveDishes(meal.getId(), request.getDishes());
         return MealResponse.from(meal, dishes);
@@ -102,14 +102,14 @@ public class PatientCarePlanServiceImpl implements PatientCarePlanService {
     @Override
     public WorkoutResponse createWorkout(String patientId, WorkoutRequest request) {
         requirePatient(patientId);
-        validateFuture(request.getScheduledAt());
+        validatePatientCreatedPlanTime(request.getScheduledAt());
         String name = request.getWorkoutName().trim();
         if (workoutRepository.existsByUserIdAndWorkoutNameAndScheduledAt(patientId, name, request.getScheduledAt())) {
             throw new ConflictException("The same workout already exists at the selected time.");
         }
         return WorkoutResponse.from(workoutRepository.save(Workout.builder().userId(patientId).prescriptionId(null)
                 .workoutName(name).content(trimToNull(request.getContent())).scheduledAt(request.getScheduledAt())
-                .status(PlanScheduleStatus.NOT_YET).note(trimToNull(request.getNote())).build()));
+                .status(PlanScheduleStatus.COMPLETED).note(trimToNull(request.getNote())).build()));
     }
 
     @Override
@@ -188,6 +188,17 @@ public class PatientCarePlanServiceImpl implements PatientCarePlanService {
 
     private void validateFuture(Instant time) {
         if (!time.isAfter(Instant.now())) throw new BadRequestException("Plan time must be in the future.");
+    }
+
+    private void validatePatientCreatedPlanTime(Instant time) {
+        if (time.isAfter(Instant.now())) {
+            throw new BadRequestException("Activity time cannot be in the future.");
+        }
+        java.time.LocalDate activityDate = time.atZone(VIETNAM_ZONE).toLocalDate();
+        java.time.LocalDate today = java.time.LocalDate.now(VIETNAM_ZONE);
+        if (activityDate.isAfter(today) || activityDate.isBefore(today.minusDays(2))) {
+            throw new BadRequestException("Patient-created activity must be for today or up to 2 previous days.");
+        }
     }
 
     private String trimToNull(String value) {

@@ -10,6 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import com.yourproject.backend.dtos.responses.ApiResponse;
 
@@ -52,6 +53,13 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.failure(
                         "The record was changed by another request. Please reload and try again.",
                         "CONFLICT"));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSizeExceededException(
+            MaxUploadSizeExceededException exception) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(ApiResponse.failure("Uploaded image must not exceed 5 MB.", "FILE_TOO_LARGE"));
     }
 
     @ExceptionHandler(AccessDeniedException.class)

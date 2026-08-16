@@ -62,7 +62,6 @@ public class DoctorWorkSlot {
     private String reviewedBy;
     private Instant reviewedAt;
     private String rejectionReason;
-    @Transient
     private boolean conflictActive;
     private Instant updatedAt;
 

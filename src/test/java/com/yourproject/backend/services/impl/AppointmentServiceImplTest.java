@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -51,6 +52,7 @@ import com.yourproject.backend.repositories.WorkSlotRepository;
 import com.yourproject.backend.repositories.ClinicRoomRepository;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.services.PatientDataProtectionService;
+import com.yourproject.backend.services.NotificationService;
 
 @ExtendWith(MockitoExtension.class)
 class AppointmentServiceImplTest {
@@ -77,6 +79,9 @@ class AppointmentServiceImplTest {
 
     @Mock
     private ClinicRoomRepository clinicRoomRepository;
+
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private AppointmentServiceImpl service;
@@ -218,6 +223,24 @@ class AppointmentServiceImplTest {
     }
 
     @Test
+    void approvingAppointmentCreatesPatientNotification() {
+        Appointment appointment = pendingAppointment();
+        DoctorWorkSlot pendingSlot = copySlot(DoctorWorkSlotStatus.SCHEDULING);
+        when(userService.getActiveUserById("staff-1")).thenReturn(staff);
+        when(appointmentRepository.findById("appointment-1")).thenReturn(Optional.of(appointment));
+        when(doctorWorkSlotRepository.findById("work-slot-1")).thenReturn(Optional.of(pendingSlot));
+        when(doctorWorkSlotRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(appointmentRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        AppointmentDecisionRequest request = new AppointmentDecisionRequest();
+        request.setDecision(ScheduleDecision.APPROVE);
+
+        Appointment result = service.decide("staff-1", "appointment-1", request);
+
+        assertEquals(AppointmentStatus.CONFIRMED, result.getStatus());
+        verify(notificationService).createAppointmentApproved(eq("PAT-0001"), any(Instant.class));
+    }
+
+    @Test
     void toResponsesLooksUpDoctorAndPatientDetails() {
         doctor.setFullName("Dr Nguyen Van A");
         doctor.setPhoneNumber("+84911111111");
@@ -292,6 +315,7 @@ class AppointmentServiceImplTest {
         assertEquals("Doctor unavailable", result.getCancellationReason());
         assertEquals("staff-1", result.getCancelledBy());
         assertEquals(DoctorWorkSlotStatus.AVAILABLE, bookedSlot.getStatus());
+        verify(notificationService).createAppointmentCancelled(eq("PAT-0001"), any());
     }
 
     @Test
@@ -324,6 +348,7 @@ class AppointmentServiceImplTest {
         assertFalse(result.isActive());
         assertEquals("patient-user-1", result.getCancelledBy());
         assertEquals(DoctorWorkSlotStatus.AVAILABLE, pendingSlot.getStatus());
+        verify(notificationService).createAppointmentCancelled(eq("PAT-0001"), any());
     }
 
     @Test
@@ -405,6 +430,7 @@ class AppointmentServiceImplTest {
         assertEquals(AppointmentStatus.CONFIRMED, result.getStatus());
         assertEquals(DoctorWorkSlotStatus.AVAILABLE, current.getStatus());
         assertEquals("Doctor unavailable", result.getRescheduleReason());
+        verify(notificationService).createAppointmentRescheduled(eq("PAT-0001"), any(Instant.class));
     }
 
     @Test

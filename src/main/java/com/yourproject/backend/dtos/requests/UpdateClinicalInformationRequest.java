@@ -3,6 +3,7 @@ package com.yourproject.backend.dtos.requests;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -26,7 +27,9 @@ public class UpdateClinicalInformationRequest {
     @Size(max = 1000, message = "Medical record note must not exceed 1000 characters.")
     private String note;
 
-    @Size(max = 30, message = "Blood pressure must not exceed 30 characters.")
+    @Pattern(
+            regexp = "^\\d{1,3}/\\d{1,3}$",
+            message = "Blood pressure must use the format xxx/xxx with digits only, for example 120/80.")
     private String bloodPressure;
 
     @Min(value = 1, message = "Heart rate must be positive.")

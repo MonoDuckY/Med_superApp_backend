@@ -7,11 +7,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -19,13 +17,18 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.http.MediaType;
 import org.springframework.web.multipart.MultipartFile;
 
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Encoding;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
+
 import com.yourproject.backend.dtos.requests.CreateUserRequest;
 import com.yourproject.backend.dtos.requests.UpdateUserRequest;
 import com.yourproject.backend.dtos.responses.ApiResponse;
 import com.yourproject.backend.dtos.responses.UserResponse;
-import com.yourproject.backend.dtos.responses.DoctorCertificateResponse;
 import com.yourproject.backend.services.UserService;
 import com.yourproject.backend.services.DoctorCertificateService;
+import com.yourproject.backend.services.AdminUserManagementService;
+import com.yourproject.backend.services.S3StorageService.PresignedObjectUrl;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.models.UserRole;
 
@@ -40,12 +43,21 @@ public class AdminUserController {
     private final UserService userService;
     private final PatientDataProtectionService patientDataProtectionService;
     private final DoctorCertificateService doctorCertificateService;
+    private final AdminUserManagementService adminUserManagementService;
 
-    @PostMapping
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequestBody(content = @Content(
+            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            encoding = {
+                    @Encoding(name = "user", contentType = MediaType.APPLICATION_JSON_VALUE),
+                    @Encoding(name = "certificate", contentType = "image/png, image/jpeg, image/webp, application/pdf")
+            }))
     public ResponseEntity<ApiResponse<UserResponse>> createUser(
             Authentication authentication,
-            @Valid @RequestBody CreateUserRequest request) {
-        UserResponse user = UserResponse.from(userService.createUser(request, authentication.getName()), patientDataProtectionService);
+            @Valid @RequestPart("user") CreateUserRequest request,
+            @RequestPart(value = "certificate", required = false) MultipartFile certificate) {
+        var created = adminUserManagementService.create(request, certificate, authentication.getName());
+        UserResponse user = adminResponse(created);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success("User account created successfully.", user));
     }
 
@@ -55,22 +67,30 @@ public class AdminUserController {
             @RequestParam(required = false) String citizenIdentificationCode,
             @RequestParam(required = false) UserRole role) {
         List<UserResponse> users = userService.searchUsers(phoneNumber, citizenIdentificationCode, role).stream()
-                .map(user -> UserResponse.from(user, patientDataProtectionService)).toList();
+                .map(this::adminResponse).toList();
         return ResponseEntity.ok(ApiResponse.success("User accounts retrieved successfully.", users));
     }
 
     @GetMapping("/{userId}")
     public ResponseEntity<ApiResponse<UserResponse>> getUser(@PathVariable String userId) {
-        UserResponse user = UserResponse.from(userService.getUserById(userId), patientDataProtectionService);
+        UserResponse user = adminResponse(userService.getUserById(userId));
         return ResponseEntity.ok(ApiResponse.success("User account retrieved successfully.", user));
     }
 
-    @PatchMapping("/{userId}")
+    @PatchMapping(value = "/{userId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequestBody(content = @Content(
+            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            encoding = {
+                    @Encoding(name = "user", contentType = MediaType.APPLICATION_JSON_VALUE),
+                    @Encoding(name = "certificate", contentType = "image/png, image/jpeg, image/webp, application/pdf")
+            }))
     public ResponseEntity<ApiResponse<UserResponse>> updateUser(
             Authentication authentication,
             @PathVariable String userId,
-            @Valid @RequestBody UpdateUserRequest request) {
-        UserResponse user = UserResponse.from(userService.updateUser(userId, request, authentication.getName()), patientDataProtectionService);
+            @Valid @RequestPart("user") UpdateUserRequest request,
+            @RequestPart(value = "certificate", required = false) MultipartFile certificate) {
+        var updated = adminUserManagementService.update(userId, request, certificate, authentication.getName());
+        UserResponse user = adminResponse(updated);
         return ResponseEntity.ok(ApiResponse.success("User account updated successfully.", user));
     }
 
@@ -82,26 +102,8 @@ public class AdminUserController {
         return ResponseEntity.ok(ApiResponse.success("User account status changed successfully.", user));
     }
 
-    @PostMapping(value = "/{userId}/certificate", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ApiResponse<DoctorCertificateResponse>> uploadDoctorCertificate(
-            @PathVariable String userId,
-            @RequestPart("file") MultipartFile file) {
-        return ResponseEntity.ok(ApiResponse.success(
-                "Doctor certificate uploaded successfully.",
-                doctorCertificateService.upload(userId, file)));
-    }
-
-    @GetMapping("/{userId}/certificate")
-    public ResponseEntity<ApiResponse<DoctorCertificateResponse>> getDoctorCertificate(
-            @PathVariable String userId) {
-        return ResponseEntity.ok(ApiResponse.success(
-                "Doctor certificate URL generated successfully.",
-                doctorCertificateService.get(userId)));
-    }
-
-    @DeleteMapping("/{userId}/certificate")
-    public ResponseEntity<ApiResponse<Void>> deleteDoctorCertificate(@PathVariable String userId) {
-        doctorCertificateService.delete(userId);
-        return ResponseEntity.ok(ApiResponse.success("Doctor certificate deleted successfully.", null));
+    private UserResponse adminResponse(com.yourproject.backend.models.User user) {
+        PresignedObjectUrl url = doctorCertificateService.createPresignedUrl(user);
+        return UserResponse.from(user, patientDataProtectionService, url == null ? null : url.url());
     }
 }

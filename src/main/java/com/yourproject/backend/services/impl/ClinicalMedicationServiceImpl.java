@@ -11,6 +11,7 @@ import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.yourproject.backend.dtos.requests.MedicineScheduleRequest;
 import com.yourproject.backend.dtos.requests.MealRequest;
@@ -22,6 +23,7 @@ import com.yourproject.backend.dtos.requests.WorkoutRequest;
 import com.yourproject.backend.dtos.responses.AppointmentResponse;
 import com.yourproject.backend.dtos.responses.DoctorExaminationResponse;
 import com.yourproject.backend.dtos.responses.MedicineScheduleResponse;
+import com.yourproject.backend.dtos.responses.MedicalImageResponse;
 import com.yourproject.backend.dtos.responses.MedicalRecordResponse;
 import com.yourproject.backend.dtos.responses.PrescriptionResponse;
 import com.yourproject.backend.dtos.responses.UserResponse;
@@ -55,8 +57,10 @@ import com.yourproject.backend.repositories.UserRepository;
 import com.yourproject.backend.repositories.WorkoutRepository;
 import com.yourproject.backend.services.AppointmentService;
 import com.yourproject.backend.services.ClinicalMedicationService;
+import com.yourproject.backend.services.MedicalImageService;
 import com.yourproject.backend.services.PatientDataProtectionService;
 import com.yourproject.backend.services.UserService;
+import com.yourproject.backend.utils.BloodPressureUtils;
 
 import lombok.RequiredArgsConstructor;
 
@@ -72,6 +76,7 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
     private final DishRepository dishRepository;
     private final WorkoutRepository workoutRepository;
     private final MedicalRecordRepository medicalRecordRepository;
+    private final MedicalImageService medicalImageService;
     private final UserRepository userRepository;
     private final UserService userService;
     private final AppointmentService appointmentService;
@@ -119,6 +124,14 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
     }
 
     @Override
+    public List<DoctorExaminationResponse> getOwnMedicalRecordHistory(String patientId) {
+        requirePatient(patientId);
+        return appointmentRepository.findAllForPatient(patientId).stream()
+                .map(this::toExaminationResponse)
+                .toList();
+    }
+
+    @Override
     @Transactional
     public DoctorExaminationResponse startExamination(String doctorId, String appointmentId) {
         Appointment appointment = requireDoctorAppointment(doctorId, appointmentId);
@@ -155,7 +168,9 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
 
         MedicalRecord medicalRecord = getOrCreateMedicalRecord(appointmentId);
         setIfPresent(request.getNote(), medicalRecord::setNote);
-        setIfPresent(request.getBloodPressure(), medicalRecord::setBloodPressure);
+        if (request.getBloodPressure() != null) {
+            medicalRecord.setBloodPressure(BloodPressureUtils.normalize(request.getBloodPressure()));
+        }
         if (request.getHeartRate() != null) medicalRecord.setHeartRate(request.getHeartRate());
         if (request.getBreathingRate() != null) medicalRecord.setBreathingRate(request.getBreathingRate());
         if (request.getBodyTemperature() != null) medicalRecord.setBodyTemperature(request.getBodyTemperature());
@@ -179,11 +194,37 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
 
     @Override
     @Transactional
+    public List<MedicalImageResponse> uploadMedicalImage(
+            String doctorId,
+            String appointmentId,
+            MultipartFile image) {
+        requireMutableExamination(doctorId, appointmentId);
+        MedicalRecord medicalRecord = medicalRecordRepository.save(getOrCreateMedicalRecord(appointmentId));
+        return medicalImageService.upload(medicalRecord, image);
+    }
+
+    @Override
+    @Transactional
+    public List<MedicalImageResponse> deleteMedicalImage(
+            String doctorId,
+            String appointmentId,
+            String imageId) {
+        requireMutableExamination(doctorId, appointmentId);
+        MedicalRecord medicalRecord = medicalRecordRepository.findByAppointmentId(appointmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Medical record was not found."));
+        return medicalImageService.delete(medicalRecord, imageId);
+    }
+
+    @Override
+    @Transactional
     public PrescriptionResponse createPrescription(
             String doctorId, String appointmentId, UpsertPrescriptionRequest request) {
         Appointment appointment = requireMutableExamination(doctorId, appointmentId);
         String patientId = resolvePatientId(appointment);
         MedicalRecord medicalRecord = medicalRecordRepository.save(getOrCreateMedicalRecord(appointmentId));
+        if (prescriptionRepository.existsByMedicalRecordId(medicalRecord.getId())) {
+            throw new ConflictException("This appointment already has a prescription.");
+        }
         validateSchedules(request.getMedicineSchedules());
         validateMeals(request.getMeals());
         validateWorkouts(request.getWorkouts());
@@ -203,17 +244,14 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
     public PrescriptionResponse updatePrescription(
             String doctorId,
             String appointmentId,
-            String prescriptionId,
             UpsertPrescriptionRequest request) {
         Appointment appointment = requireMutableExamination(doctorId, appointmentId);
         String patientId = resolvePatientId(appointment);
-        Prescription prescription = prescriptionRepository.findById(prescriptionId)
-                .orElseThrow(() -> new ResourceNotFoundException("Prescription was not found."));
         MedicalRecord medicalRecord = medicalRecordRepository.findByAppointmentId(appointmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Medical record was not found."));
-        if (!medicalRecord.getId().equals(prescription.getMedicalRecordId())) {
-            throw new ForbiddenException("Prescription does not belong to this appointment.");
-        }
+        Prescription prescription = prescriptionRepository.findByMedicalRecordId(medicalRecord.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Prescription was not found."));
+        String prescriptionId = prescription.getId();
         validateSchedules(request.getMedicineSchedules());
         validateMeals(request.getMeals());
         validateWorkouts(request.getWorkouts());
@@ -293,6 +331,7 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
             throw new ConflictException("The same medicine schedule already exists at the selected time.");
         }
         schedule.setScheduledAt(request.getScheduledAt());
+        schedule.setNotified(false);
         return MedicineScheduleResponse.from(medicineScheduleRepository.save(schedule));
     }
 
@@ -325,7 +364,9 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
         return DoctorExaminationResponse.builder()
                 .appointment(appointmentService.toResponse(appointment))
                 .patient(UserResponse.from(patient, patientDataProtectionService))
-                .medicalRecord(MedicalRecordResponse.from(medicalRecord))
+                .medicalRecord(MedicalRecordResponse.from(
+                        medicalRecord,
+                        medicalImageService.createResponses(medicalRecord)))
                 .prescriptions(prescriptions.stream()
                         .map(prescription -> PrescriptionResponse.from(
                                 prescription,
@@ -413,6 +454,7 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
                         .scheduledAt(request.getScheduledAt())
                         .status(MedicineScheduleStatus.NOT_YET)
                         .note(trimToNull(request.getNote()))
+                        .isNotified(false)
                         .build())
                 .toList());
     }

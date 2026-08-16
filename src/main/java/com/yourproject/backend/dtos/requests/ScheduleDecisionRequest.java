@@ -11,6 +11,9 @@ public class ScheduleDecisionRequest {
     @NotNull(message = "Decision is required.")
     private ScheduleDecision decision;
 
+    @Size(max = 100, message = "Clinic room ID must not exceed 100 characters.")
+    private String roomId;
+
     @Size(max = 500, message = "Rejection reason must not exceed 500 characters.")
     private String rejectionReason;
 }

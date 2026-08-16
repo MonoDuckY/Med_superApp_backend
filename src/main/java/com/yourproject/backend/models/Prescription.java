@@ -17,7 +17,7 @@ import lombok.NoArgsConstructor;
 public class Prescription {
     @Id
     private String id;
-    @Indexed
+    @Indexed(unique = true)
     private String medicalRecordId;
     private String content;
 }
