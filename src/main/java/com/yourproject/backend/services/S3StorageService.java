@@ -7,6 +7,9 @@ import java.time.Instant;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -23,6 +26,8 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 
@@ -129,6 +134,120 @@ public class S3StorageService {
         }
     }
 
+    public List<String> listMedicalImageFolders() {
+        validateConfiguration();
+        String prefix = normalizedPrefix(medicalImagePrefix, "medical-images") + "/";
+        try {
+            return s3Client.listObjectsV2Paginator(ListObjectsV2Request.builder()
+                            .bucket(bucketName)
+                            .prefix(prefix)
+                            .delimiter("/")
+                            .build())
+                    .stream()
+                    .flatMap(page -> page.commonPrefixes().stream())
+                    .map(commonPrefix -> commonPrefix.prefix().substring(prefix.length()))
+                    .map(folder -> folder.endsWith("/") ? folder.substring(0, folder.length() - 1) : folder)
+                    .filter(folder -> !folder.isBlank())
+                    .distinct()
+                    .sorted()
+                    .collect(Collectors.toList());
+        } catch (S3Exception exception) {
+            throw new FileStorageException("Unable to list medical image folders.");
+        }
+    }
+
+    public List<PresignedObjectUrlWithKey> listMedicalImagesByFolder(String folderName) {
+        validateConfiguration();
+        if (folderName == null || folderName.isBlank() || folderName.contains("/")
+                || folderName.contains("\\") || folderName.contains("..")) {
+            throw new BadRequestException("A valid medical image folder name is required.");
+        }
+        String prefix = normalizedPrefix(medicalImagePrefix, "medical-images") + "/" + folderName + "/";
+        try {
+            List<PresignedObjectUrlWithKey> result = new ArrayList<>();
+            s3Client.listObjectsV2Paginator(ListObjectsV2Request.builder()
+                            .bucket(bucketName)
+                            .prefix(prefix)
+                            .build())
+                    .stream()
+                    .flatMap(page -> page.contents().stream())
+                    .filter(object -> !object.key().endsWith("/"))
+                    .sorted((left, right) -> left.key().compareToIgnoreCase(right.key()))
+                    .forEach(object -> {
+                        PresignedObjectUrl signedUrl = createPresignedGetUrl(object.key());
+                        result.add(new PresignedObjectUrlWithKey(object.key(), signedUrl.url(), signedUrl.expiresAt()));
+                    });
+            return result;
+        } catch (S3Exception exception) {
+            throw new FileStorageException("Unable to list medical images.");
+        }
+    }
+
+    public String uploadMedicalImageToFolder(String folderName, MultipartFile file) {
+        validateFolderName(folderName);
+        validateConfiguration();
+        String objectKey = normalizedPrefix(medicalImagePrefix, "medical-images")
+                + "/" + folderName + "/" + UUID.randomUUID() + validateMedicalImage(file);
+        try {
+            PutObjectRequest request = PutObjectRequest.builder()
+                    .bucket(bucketName)
+                    .key(objectKey)
+                    .contentType(file.getContentType())
+                    .contentLength(file.getSize())
+                    .serverSideEncryption(ServerSideEncryption.AES256)
+                    .build();
+            s3Client.putObject(request, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+            return objectKey;
+        } catch (IOException | S3Exception exception) {
+            throw new FileStorageException("Unable to upload the medical image.");
+        }
+    }
+
+    public void cloneMedicalImageFolder(String sourceFolderName, String targetFolderName) {
+        validateFolderName(targetFolderName);
+        if (sourceFolderName != null && !sourceFolderName.isBlank()) {
+            validateFolderName(sourceFolderName);
+        }
+        validateConfiguration();
+        String prefix = normalizedPrefix(medicalImagePrefix, "medical-images") + "/";
+        String targetPrefix = prefix + targetFolderName + "/";
+        try {
+            boolean copied = false;
+            if (sourceFolderName != null && !sourceFolderName.isBlank()) {
+                String sourcePrefix = prefix + sourceFolderName + "/";
+                for (var page : s3Client.listObjectsV2Paginator(ListObjectsV2Request.builder()
+                        .bucket(bucketName).prefix(sourcePrefix).build())) {
+                    for (var object : page.contents()) {
+                        String relativeKey = object.key().substring(sourcePrefix.length());
+                        if (relativeKey.isBlank()) {
+                            continue;
+                        }
+                        s3Client.copyObject(CopyObjectRequest.builder()
+                                .copySource(bucketName + "/" + object.key())
+                                .bucket(bucketName)
+                                .key(targetPrefix + relativeKey)
+                                .serverSideEncryption(ServerSideEncryption.AES256)
+                                .build());
+                        copied = true;
+                    }
+                }
+            }
+            if (!copied) {
+                s3Client.putObject(PutObjectRequest.builder().bucket(bucketName).key(targetPrefix).build(),
+                        RequestBody.empty());
+            }
+        } catch (S3Exception exception) {
+            throw new FileStorageException("Unable to clone the medical image folder.");
+        }
+    }
+
+    private void validateFolderName(String folderName) {
+        if (folderName == null || folderName.isBlank() || folderName.contains("/")
+                || folderName.contains("\\") || folderName.contains("..")) {
+            throw new BadRequestException("A valid medical image folder name is required.");
+        }
+    }
+
     private String validateCertificateFile(MultipartFile file) {
         validateFilePresenceAndSize(file, "Certificate file");
         String extension = ALLOWED_CERTIFICATE_TYPES.get(file.getContentType());
@@ -191,5 +310,8 @@ public class S3StorageService {
     }
 
     public record PresignedObjectUrl(String url, Instant expiresAt) {
+    }
+
+    public record PresignedObjectUrlWithKey(String objectKey, String url, Instant expiresAt) {
     }
 }

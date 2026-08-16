@@ -5,6 +5,7 @@
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `POST` | `/api/researcher/detect` | Uploads one image to the internal AI backend and returns the detection result. Requires `RESEARCHER`; the client only sends multipart part `file`. |
+| `POST` | `/api/researcher/LaMa/` | Uploads one image to the LaMa backend and returns the processed image. Requires `RESEARCHER`; the client sends multipart part `image`. |
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
