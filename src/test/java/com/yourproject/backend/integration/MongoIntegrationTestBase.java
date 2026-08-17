@@ -110,6 +110,16 @@ public abstract class MongoIntegrationTestBase {
     static void configureProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.mongodb.uri", MONGO::getReplicaSetUrl);
         registry.add("app.jwt.secret", () -> "integration-test-secret-with-at-least-thirty-two-characters");
+        registry.add("app.jwt.access-token-expiration-minutes", () -> "15");
+        registry.add("app.jwt.refresh-token-expiration-days", () -> "7");
+        registry.add("app.cors.allowed-origins", () -> "*");
+        registry.add("app.password-reset.token-expiration-minutes", () -> "10");
+        registry.add("app.aws.region", () -> "ap-southeast-1");
+        registry.add("app.aws.s3.bucket-name", () -> "test-bucket");
+        registry.add("app.aws.s3.certificate-prefix", () -> "test-cert");
+        registry.add("app.aws.s3.presigned-url-minutes", () -> "10");
+        registry.add("app.aws.s3.max-file-size-bytes", () -> "5242880");
+        registry.add("app.bootstrap.admin.full-name", () -> "Admin");
         registry.add("app.patient-data.aes-key", () -> key((byte) 1));
         registry.add("app.patient-data.lookup-hmac-key", () -> key((byte) 2));
         registry.add("app.bootstrap.admin.phone-number", () -> "");
@@ -188,6 +198,21 @@ public abstract class MongoIntegrationTestBase {
                 .build());
     }
 
+    protected User saveActiveResearcher(String normalizedPhone, String password) {
+        Instant now = Instant.now();
+        return userRepository.save(User.builder()
+                .fullName("Researcher Integration")
+                .roleId(UserRole.RESEARCHER.getId())
+                .status(AccountStatus.ACTIVE)
+                .phoneNumber(normalizedPhone)
+                .phoneLookup(patientDataProtectionService.phoneLookup(normalizedPhone))
+                .passwordHash(passwordEncoder.encode(password))
+                .createdAt(now)
+                .updatedAt(now)
+                .passwordChangedAt(now.minusSeconds(10))
+                .build());
+    }
+
     protected User saveActivePatient(String normalizedPhone) {
         return saveActivePatient(normalizedPhone, "PAT-INTEGRATION");
     }
@@ -218,5 +243,17 @@ public abstract class MongoIntegrationTestBase {
             bytes[index] = (byte) (seed + index);
         }
         return Base64.getEncoder().encodeToString(bytes);
+    }
+    protected String generateAccessTokenAndSave(User user) {
+        String token = jwtUtils.generateAccessToken(user);
+        try {
+            String hash = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(
+                    java.security.MessageDigest.getInstance("SHA-256").digest(token.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            user.setAccessTokenHash(hash);
+            userRepository.save(user);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        return token;
     }
 }

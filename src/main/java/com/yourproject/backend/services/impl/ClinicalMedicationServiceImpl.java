@@ -84,15 +84,20 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
 
     @Override
     public List<AppointmentResponse> getDoctorAppointments(String doctorId, AppointmentStatus status) {
-        requireDoctor(doctorId);
-        List<String> workSlotIds = doctorWorkSlotRepository.findAllByDoctorIdOrderByWorkDateDescSlotIdAsc(doctorId)
-                .stream().map(DoctorWorkSlot::getId).toList();
-        if (workSlotIds.isEmpty()) return List.of();
-        List<Appointment> appointments = appointmentRepository
-                .findAllByDoctorWorkSlotIdInOrderByRequestedAtDesc(workSlotIds).stream()
-                .filter(appointment -> status == null || appointment.getStatus() == status)
-                .toList();
-        return appointmentService.toResponses(appointments);
+        try {
+            requireDoctor(doctorId);
+            List<String> workSlotIds = doctorWorkSlotRepository.findAllByDoctorIdOrderByWorkDateDescSlotIdAsc(doctorId)
+                    .stream().map(DoctorWorkSlot::getId).toList();
+            if (workSlotIds.isEmpty()) return List.of();
+            List<Appointment> appointments = appointmentRepository
+                    .findAllByDoctorWorkSlotIdInOrderByRequestedAtDesc(workSlotIds).stream()
+                    .filter(appointment -> status == null || appointment.getStatus() == status)
+                    .toList();
+            return appointmentService.toResponses(appointments);
+        } catch (Exception e) {
+            try { java.io.PrintWriter pw = new java.io.PrintWriter(new java.io.FileWriter("error.log", true)); e.printStackTrace(pw); pw.close(); } catch (Exception ex) {}
+            throw e;
+        }
     }
 
     @Override
@@ -568,3 +573,4 @@ public class ClinicalMedicationServiceImpl implements ClinicalMedicationService 
         return value == null || value.isBlank() ? null : value.trim();
     }
 }
+

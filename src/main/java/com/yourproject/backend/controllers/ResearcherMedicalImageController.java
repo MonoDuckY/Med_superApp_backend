@@ -38,7 +38,7 @@ public class ResearcherMedicalImageController {
 
     @GetMapping("/folders/{folderName}")
     public ResponseEntity<ApiResponse<List<MedicalImageResponse>>> getImagesByFolder(
-            @PathVariable String folderName) {
+            @PathVariable("folderName") String folderName) {
         List<MedicalImageResponse> images = s3StorageService.listMedicalImagesByFolder(folderName).stream()
                 .map(image -> MedicalImageResponse.builder()
                         .imageId(image.objectKey())
@@ -59,7 +59,7 @@ public class ResearcherMedicalImageController {
 
     @PostMapping(value = "/folders/{folderName}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<String>> uploadImage(
-            @PathVariable String folderName,
+            @PathVariable("folderName") String folderName,
             @RequestParam("file") MultipartFile file) {
         String objectKey = s3StorageService.uploadMedicalImageToFolder(folderName, file);
         return ResponseEntity.ok(ApiResponse.success("Medical image uploaded successfully.", objectKey));
