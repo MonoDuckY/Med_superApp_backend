@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.yourproject.backend.services.ResearcherLamaService;
+import com.yourproject.backend.services.ResearcherImageCompareService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -19,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class ResearcherLamaController {
     private final ResearcherLamaService researcherLamaService;
+    private final ResearcherImageCompareService researcherImageCompareService;
 
     @PostMapping(value = {"/LaMa", "/LaMa/"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<byte[]> inpaint(@RequestPart("image") MultipartFile image) {
@@ -26,5 +28,16 @@ public class ResearcherLamaController {
         return ResponseEntity.ok()
                 .contentType(processedImage.contentType())
                 .body(processedImage.content());
+    }
+
+    @PostMapping(value = {"/compare", "/compare/"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<byte[]> compare(
+            @RequestPart("image1") MultipartFile image1,
+            @RequestPart("image2") MultipartFile image2) {
+        ResearcherImageCompareService.ProcessedImage comparedImage =
+                researcherImageCompareService.compare(image1, image2);
+        return ResponseEntity.ok()
+                .contentType(comparedImage.contentType())
+                .body(comparedImage.content());
     }
 }
