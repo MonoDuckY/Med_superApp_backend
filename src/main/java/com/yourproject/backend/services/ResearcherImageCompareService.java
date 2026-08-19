@@ -12,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.FileStorageException;
+import com.yourproject.backend.utils.ImageFileValidator;
 
 @Service
 public class ResearcherImageCompareService {
@@ -62,9 +63,7 @@ public class ResearcherImageCompareService {
     }
 
     private void validateImage(MultipartFile image, String name) {
-        if (image == null || image.isEmpty()) {
-            throw new BadRequestException(name + " image is required.");
-        }
+        ImageFileValidator.validate(image, name);
     }
 
     public record ProcessedImage(byte[] content, MediaType contentType) {

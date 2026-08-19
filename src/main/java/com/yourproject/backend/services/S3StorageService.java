@@ -15,6 +15,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.yourproject.backend.utils.ImageFileValidator;
+
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.FileStorageException;
 
@@ -262,10 +264,8 @@ public class S3StorageService {
 
     private String validateMedicalImage(MultipartFile file) {
         validateFilePresenceAndSize(file, "Medical image");
+        ImageFileValidator.validate(file, "Medical");
         String extension = ALLOWED_IMAGE_TYPES.get(file.getContentType());
-        if (extension == null) {
-            throw new BadRequestException("Medical image must be JPEG, PNG, or WEBP.");
-        }
         return extension;
     }
 

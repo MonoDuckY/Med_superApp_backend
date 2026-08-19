@@ -12,6 +12,7 @@ import org.springframework.web.multipart.MultipartFile;
 import tools.jackson.databind.JsonNode;
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.FileStorageException;
+import com.yourproject.backend.utils.ImageFileValidator;
 
 import lombok.RequiredArgsConstructor;
 
@@ -22,9 +23,7 @@ public class ResearcherAiDetectionService {
     private String aiBackendUrl;
 
     public JsonNode detect(MultipartFile image) {
-        if (image == null || image.isEmpty()) {
-            throw new BadRequestException("An image file is required.");
-        }
+        ImageFileValidator.validate(image, "Input");
 
         MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();
         bodyBuilder.part("file", image.getResource())

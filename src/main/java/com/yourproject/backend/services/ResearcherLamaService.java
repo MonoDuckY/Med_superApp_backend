@@ -13,6 +13,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.FileStorageException;
+import com.yourproject.backend.utils.ImageFileValidator;
 
 @Service
 public class ResearcherLamaService {
@@ -24,9 +25,7 @@ public class ResearcherLamaService {
     }
 
     public ProcessedImage inpaint(MultipartFile image) {
-        if (image == null || image.isEmpty()) {
-            throw new BadRequestException("An image file is required.");
-        }
+        ImageFileValidator.validate(image, "Input");
 
         MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();
         bodyBuilder.part("image", image.getResource())
