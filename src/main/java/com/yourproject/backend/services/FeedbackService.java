@@ -23,6 +23,7 @@ public class FeedbackService {
 
     private final FeedbackRepository feedbackRepository;
     private final UserRepository userRepository;
+    private final PatientDataProtectionService patientDataProtectionService;
 
     public FeedbackResponse submit(String patientId, CreateFeedbackRequest request) {
         Feedback feedback = Feedback.builder()
@@ -82,7 +83,12 @@ public class FeedbackService {
             return null;
         }
         return userRepository.findById(userId)
-                .map(user -> user.getFullName())
+                .map(user -> {
+                    if (patientDataProtectionService != null) {
+                        patientDataProtectionService.decryptPatientFields(user);
+                    }
+                    return user.getFullName();
+                })
                 .orElse(null);
     }
 }

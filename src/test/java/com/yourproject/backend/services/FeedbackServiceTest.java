@@ -27,6 +27,9 @@ class FeedbackServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private PatientDataProtectionService patientDataProtectionService;
+
     @InjectMocks
     private FeedbackService service;
 
