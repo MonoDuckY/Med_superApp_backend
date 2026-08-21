@@ -15,6 +15,11 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Encoding;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
+
 import com.yourproject.backend.dtos.requests.NewsRequest;
 import com.yourproject.backend.dtos.responses.ApiResponse;
 import com.yourproject.backend.dtos.responses.NewsResponse;
@@ -36,25 +41,55 @@ public class StaffNewsController {
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequestBody(content = @Content(
+            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            schema = @Schema(type = "object"),
+            encoding = {
+                    @Encoding(name = "news", contentType = MediaType.APPLICATION_JSON_VALUE),
+                    @Encoding(name = "coverPhoto", contentType = "image/jpeg, image/png, image/webp"),
+                    @Encoding(name = "attachments", contentType = "image/jpeg, image/png, image/webp")
+            }))
     public ResponseEntity<ApiResponse<NewsResponse>> create(
             Authentication authentication,
             @Valid @RequestPart("news") NewsRequest request,
-            @RequestPart(value = "coverPhoto", required = false) MultipartFile coverPhoto) {
+            @RequestPart(value = "coverPhoto", required = false) MultipartFile coverPhoto,
+            @RequestPart(value = "attachments", required = false) List<MultipartFile> attachments) {
+        NewsResponse response = newsService.create(authentication.getName(), request, coverPhoto);
+        if (attachments != null && attachments.stream().anyMatch(file -> file != null && !file.isEmpty())) {
+            response = newsService.addContentImages(response.getNewsId(), attachments);
+        }
         return ResponseEntity.ok(ApiResponse.success("News draft created successfully.",
-                newsService.create(authentication.getName(), request, coverPhoto)));
+                response));
     }
 
     @PatchMapping(value = "/{newsId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequestBody(content = @Content(
+            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            schema = @Schema(type = "object"),
+            encoding = {
+                    @Encoding(name = "news", contentType = MediaType.APPLICATION_JSON_VALUE),
+                    @Encoding(name = "coverPhoto", contentType = "image/jpeg, image/png, image/webp"),
+                    @Encoding(name = "attachments", contentType = "image/jpeg, image/png, image/webp")
+            }))
     public ResponseEntity<ApiResponse<NewsResponse>> update(
             Authentication authentication,
             @PathVariable String newsId,
             @Valid @RequestPart("news") NewsRequest request,
-            @RequestPart(value = "coverPhoto", required = false) MultipartFile coverPhoto) {
+            @RequestPart(value = "coverPhoto", required = false) MultipartFile coverPhoto,
+            @RequestPart(value = "attachments", required = false) List<MultipartFile> attachments) {
+        NewsResponse response = newsService.update(authentication.getName(), newsId, request, coverPhoto);
+        if (attachments != null && attachments.stream().anyMatch(file -> file != null && !file.isEmpty())) {
+            response = newsService.addContentImages(newsId, attachments);
+        }
         return ResponseEntity.ok(ApiResponse.success("News draft updated successfully.",
-                newsService.update(authentication.getName(), newsId, request, coverPhoto)));
+                response));
     }
 
     @PostMapping(value = "/{newsId}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequestBody(content = @Content(
+            mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            schema = @Schema(type = "object"),
+            encoding = @Encoding(name = "images", contentType = "image/jpeg, image/png, image/webp")))
     public ResponseEntity<ApiResponse<NewsResponse>> addContentImages(
             @PathVariable String newsId,
             @RequestPart("images") List<MultipartFile> images) {

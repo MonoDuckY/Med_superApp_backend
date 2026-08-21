@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import com.yourproject.backend.models.NewsStatus;
+import io.swagger.v3.oas.annotations.media.Schema;
 
 @Data
 public class NewsRequest {
@@ -15,6 +16,7 @@ public class NewsRequest {
     @Size(max = 10000, message = "Content must not exceed 10000 characters.")
     private String content;
 
+    @Schema(description = "Publication status. Defaults to DRAFT when omitted.", defaultValue = "DRAFT", example = "DRAFT")
     private NewsStatus status = NewsStatus.DRAFT;
 
 }
