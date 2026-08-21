@@ -8,7 +8,9 @@ import lombok.Value;
 public class FeedbackResponse {
     String feedbackId;
     String senderId;
+    String senderName;
     String receiverId;
+    String receiverName;
     String content;
     String status;
     Integer rating;

@@ -11,6 +11,7 @@ import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.ResourceNotFoundException;
 import com.yourproject.backend.models.Feedback;
 import com.yourproject.backend.repositories.FeedbackRepository;
+import com.yourproject.backend.repositories.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -21,6 +22,7 @@ public class FeedbackService {
     private static final String RESPONDED = "RESPONDED";
 
     private final FeedbackRepository feedbackRepository;
+    private final UserRepository userRepository;
 
     public FeedbackResponse submit(String patientId, CreateFeedbackRequest request) {
         Feedback feedback = Feedback.builder()
@@ -64,12 +66,23 @@ public class FeedbackService {
         return FeedbackResponse.builder()
                 .feedbackId(feedback.getFeedbackId())
                 .senderId(feedback.getSenderId())
+                .senderName(resolveUserName(feedback.getSenderId()))
                 .receiverId(feedback.getReceiverId())
+                .receiverName(resolveUserName(feedback.getReceiverId()))
                 .content(feedback.getContent())
                 .status(feedback.getStatus())
                 .rating(feedback.getRating())
                 .serviceType(feedback.getServiceType())
                 .response(feedback.getResponse())
                 .build();
+    }
+
+    private String resolveUserName(String userId) {
+        if (userId == null || userRepository == null) {
+            return null;
+        }
+        return userRepository.findById(userId)
+                .map(user -> user.getFullName())
+                .orElse(null);
     }
 }

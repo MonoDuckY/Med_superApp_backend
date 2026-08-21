@@ -17,11 +17,15 @@ import com.yourproject.backend.dtos.requests.CreateFeedbackRequest;
 import com.yourproject.backend.dtos.requests.RespondFeedbackRequest;
 import com.yourproject.backend.models.Feedback;
 import com.yourproject.backend.repositories.FeedbackRepository;
+import com.yourproject.backend.repositories.UserRepository;
 
 @ExtendWith(MockitoExtension.class)
 class FeedbackServiceTest {
     @Mock
     private FeedbackRepository feedbackRepository;
+
+    @Mock
+    private UserRepository userRepository;
 
     @InjectMocks
     private FeedbackService service;
