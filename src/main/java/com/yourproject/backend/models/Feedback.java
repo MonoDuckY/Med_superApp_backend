@@ -2,6 +2,7 @@ package com.yourproject.backend.models;
 
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
+import java.time.Instant;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -23,4 +24,5 @@ public class Feedback {
     private Integer rating;
     private String serviceType;
     private String response;
+    private Instant createdAt;
 }

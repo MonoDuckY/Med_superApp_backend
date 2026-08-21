@@ -8,11 +8,11 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import com.yourproject.backend.models.Feedback;
 
 public interface FeedbackRepository extends MongoRepository<Feedback, String> {
-    List<Feedback> findAllByOrderByFeedbackIdDesc();
+    List<Feedback> findAllByOrderByCreatedAtDesc();
 
-    List<Feedback> findAllByStatusOrderByFeedbackIdDesc(String status);
+    List<Feedback> findAllByStatusOrderByCreatedAtDesc(String status);
 
-    List<Feedback> findAllBySenderIdOrderByFeedbackIdDesc(String senderId);
+    List<Feedback> findAllBySenderIdOrderByCreatedAtDesc(String senderId);
 
     Optional<Feedback> findByFeedbackIdAndSenderId(String feedbackId, String senderId);
 

@@ -56,6 +56,8 @@ public class S3StorageService {
     private String certificatePrefix;
     @Value("${app.aws.s3.medical-image-prefix:medical-images}")
     private String medicalImagePrefix;
+    @Value("${app.aws.s3.news-prefix:news}")
+    private String newsPrefix;
     @Value("${app.aws.s3.presigned-url-minutes}")
     private long presignedUrlMinutes;
     @Value("${app.aws.s3.max-file-size-bytes}")
@@ -77,6 +79,24 @@ public class S3StorageService {
                 file,
                 validateMedicalImage(file),
                 "Unable to upload the medical image.");
+    }
+
+    public String uploadNewsAttachment(String newsId, MultipartFile file) {
+        return uploadFile(
+                normalizedPrefix(newsPrefix, "news"),
+                newsId,
+                file,
+                validateMedicalImage(file),
+                "Unable to upload the news attachment.");
+    }
+
+    public String uploadNewsCoverPhoto(String newsId, MultipartFile file) {
+        return uploadFile(
+                normalizedPrefix(newsPrefix, "news") + "/" + newsId + "/cover",
+                "cover",
+                file,
+                validateMedicalImage(file),
+                "Unable to upload the news cover photo.");
     }
 
     private String uploadFile(

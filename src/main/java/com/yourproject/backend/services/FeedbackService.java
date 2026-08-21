@@ -1,6 +1,7 @@
 package com.yourproject.backend.services;
 
 import java.util.List;
+import java.time.Instant;
 
 import org.springframework.stereotype.Service;
 
@@ -32,18 +33,19 @@ public class FeedbackService {
                 .status(SUBMITTED)
                 .rating(request.getRating())
                 .serviceType(request.getServiceType())
+                .createdAt(Instant.now())
                 .build();
         return toResponse(feedbackRepository.save(feedback));
     }
 
     public List<FeedbackResponse> getPatientFeedback(String patientId) {
-        return feedbackRepository.findAllBySenderIdOrderByFeedbackIdDesc(patientId).stream()
+        return feedbackRepository.findAllBySenderIdOrderByCreatedAtDesc(patientId).stream()
                 .map(this::toResponse)
                 .toList();
     }
 
     public List<FeedbackResponse> getAll() {
-        return feedbackRepository.findAllByOrderByFeedbackIdDesc().stream().map(this::toResponse).toList();
+        return feedbackRepository.findAllByOrderByCreatedAtDesc().stream().map(this::toResponse).toList();
     }
 
     public FeedbackResponse get(String feedbackId) {
@@ -75,6 +77,7 @@ public class FeedbackService {
                 .rating(feedback.getRating())
                 .serviceType(feedback.getServiceType())
                 .response(feedback.getResponse())
+                .createdAt(feedback.getCreatedAt())
                 .build();
     }
 
