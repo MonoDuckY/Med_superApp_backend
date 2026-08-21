@@ -14,6 +14,7 @@ import com.yourproject.backend.exceptions.ResourceNotFoundException;
 import com.yourproject.backend.models.News;
 import com.yourproject.backend.models.NewsStatus;
 import com.yourproject.backend.repositories.NewsRepository;
+import com.yourproject.backend.repositories.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -21,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class NewsService {
     private final NewsRepository newsRepository;
+    private final UserRepository userRepository;
     private final S3StorageService s3StorageService;
 
     public NewsResponse create(String staffId, NewsRequest request, MultipartFile coverPhoto) {
@@ -128,11 +130,22 @@ public class NewsService {
                 .newsId(news.getNewsId())
                 .title(news.getTitle())
                 .content(news.getContent())
-                .uploadBy(news.getUploadBy())
+                .uploadBy(resolveUploaderName(news.getUploadBy()))
                 .image(attachments)
                 .coverPhoto(cover)
                 .status(news.getStatus() == null ? null : news.getStatus().name())
                 .uploadTime(news.getUploadTime())
                 .build();
+    }
+
+    private String resolveUploaderName(String uploaderId) {
+        if (uploaderId == null || uploaderId.isBlank()) {
+            return uploaderId;
+        }
+        return userRepository.findById(uploaderId)
+                .map(user -> user.getFullName() == null || user.getFullName().isBlank()
+                        ? uploaderId
+                        : user.getFullName())
+                .orElse(uploaderId);
     }
 }
