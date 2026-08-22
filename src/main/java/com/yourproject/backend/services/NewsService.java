@@ -11,6 +11,7 @@ import com.yourproject.backend.dtos.requests.NewsRequest;
 import com.yourproject.backend.dtos.responses.NewsResponse;
 import com.yourproject.backend.dtos.responses.NewsResponse.Attachment;
 import com.yourproject.backend.exceptions.ResourceNotFoundException;
+import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.models.News;
 import com.yourproject.backend.models.NewsStatus;
 import com.yourproject.backend.repositories.NewsRepository;
@@ -26,12 +27,14 @@ public class NewsService {
     private final S3StorageService s3StorageService;
 
     public NewsResponse create(String staffId, NewsRequest request, MultipartFile coverPhoto) {
+        NewsStatus status = request.getStatus() == null ? NewsStatus.DRAFT : request.getStatus();
+        validatePublishedContent(status, request.getContent());
         Instant now = Instant.now();
         News news = News.builder()
                 .title(request.getTitle())
                 .content(request.getContent())
                 .uploadBy(staffId)
-                .status(request.getStatus() == null ? NewsStatus.DRAFT : request.getStatus())
+                .status(status)
                 .uploadTime(now)
                 .image(new ArrayList<>())
                 .updateTime(now)
@@ -50,6 +53,7 @@ public class NewsService {
         if (request.getStatus() != null) {
             news.setStatus(request.getStatus());
         }
+        validatePublishedContent(news.getStatus(), news.getContent());
         news.setUpdateTime(Instant.now());
         if (coverPhoto != null && !coverPhoto.isEmpty()) {
             if (news.getCoverPhoto() != null) {
@@ -69,6 +73,7 @@ public class NewsService {
 
     public NewsResponse publish(String newsId) {
         News news = find(newsId);
+        validatePublishedContent(NewsStatus.PUBLISHED, news.getContent());
         news.setStatus(NewsStatus.PUBLISHED);
         news.setUpdateTime(Instant.now());
         return toResponse(newsRepository.save(news));
@@ -153,5 +158,11 @@ public class NewsService {
                         ? uploaderId
                         : user.getFullName())
                 .orElse(uploaderId);
+    }
+
+    private void validatePublishedContent(NewsStatus status, String content) {
+        if (status == NewsStatus.PUBLISHED && (content == null || content.isBlank())) {
+            throw new BadRequestException("News content is required before publishing.");
+        }
     }
 }

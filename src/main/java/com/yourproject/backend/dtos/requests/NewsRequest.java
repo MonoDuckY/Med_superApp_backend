@@ -12,7 +12,6 @@ public class NewsRequest {
     @Size(max = 150, message = "Title must not exceed 150 characters.")
     private String title;
 
-    @NotBlank(message = "Content is required.")
     @Size(max = 10000, message = "Content must not exceed 10000 characters.")
     private String content;
 
