@@ -29,6 +29,8 @@ import com.yourproject.backend.exceptions.FileStorageException;
 @ExtendWith(MockitoExtension.class)
 class ResearcherAiDetectionServiceTest {
 
+    private static final byte[] VALID_PNG_BYTES = new byte[] { (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0 };
+
     @InjectMocks
     private ResearcherAiDetectionService service;
 
@@ -40,7 +42,7 @@ class ResearcherAiDetectionServiceTest {
     // TC-UNIT-ResearcherAiDetectionService-001
     @Test
     void detect_Success() {
-        MockMultipartFile file = new MockMultipartFile("file", "test.png", MediaType.IMAGE_PNG_VALUE, "dummy content".getBytes());
+        MockMultipartFile file = new MockMultipartFile("file", "test.png", MediaType.IMAGE_PNG_VALUE, VALID_PNG_BYTES);
         ObjectMapper mapper = new ObjectMapper();
         ObjectNode mockNode = mapper.createObjectNode();
         mockNode.put("result", "success");
@@ -69,7 +71,7 @@ class ResearcherAiDetectionServiceTest {
     @Test
     void detect_ThrowsBadRequestException_WhenImageIsNull() {
         BadRequestException exception = assertThrows(BadRequestException.class, () -> service.detect(null));
-        assertEquals("An image file is required.", exception.getMessage());
+        assertEquals("Input image is required.", exception.getMessage());
     }
 
     // TC-UNIT-ResearcherAiDetectionService-003
@@ -77,13 +79,13 @@ class ResearcherAiDetectionServiceTest {
     void detect_ThrowsBadRequestException_WhenImageIsEmpty() {
         MockMultipartFile file = new MockMultipartFile("file", "test.png", MediaType.IMAGE_PNG_VALUE, new byte[0]);
         BadRequestException exception = assertThrows(BadRequestException.class, () -> service.detect(file));
-        assertEquals("An image file is required.", exception.getMessage());
+        assertEquals("Input image is required.", exception.getMessage());
     }
 
     // TC-UNIT-ResearcherAiDetectionService-004
     @Test
     void detect_ThrowsFileStorageException_WhenBackendReturnsEmpty() {
-        MockMultipartFile file = new MockMultipartFile("file", "test.png", MediaType.IMAGE_PNG_VALUE, "dummy content".getBytes());
+        MockMultipartFile file = new MockMultipartFile("file", "test.png", MediaType.IMAGE_PNG_VALUE, VALID_PNG_BYTES);
 
         try (MockedStatic<RestClient> mockedRestClient = mockStatic(RestClient.class)) {
             RestClient restClient = mock(RestClient.class);
@@ -107,7 +109,7 @@ class ResearcherAiDetectionServiceTest {
     // TC-UNIT-ResearcherAiDetectionService-005
     @Test
     void detect_ThrowsFileStorageException_WhenRestClientExceptionThrown() {
-        MockMultipartFile file = new MockMultipartFile("file", "test.png", MediaType.IMAGE_PNG_VALUE, "dummy content".getBytes());
+        MockMultipartFile file = new MockMultipartFile("file", "test.png", MediaType.IMAGE_PNG_VALUE, VALID_PNG_BYTES);
 
         try (MockedStatic<RestClient> mockedRestClient = mockStatic(RestClient.class)) {
             RestClient restClient = mock(RestClient.class);

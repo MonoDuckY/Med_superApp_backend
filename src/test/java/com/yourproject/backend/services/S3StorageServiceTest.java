@@ -26,6 +26,9 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
 @ExtendWith(MockitoExtension.class)
 class S3StorageServiceTest {
+    private static final byte[] VALID_PNG_BYTES = new byte[] { (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0 };
+    private static final byte[] VALID_JPEG_BYTES = new byte[] { (byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 0, 0, 0 };
+
     @Mock
     private S3Client s3Client;
     @Mock
@@ -44,7 +47,7 @@ class S3StorageServiceTest {
     @Test
     void uploadMedicalImageUsesDefaultPrefixWhenConfigurationIsBlank() {
         MockMultipartFile image = new MockMultipartFile(
-                "image", "scan.png", "image/png", new byte[] { 1, 2, 3 });
+                "image", "scan.png", "image/png", VALID_PNG_BYTES);
         when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
                 .thenReturn(PutObjectResponse.builder().build());
 
@@ -61,7 +64,7 @@ class S3StorageServiceTest {
     void uploadMedicalImageUsesConfiguredPrefix() {
         ReflectionTestUtils.setField(service, "medicalImagePrefix", "/clinical-images/");
         MockMultipartFile image = new MockMultipartFile(
-                "image", "scan.jpg", "image/jpeg", new byte[] { 1 });
+                "image", "scan.jpg", "image/jpeg", VALID_JPEG_BYTES);
         when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
                 .thenReturn(PutObjectResponse.builder().build());
 

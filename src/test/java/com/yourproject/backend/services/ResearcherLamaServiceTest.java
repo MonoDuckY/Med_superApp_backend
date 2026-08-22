@@ -27,6 +27,8 @@ import com.yourproject.backend.services.ResearcherLamaService.ProcessedImage;
 @ExtendWith(MockitoExtension.class)
 class ResearcherLamaServiceTest {
 
+    private static final byte[] VALID_PNG_BYTES = new byte[] { (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0 };
+
     @InjectMocks
     private ResearcherLamaService service;
 
@@ -38,7 +40,7 @@ class ResearcherLamaServiceTest {
     // TC-UNIT-ResearcherLamaService-001
     @Test
     void inpaint_Success() {
-        MockMultipartFile file = new MockMultipartFile("image", "test.png", MediaType.IMAGE_PNG_VALUE, "dummy content".getBytes());
+        MockMultipartFile file = new MockMultipartFile("image", "test.png", MediaType.IMAGE_PNG_VALUE, VALID_PNG_BYTES);
         byte[] responseBody = "processed image content".getBytes();
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.IMAGE_PNG);
@@ -69,7 +71,7 @@ class ResearcherLamaServiceTest {
     @Test
     void inpaint_ThrowsBadRequestException_WhenImageIsNull() {
         BadRequestException exception = assertThrows(BadRequestException.class, () -> service.inpaint(null));
-        assertEquals("An image file is required.", exception.getMessage());
+        assertEquals("Input image is required.", exception.getMessage());
     }
 
     // TC-UNIT-ResearcherLamaService-003
@@ -77,13 +79,13 @@ class ResearcherLamaServiceTest {
     void inpaint_ThrowsBadRequestException_WhenImageIsEmpty() {
         MockMultipartFile file = new MockMultipartFile("image", "test.png", MediaType.IMAGE_PNG_VALUE, new byte[0]);
         BadRequestException exception = assertThrows(BadRequestException.class, () -> service.inpaint(file));
-        assertEquals("An image file is required.", exception.getMessage());
+        assertEquals("Input image is required.", exception.getMessage());
     }
 
     // TC-UNIT-ResearcherLamaService-004
     @Test
     void inpaint_ThrowsFileStorageException_WhenBackendReturnsEmptyImage() {
-        MockMultipartFile file = new MockMultipartFile("image", "test.png", MediaType.IMAGE_PNG_VALUE, "dummy content".getBytes());
+        MockMultipartFile file = new MockMultipartFile("image", "test.png", MediaType.IMAGE_PNG_VALUE, VALID_PNG_BYTES);
         ResponseEntity<byte[]> responseEntity = ResponseEntity.ok().body(new byte[0]);
 
         try (MockedStatic<RestClient> mockedRestClient = mockStatic(RestClient.class)) {
@@ -108,7 +110,7 @@ class ResearcherLamaServiceTest {
     // TC-UNIT-ResearcherLamaService-005
     @Test
     void inpaint_ThrowsFileStorageException_WhenRestClientExceptionThrown() {
-        MockMultipartFile file = new MockMultipartFile("image", "test.png", MediaType.IMAGE_PNG_VALUE, "dummy content".getBytes());
+        MockMultipartFile file = new MockMultipartFile("image", "test.png", MediaType.IMAGE_PNG_VALUE, VALID_PNG_BYTES);
 
         try (MockedStatic<RestClient> mockedRestClient = mockStatic(RestClient.class)) {
             RestClient restClient = mock(RestClient.class);
