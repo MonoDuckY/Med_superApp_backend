@@ -1,7 +1,6 @@
 package com.yourproject.backend.services;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.MultipartBodyBuilder;
@@ -16,36 +15,34 @@ import com.yourproject.backend.exceptions.FileStorageException;
 import com.yourproject.backend.utils.ImageFileValidator;
 
 @Service
-public class ResearcherLamaService {
-    private final String lamaBackendUrl;
+public class ResearcherImageCompareService {
+    private final String khoanhBackendUrl;
 
-    public ResearcherLamaService(
-            @Value("${app.lama.backend-url:http://18.143.151.200:8000}") String lamaBackendUrl) {
-        this.lamaBackendUrl = lamaBackendUrl;
+    public ResearcherImageCompareService(
+            @Value("${app.khoanh.backend-url:http://127.0.0.1:8000}") String khoanhBackendUrl) {
+        this.khoanhBackendUrl = khoanhBackendUrl;
     }
 
-    public ProcessedImage inpaint(MultipartFile image) {
-        ImageFileValidator.validate(image, "Input");
+    public ProcessedImage compare(MultipartFile image1, MultipartFile image2) {
+        validateImage(image1, "image1");
+        validateImage(image2, "image2");
 
         MultipartBodyBuilder bodyBuilder = new MultipartBodyBuilder();
-        bodyBuilder.part("image", image.getResource())
-                .filename(image.getOriginalFilename() == null ? "image" : image.getOriginalFilename())
-                .contentType(image.getContentType() == null
-                        ? MediaType.APPLICATION_OCTET_STREAM
-                        : MediaType.parseMediaType(image.getContentType()));
+        addPart(bodyBuilder, "image1", image1);
+        addPart(bodyBuilder, "image2", image2);
         MultiValueMap<String, org.springframework.http.HttpEntity<?>> body = bodyBuilder.build();
 
         try {
             ResponseEntity<byte[]> response = RestClient.create()
                     .post()
-                    .uri(lamaBackendUrl + "/inpaint")
+                    .uri(khoanhBackendUrl + "/compare")
                     .contentType(MediaType.MULTIPART_FORM_DATA)
                     .body(body)
                     .retrieve()
                     .toEntity(byte[].class);
             byte[] responseBody = response.getBody();
             if (responseBody == null || responseBody.length == 0) {
-                throw new FileStorageException("LaMa backend returned an empty image.");
+                throw new FileStorageException("Image comparison backend returned an empty image.");
             }
             MediaType contentType = response.getHeaders().getContentType();
             if (contentType == null || !contentType.getType().equalsIgnoreCase("image")) {
@@ -53,8 +50,20 @@ public class ResearcherLamaService {
             }
             return new ProcessedImage(responseBody, contentType);
         } catch (RestClientException exception) {
-            throw new FileStorageException("Unable to connect to the LaMa image processing backend.");
+            throw new FileStorageException("Unable to connect to the image comparison backend.");
         }
+    }
+
+    private void addPart(MultipartBodyBuilder bodyBuilder, String name, MultipartFile file) {
+        bodyBuilder.part(name, file.getResource())
+                .filename(file.getOriginalFilename() == null ? name : file.getOriginalFilename())
+                .contentType(file.getContentType() == null
+                        ? MediaType.APPLICATION_OCTET_STREAM
+                        : MediaType.parseMediaType(file.getContentType()));
+    }
+
+    private void validateImage(MultipartFile image, String name) {
+        ImageFileValidator.validate(image, name);
     }
 
     public record ProcessedImage(byte[] content, MediaType contentType) {

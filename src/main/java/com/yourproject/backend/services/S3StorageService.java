@@ -15,6 +15,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.yourproject.backend.utils.ImageFileValidator;
+
 import com.yourproject.backend.exceptions.BadRequestException;
 import com.yourproject.backend.exceptions.FileStorageException;
 
@@ -54,6 +56,8 @@ public class S3StorageService {
     private String certificatePrefix;
     @Value("${app.aws.s3.medical-image-prefix:medical-images}")
     private String medicalImagePrefix;
+    @Value("${app.aws.s3.news-prefix:news}")
+    private String newsPrefix;
     @Value("${app.aws.s3.presigned-url-minutes}")
     private long presignedUrlMinutes;
     @Value("${app.aws.s3.max-file-size-bytes}")
@@ -75,6 +79,24 @@ public class S3StorageService {
                 file,
                 validateMedicalImage(file),
                 "Unable to upload the medical image.");
+    }
+
+    public String uploadNewsAttachment(String newsId, MultipartFile file) {
+        return uploadFile(
+                normalizedPrefix(newsPrefix, "news"),
+                newsId,
+                file,
+                validateMedicalImage(file),
+                "Unable to upload the news attachment.");
+    }
+
+    public String uploadNewsCoverPhoto(String newsId, MultipartFile file) {
+        return uploadFile(
+                normalizedPrefix(newsPrefix, "news") + "/" + newsId + "/cover",
+                "cover",
+                file,
+                validateMedicalImage(file),
+                "Unable to upload the news cover photo.");
     }
 
     private String uploadFile(
@@ -262,10 +284,8 @@ public class S3StorageService {
 
     private String validateMedicalImage(MultipartFile file) {
         validateFilePresenceAndSize(file, "Medical image");
+        ImageFileValidator.validate(file, "Medical");
         String extension = ALLOWED_IMAGE_TYPES.get(file.getContentType());
-        if (extension == null) {
-            throw new BadRequestException("Medical image must be JPEG, PNG, or WEBP.");
-        }
         return extension;
     }
 

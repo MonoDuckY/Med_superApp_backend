@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Encoding;
 
 import com.yourproject.backend.dtos.requests.UpdateClinicalInformationRequest;
 import com.yourproject.backend.dtos.requests.UpdateDiagnosisRequest;
@@ -105,6 +107,8 @@ public class DoctorExaminationController {
     }
 
     @PostMapping(value = "/{appointmentId}/medical-images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            encoding = @Encoding(name = "image", contentType = "image/png, image/jpeg, image/webp")))
     public ResponseEntity<ApiResponse<List<MedicalImageResponse>>> uploadMedicalImage(
             Authentication authentication,
             @PathVariable String appointmentId,

@@ -21,6 +21,8 @@ import com.yourproject.backend.dtos.requests.CloneMedicalImageFolderRequest;
 import com.yourproject.backend.services.S3StorageService;
 
 import lombok.RequiredArgsConstructor;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Encoding;
 
 @RestController
 @RequestMapping("/api/researcher/medical-images")
@@ -58,6 +60,8 @@ public class ResearcherMedicalImageController {
     }
 
     @PostMapping(value = "/folders/{folderName}/images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(content = @Content(mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            encoding = @Encoding(name = "file", contentType = "image/png, image/jpeg, image/webp")))
     public ResponseEntity<ApiResponse<String>> uploadImage(
             @PathVariable("folderName") String folderName,
             @RequestParam("file") MultipartFile file) {

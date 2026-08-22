@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Encoding;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
 
 import tools.jackson.databind.JsonNode;
 import com.yourproject.backend.dtos.responses.ApiResponse;
@@ -24,6 +27,8 @@ public class ResearcherAiController {
     private final ResearcherAiDetectionService researcherAiDetectionService;
 
     @PostMapping(value = "/detect", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @RequestBody(content = @Content(mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            encoding = @Encoding(name = "file", contentType = "image/png, image/jpeg, image/webp")))
     public ResponseEntity<ApiResponse<JsonNode>> detect(@RequestPart("file") MultipartFile file) {
         return ResponseEntity.status(HttpStatus.OK).body(ApiResponse.success(
                 "Image detection completed successfully.",
