@@ -17,6 +17,7 @@ public class NewsResponse {
     Attachment coverPhoto;
     String status;
     Instant uploadTime;
+    Instant updateTime;
 
     @Value
     @Builder

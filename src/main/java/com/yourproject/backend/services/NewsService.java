@@ -34,6 +34,7 @@ public class NewsService {
                 .status(request.getStatus() == null ? NewsStatus.DRAFT : request.getStatus())
                 .uploadTime(now)
                 .image(new ArrayList<>())
+                .updateTime(now)
                 .build();
         news = newsRepository.save(news);
         if (coverPhoto != null && !coverPhoto.isEmpty()) {
@@ -49,6 +50,7 @@ public class NewsService {
         if (request.getStatus() != null) {
             news.setStatus(request.getStatus());
         }
+        news.setUpdateTime(Instant.now());
         if (coverPhoto != null && !coverPhoto.isEmpty()) {
             if (news.getCoverPhoto() != null) {
                 s3StorageService.deleteObject(news.getCoverPhoto());
@@ -61,18 +63,21 @@ public class NewsService {
     public NewsResponse addContentImages(String newsId, List<MultipartFile> images) {
         News news = find(newsId);
         addAttachments(news, images);
+        news.setUpdateTime(Instant.now());
         return toResponse(newsRepository.save(news));
     }
 
     public NewsResponse publish(String newsId) {
         News news = find(newsId);
         news.setStatus(NewsStatus.PUBLISHED);
+        news.setUpdateTime(Instant.now());
         return toResponse(newsRepository.save(news));
     }
 
     public NewsResponse disable(String newsId) {
         News news = find(newsId);
         news.setStatus(NewsStatus.DISABLED);
+        news.setUpdateTime(Instant.now());
         return toResponse(newsRepository.save(news));
     }
 
@@ -135,6 +140,7 @@ public class NewsService {
                 .coverPhoto(cover)
                 .status(news.getStatus() == null ? null : news.getStatus().name())
                 .uploadTime(news.getUploadTime())
+                .updateTime(news.getUpdateTime() == null ? news.getUploadTime() : news.getUpdateTime())
                 .build();
     }
 

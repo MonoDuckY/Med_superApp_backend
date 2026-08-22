@@ -28,4 +28,5 @@ public class News {
     private String uploadBy;
     private NewsStatus status;
     private Instant uploadTime;
+    private Instant updateTime;
 }
