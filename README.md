@@ -1,24 +1,36 @@
-# Med Super App Backend — Hướng dẫn tích hợp Frontend
+# Med Super App Backend
 
 > Đặc tả kỹ thuật của các luồng backend nằm tại [`docs/specs/README.md`](docs/specs/README.md). Mọi thay đổi API, business rule, database hoặc security phải cập nhật spec liên quan và [`CHANGELOG.md`](CHANGELOG.md) trong cùng pull request.
 
-Tài liệu này dành cho Web Admin, Web Doctor và Mobile App. Hiện backend đã triển khai nhóm API **xác thực** và **quản lý tài khoản của Admin**.
+Tài liệu này cung cấp hướng dẫn tích hợp và vận hành API cho Web Admin, Web Doctor, Web Staff và Mobile App (Bệnh nhân).
 
-> Backend hiện có Auth, Admin User, Doctor/Staff scheduling, Patient appointment, Doctor examination, prescription, medicine schedule và Android SMS Gateway. Xem spec để phân biệt chức năng hiện tại với thay đổi ERD đang được lên kế hoạch.
+---
 
-##-3.6.vẻy importance
--Cách chạy: clone về
-+dung inteliJ: copy đống trên Backend fix tại business doc về paste vào variable inviroment
-+ko thì copy đống đấy gửi AI
--Vào firebase->project setting-> service accounts-> generate a private key( chọn java, dù tải cái đéo j cũng như nhau) 
--Nhét vào đâu thì đổi đường dẫn ở đó, r thay cái FIREBASE_SERVICE_ACCOUNT_PATH= cái đường dẫn đến file đó
--Chạy backend và mong nó hoạt động
-PS: lỗi thì hỏi AI đừng hỏi t, t cũng đéo biết đâu :P  
+## 🛠️ Tổng Quan Công Nghệ & Kiến Trúc
 
+| Thành phần | Công nghệ / Thư viện |
+|---|---|
+| **Ngôn ngữ & Framework** | Java 17+, Spring Boot 3.x, Gradle (Groovy DSL) |
+| **Kiến trúc** | 3-Tier Architecture (Controllers - Services - Repositories) |
+| **Database chính** | MongoDB Atlas (`med_super_app`) |
+| **File & Media Storage** | AWS S3 (Presigned URLs cho Medical Images & Doctor Certificates) |
+| **Authentication & Security** | Spring Security 6, JWT, AES-256-GCM (PII Encryption), HMAC-SHA-256 |
+| **Thông báo & OTP** | Firebase Cloud Messaging (FCM), Android SMS Gateway |
+| **Kiểm thử** | JUnit 5, Mockito (Unit test) & Testcontainers MongoDB 7 (Integration test) |
 
+---
 
+## 🔑 Hướng Dẫn Cấu Hình Firebase Admin SDK
 
+Để kích hoạt tính năng gửi OTP qua SMS Gateway / FCM:
+1. Truy cập [Firebase Console](https://console.firebase.google.com/) -> **Project Settings** -> tab **Service accounts**.
+2. Chọn **Java**, nhấn **Generate new private key** để tải file JSON credentials về máy.
+3. Lưu file ở vị trí an toàn trên máy cục bộ và cấu hình đường dẫn trong biến môi trường:
+   ```properties
+   FIREBASE_SERVICE_ACCOUNT_PATH=<duong-dan-den-file-service-account.json>
+   ```
 
+---
 
 ## 1. Môi trường và Base URL
 
@@ -632,7 +644,7 @@ Nếu `docker` không được nhận diện, restart PowerShell/IntelliJ sau kh
 Chạy riêng unit test:
 
 ```powershell
-cd D:\doAn2026\Med_superApp_backend
+cd <thu-muc-Med_superApp_backend>
 .\gradlew.bat test --tests "com.yourproject.backend.services.*" --tests "com.yourproject.backend.utils.*" --tests "com.yourproject.backend.config.*"
 ```
 
